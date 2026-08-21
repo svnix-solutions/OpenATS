@@ -81,6 +81,18 @@ The "do it properly" phase. None of this is urgent, all of it is what separates 
 
 ---
 
+## Beyond GA
+
+Not part of the road to v1.0, but decided and written down so it is not invisible.
+
+| Item | Where | Status |
+| --- | --- | --- |
+| Multi-tenancy: agencies, client companies, and applications | [decisions/0001-multi-tenancy.md](decisions/0001-multi-tenancy.md) | 🔴 Proposed |
+
+Phase 0 of that plan (closing the per-job authorization gaps on read routes) overlaps the **Security review** item above, and the record argues that review is better spent on the tenancy boundary than on the single-tenant model it replaces.
+
+---
+
 ## Completed
 
 ### v0.4.0 (5 Aug 2026)
