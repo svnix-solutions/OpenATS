@@ -2,6 +2,7 @@ import { createRemoteJWKSet, jwtVerify } from "jose";
 import { sql } from "drizzle-orm";
 import { resolveMembership, unscopedDb } from "../../db";
 import type { User } from "../../db/schema/users";
+import logger from "../../utils/logger";
 
 /**
  * Shared Asgardeo access-token verification, used by both the HTTP auth
@@ -59,6 +60,20 @@ export function collectRolesFromPayload(
   }
 
   return out;
+}
+
+/**
+ * The Asgardeo sub-organization a token was issued for, if any.
+ *
+ * B2B tokens carry `org_id`. A token from the root organization does not, and
+ * that absence is meaningful: it means this install has not adopted
+ * sub-organizations and login falls back to the single-organization path.
+ */
+export function organizationClaim(
+  payload: Record<string, unknown>,
+): string | null {
+  const value = payload["org_id"];
+  return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
 export function mapToAppRole(names: string[]): AppRole | null {
@@ -153,11 +168,35 @@ export async function verifyAccessToken(
     updatedAt: row.updated_at,
   };
 
-  // Bridges first login until sub-organizations land: attaches only when a
-  // single organization exists, and declines to guess otherwise.
-  await unscopedDb.execute(
-    sql`SELECT app_attach_default_membership(${user.id})`,
-  );
+  const asgardeoOrg = organizationClaim(payload as Record<string, unknown>);
+
+  if (asgardeoOrg) {
+    // The token names its organization, so there is nothing to infer.
+    const attached = await unscopedDb.execute<{
+      app_attach_membership_by_asgardeo_org: number | null;
+    }>(
+      sql`SELECT app_attach_membership_by_asgardeo_org(${user.id}, ${asgardeoOrg})`,
+    );
+
+    if (!attached.rows[0]?.app_attach_membership_by_asgardeo_org) {
+      // The sub-organization exists in the identity provider but not here.
+      // Inventing a tenant would be worse than refusing.
+      logger.warn(
+        `[auth] token for unmapped Asgardeo organization ${asgardeoOrg}`,
+      );
+      throw new AuthError(
+        403,
+        "Your organization is not set up in OpenATS. Contact your administrator.",
+      );
+    }
+  } else {
+    // No organization on the token: this install has not adopted
+    // sub-organizations. Attaches only when a single organization exists, and
+    // declines to guess otherwise.
+    await unscopedDb.execute(
+      sql`SELECT app_attach_default_membership(${user.id})`,
+    );
+  }
 
   const membership = await resolveMembership(sub);
   if (!membership) {

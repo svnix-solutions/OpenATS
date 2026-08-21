@@ -253,6 +253,13 @@
       "when": 1787342017525,
       "tag": "0035_public_org_resolver",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1787351318379,
+      "tag": "0036_asgardeo_org_mapping",
+      "breakpoints": true
     }
   ]
 }

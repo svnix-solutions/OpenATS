@@ -310,3 +310,61 @@ describe("authMiddleware", () => {
     expect(result.passed).toBe(true);
   });
 });
+
+// Sub-organizations (0001 §5) replace the "only one organization" inference
+// with an answer the token carries. Both paths have to keep working: an
+// install that has adopted them, and one that has not.
+describe("verifyAccessToken - organization from the token", () => {
+  it("attaches to the organization the token names", async () => {
+    const tag = "suborg";
+    createdEmails.push(email(tag));
+    const asgardeoOrg = `asg-${SUFFIX}`;
+
+    // Inside a context: organizations is policy-protected like everything
+    // else, so an unscoped UPDATE here would match no rows and say nothing.
+    // `db`, not `unscopedDb`: the latter deliberately bypasses the proxy and
+    // so never picks up the context this wraps it in.
+    await runInOrganization(organizationId, () =>
+      db.execute(
+        sql`UPDATE organizations SET asgardeo_org_id = ${asgardeoOrg}
+            WHERE id = ${organizationId}`,
+      ),
+    );
+
+    const user = await verifyAccessToken(
+      await sign(validClaims(tag, { org_id: asgardeoOrg })),
+    );
+
+    // Resolved from the claim, with no inference from how many organizations
+    // happen to exist — and several do, since every suite creates one.
+    expect(user.organizationId).toBe(organizationId);
+
+    await runInOrganization(organizationId, () =>
+      db.execute(
+        sql`UPDATE organizations SET asgardeo_org_id = NULL
+            WHERE id = ${organizationId}`,
+      ),
+    );
+  });
+
+  it("refuses a token from an organization that is not set up here", async () => {
+    const tag = "unmapped";
+    createdEmails.push(email(tag));
+
+    await expect(
+      verifyAccessToken(
+        await sign(validClaims(tag, { org_id: `never-provisioned-${SUFFIX}` })),
+      ),
+    ).rejects.toThrow(/organization is not set up/);
+  });
+
+  it("still refuses when the token names no organization and several exist", async () => {
+    const tag = "noclaim";
+    createdEmails.push(email(tag));
+
+    // The single-organization path, unchanged: it declines to guess.
+    await expect(
+      verifyAccessToken(await sign(validClaims(tag))),
+    ).rejects.toThrow(/not attached to an organization/);
+  });
+});
