@@ -152,8 +152,19 @@ Already rejected in [0001 §10](0001-multi-tenancy.md), on the evidence that the
 
 ---
 
-## 6. Open questions
+## 6. Settled while writing this
 
-- Does the seed script run as the owner or the app role? It creates data that must be visible to the app, and once tables carry `organization_id` it needs an organization to seed into.
+**The seed script runs as the app role.** It only inserts, which the app role can do, and it was verified end to end against the test database. Once tables carry `organization_id` it will need an organization to seed into, but that is phase 1's problem, not a role problem.
+
+**The obvious policy expression is wrong.** `current_setting('app.org_id', true)` returns `''`, not `NULL`, once the GUC has been set anywhere in the session. So the natural
+
+```sql
+USING (org_id = current_setting('app.org_id', true)::int)
+```
+
+raises `22P02 invalid_text_representation` on exactly the request that forgot to set a context — a crash where the whole point was to fail closed and return nothing. Phase 1's policies need `NULLIF(current_setting('app.org_id', true), '')::int`. Step 1's tests caught this before any real policy existed, which is the argument for step 1 in miniature.
+
+## 7. Open questions
+
 - Should the dev database also use the app role, or only test and production? Parity argues yes; the friction of migrating existing local volumes argues no.
 - Do characterization tests for services that the candidate/application split will rewrite get deleted with it, or rewritten in place? Deleting is honest; rewriting keeps the coverage.
