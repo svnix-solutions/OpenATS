@@ -53,8 +53,11 @@ export const authMiddleware = async (
     await new Promise<void>((resolve, reject) => {
       res.on("finish", resolve);
       res.on("close", resolve);
+      // next(), not next(err): passing anything here tells Express the
+      // request failed. Errors from the handler travel to the error
+      // middleware as usual; this promise only waits for the response.
       try {
-        next(reject);
+        next();
       } catch (err) {
         reject(err);
       }

@@ -32,6 +32,8 @@ import { integrationConnectionService } from "../shared/integrations/connection.
 import { getProviderClient } from "../shared/integrations/registry";
 import { getErrorMessage } from "../utils/error.utils";
 
+import { withPublicOrganization } from "../middlewares/public-org.middleware";
+
 const router: Router = Router();
 
 // Public resume uploads are unauthenticated, so restrict to PDF only. The
@@ -94,37 +96,40 @@ const publicReadLimiter = rateLimit({
   message: { error: "Too many requests. Please try again later." },
 });
 
-router.get("/company", checkOrigins, getPublicCompany);
-router.get("/jobs", checkOrigins, listPublishedCareersJobs);
-router.get("/jobs/:id", checkOrigins, getPublicJobById);
-router.get("/jobs/:jobId/questions", checkOrigins, getCustomQuestions);
-router.post("/jobs/:jobId/apply", checkOrigins, applyLimiter, applyForJob);
+router.get("/company", checkOrigins, withPublicOrganization("only"), getPublicCompany);
+router.get("/jobs", checkOrigins, withPublicOrganization("only"), listPublishedCareersJobs);
+router.get("/jobs/:id", checkOrigins, withPublicOrganization("job", "id"), getPublicJobById);
+router.get("/jobs/:jobId/questions", checkOrigins, withPublicOrganization("job", "jobId"), getCustomQuestions);
+router.post("/jobs/:jobId/apply", checkOrigins, applyLimiter, withPublicOrganization("job", "jobId"), applyForJob);
 router.post(
   "/upload/resume",
   checkOrigins,
   publicWriteLimiter,
+  withPublicOrganization("only"),
   handleResumeUpload,
   uploadFile,
 );
 
 // assessments for candidates ( token based)
-router.get("/assessment/:token", publicReadLimiter, getAssessmentForCandidate);
-router.post("/assessment/:token/start", publicWriteLimiter, startAssessment);
+router.get("/assessment/:token", publicReadLimiter, withPublicOrganization("attempt_token", "token"), getAssessmentForCandidate);
+router.post("/assessment/:token/start", publicWriteLimiter, withPublicOrganization("attempt_token", "token"), startAssessment);
 router.post(
   "/assessment/:token/answer",
   publicWriteLimiter,
+  withPublicOrganization("attempt_token", "token"),
   submitAssessmentAnswer,
 );
 router.post(
   "/assessment/:token/complete",
   publicWriteLimiter,
+  withPublicOrganization("attempt_token", "token"),
   completeAssessment,
 );
 
 // public offer portal (token based)
-router.get("/offers/:token", publicReadLimiter, getPublicOfferByToken);
-router.post("/offers/:token/accept", publicWriteLimiter, acceptPublicOffer);
-router.post("/offers/:token/decline", publicWriteLimiter, declinePublicOffer);
+router.get("/offers/:token", publicReadLimiter, withPublicOrganization("offer_token", "token"), getPublicOfferByToken);
+router.post("/offers/:token/accept", publicWriteLimiter, withPublicOrganization("offer_token", "token"), acceptPublicOffer);
+router.post("/offers/:token/decline", publicWriteLimiter, withPublicOrganization("offer_token", "token"), declinePublicOffer);
 
 // Times already taken by other confirmed interviews (same interviewer, or any if unassigned)
 async function getTakenTimes(
@@ -159,7 +164,7 @@ async function getTakenTimes(
 }
 
 // Public interview slot selection (no auth)
-router.get("/interview/:token", publicReadLimiter, async (req, res) => {
+router.get("/interview/:token", publicReadLimiter, withPublicOrganization("interview_token", "token"), async (req, res) => {
   try {
     const [iv] = await db
       .select({
@@ -227,6 +232,7 @@ router.get("/interview/:token", publicReadLimiter, async (req, res) => {
 router.patch(
   "/interview/:token/select",
   publicWriteLimiter,
+  withPublicOrganization("interview_token", "token"),
   async (req, res) => {
     try {
       const [iv] = await db
