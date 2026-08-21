@@ -59,10 +59,17 @@ jobs:
       - name: Lint backend
         run: pnpm --filter ./backend lint
 
+      # The service container starts before the repo is checked out, so its
+      # init scripts cannot be mounted. Apply the role here instead.
+      - name: Create the application role
+        run: |
+          PGPASSWORD=openats psql -h localhost -p 5433 -U openats -d openats_test \
+            -v ON_ERROR_STOP=1 -f docker/init-app-role.sql
+
       - name: Apply migrations to the test database
         working-directory: backend
         env:
-          DATABASE_URL: postgresql://openats:openats@localhost:5433/openats_test
+          MIGRATION_DATABASE_URL: postgresql://openats:openats@localhost:5433/openats_test
         run: pnpm drizzle-kit migrate
 
       - name: Run unit and integration tests

@@ -10,7 +10,7 @@
 #   make build          build both packages
 #   make clean          remove all node_modules
 
-.PHONY: setup dev infra-up infra-down wait-for-db migrate seed asgardeo encryption-key build lint clean
+.PHONY: setup dev infra-up infra-down wait-for-db db-role migrate seed asgardeo encryption-key build lint clean
 
 setup:
 	@echo "📦 Installing dependencies (backend + frontend)..."
@@ -58,6 +58,14 @@ wait-for-db:
 		docker exec openats-postgres pg_isready -U openats >/dev/null 2>&1 && break; \
 		sleep 1; \
 	done
+
+db-role:
+	@echo "🔑 Creating the application role..."
+	@# The container init script only runs on an empty data directory, so a
+	@# database that predates this target needs the role applied by hand.
+	@docker exec -i openats-postgres psql -U openats -d openats -q < docker/init-app-role.sql
+	@docker exec -i openats-postgres-test psql -U openats -d openats_test -q < docker/init-app-role.sql 2>/dev/null || true
+	@echo "   ✅ openats_app ready"
 
 migrate:
 	@echo "🗄️  Running database migrations..."

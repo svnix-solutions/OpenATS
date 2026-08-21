@@ -143,6 +143,19 @@ This starts:
 - **Postgres** on `localhost:5432` (user: `openats`, password: `openats`, db: `openats`)
 - **Redis** on `localhost:6379`
 
+Two Postgres roles are set up, and the split matters:
+
+| Role | Used by | Why |
+| --- | --- | --- |
+| `openats` | migrations | Owns the tables, so it can create and alter them |
+| `openats_app` | the app and the tests | Least privilege. Postgres lets superusers and table owners bypass row-level security, so an app connecting as `openats` would silently ignore every policy |
+
+`openats_app` is created automatically by `docker/init-app-role.sql` the first time a database container starts. **If your `postgres-data` volume predates this**, the init script will not have run — create the role with:
+
+```bash
+make db-role
+```
+
 Check they're running:
 
 ```bash
@@ -179,12 +192,15 @@ cp .env.example .env
 cd ..
 ```
 
-If you're using the Docker containers from step 1, `DATABASE_URL` and `REDIS_URL` in `backend/.env` are already filled in correctly by default:
+If you're using the Docker containers from step 1, the database and Redis URLs in `backend/.env` are already filled in correctly by default:
 
 ```bash
-DATABASE_URL=postgresql://openats:openats@localhost:5432/openats
+DATABASE_URL=postgresql://openats_app:openats_app@localhost:5432/openats
+MIGRATION_DATABASE_URL=postgresql://openats:openats@localhost:5432/openats
 REDIS_URL=redis://localhost:6379
 ```
+
+`DATABASE_URL` is what the app runs as; `MIGRATION_DATABASE_URL` is read only by `drizzle-kit`. See the role table above for why they differ.
 
 ### 3. Set up your Asgardeo M2M application
 
@@ -267,7 +283,7 @@ Start the test database and apply the schema to it:
 ```bash
 docker compose up -d postgres-test
 cd backend
-DATABASE_URL=postgresql://openats:openats@localhost:5433/openats_test pnpm drizzle-kit migrate
+MIGRATION_DATABASE_URL=postgresql://openats:openats@localhost:5433/openats_test pnpm drizzle-kit migrate
 cd ..
 ```
 
