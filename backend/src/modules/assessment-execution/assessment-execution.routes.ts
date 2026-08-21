@@ -8,12 +8,24 @@ import {
   getCandidateAttempts,
   getAttemptResults,
 } from "./assessment-execution.controller";
+import {
+  requireAttemptRead,
+  requireCandidateRead,
+} from "../../middlewares/job-access.middleware";
 
 const router: Router = Router();
 
 router.post("/invite", inviteCandidateToAssessment);
-router.get("/candidate/:candidateId", getCandidateAttempts);
-router.get("/attempts/:attemptId/results", getAttemptResults);
+router.get(
+  "/candidate/:candidateId",
+  requireCandidateRead(),
+  getCandidateAttempts,
+);
+router.get(
+  "/attempts/:attemptId/results",
+  requireAttemptRead(),
+  getAttemptResults,
+);
 
 router.get("/public/:token", getAssessmentForCandidate);
 

@@ -11,6 +11,7 @@ import {
 } from "./candidate.controller";
 
 import { requireManager } from "../../middlewares/role.middleware";
+import { requireCandidateRead } from "../../middlewares/job-access.middleware";
 
 const router: Router = Router();
 
@@ -26,7 +27,7 @@ router.post("/jobs/:jobId/apply", applyForJob);
 
 router.get("/", getCandidates);
 router.get("/jobs/:jobId", getCandidates);
-router.get("/:id", getCandidateById);
+router.get("/:id", requireCandidateRead("id"), getCandidateById);
 router.patch("/:id", requireManager, upload.single("resume"), updateCandidateBasicDetails);
 router.put("/:id/stage", requireManager, moveCandidateStage);
 router.delete("/bulk", requireManager, bulkDeleteCandidates);

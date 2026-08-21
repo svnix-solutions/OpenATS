@@ -3,6 +3,7 @@ import { z } from "zod";
 import { offerService } from "./offer.service";
 import { socketService } from "../../shared/services/socket.service";
 import logger from "../../utils/logger";
+import { isTeamScoped } from "../../shared/auth/job-access";
 import { asEnum } from "../../utils/object.utils";
 import { offers } from "../../db/schema";
 
@@ -63,6 +64,7 @@ function parseId(value: string | string[] | undefined) {
 export const getAllOffers = async (req: Request, res: Response) => {
   try {
     const { page, limit, search, status, jobId } = req.query;
+    const teamUserId = isTeamScoped(req.user) ? req.user.id : undefined;
 
     if (page !== undefined) {
       const result = await offerService.getPaginated({
@@ -71,6 +73,7 @@ export const getAllOffers = async (req: Request, res: Response) => {
         search: (search as string) || undefined,
         status: asEnum(status, offers.status.enumValues),
         jobId: jobId ? parseInt(jobId as string) : undefined,
+        teamUserId,
       });
       res.status(200).json({
         data: result.rows,
@@ -79,7 +82,7 @@ export const getAllOffers = async (req: Request, res: Response) => {
       return;
     }
 
-    const result = await offerService.getAllDetails();
+    const result = await offerService.getAllDetails(teamUserId);
     res.status(200).json({ data: result });
   } catch (error) {
     logger.error(`Failed to fetch all offers: ${(error as Error)?.message}`);

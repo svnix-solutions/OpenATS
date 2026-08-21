@@ -6,6 +6,7 @@ import {
   candidates,
   jobPipelineStages,
   jobs,
+  jobHiringTeam,
   offers,
   templates,
 } from "../../db/schema";
@@ -161,11 +162,26 @@ export type OfferListFilters = {
   search?: string;
   status?: (typeof offers.status.enumValues)[number];
   jobId?: number;
+  teamUserId?: number;
 };
 
+// Restricts a list to the jobs a team-scoped user is on. Returns undefined for
+// unrestricted roles so the caller can drop the condition entirely.
+function teamJobFilter(teamUserId?: number) {
+  if (!teamUserId) return undefined;
+  return inArray(
+    offers.jobId,
+    db
+      .select({ id: jobHiringTeam.jobId })
+      .from(jobHiringTeam)
+      .where(eq(jobHiringTeam.userId, teamUserId)),
+  );
+}
+
 export const offerService = {
-  async getAllDetails() {
+  async getAllDetails(teamUserId?: number) {
     return await db.query.offers.findMany({
+      where: teamJobFilter(teamUserId),
       with: {
         candidate: {
           with: { currentStage: true },
@@ -180,10 +196,12 @@ export const offerService = {
   },
 
   async getPaginated(filters: OfferListFilters = {}) {
-    const { page = 1, limit = 15, search, status, jobId } = filters;
+    const { page = 1, limit = 15, search, status, jobId, teamUserId } = filters;
     const offset = (page - 1) * limit;
 
     const conditions = [];
+    const teamFilter = teamJobFilter(teamUserId);
+    if (teamFilter) conditions.push(teamFilter);
     if (jobId) conditions.push(eq(offers.jobId, jobId));
     if (status) conditions.push(eq(offers.status, status));
     const where = conditions.length > 0 ? and(...conditions) : undefined;

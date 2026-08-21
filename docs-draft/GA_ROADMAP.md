@@ -29,6 +29,7 @@ The focus of this phase is correctness and safety, not new features. Nothing her
 | Re-check socket tokens on reconnect | The token is read once when the dashboard layout renders. If it expires while a tab is open, reconnects fail silently and realtime stops until the page is refreshed. | 🟢 Done |
 | Authorize chat history over HTTP | `GET /chat/job/:jobId` and `/chat/candidate/:candidateId` return any conversation to any authenticated user. The socket rooms are now gated, so this is the remaining way to read another hiring team's chat. | 🟢 Done |
 | Rate limit authenticated routes | Only `/public/*` is rate limited today. | 🟢 Done |
+| Scope record reads to the hiring team | `requireJobAccess` existed but was wired to 3 of ~70 authenticated routes, so any logged-in user could read a job, offer, interview, assessment attempt, or rejection belonging to a team they are not on by requesting its id. Extends the guard to record reads and scopes the offer and interview lists. | 🟢 Done |
 | Resolve dependency vulnerabilities | 54 reported (15 high). Every high comes through `next@16.1.6`, the only direct dependency involved: bumping it to `>=16.2.11` also clears the `sharp` and `postcss` copies it pins. `dompurify` arrives via `@asgardeo/react` and needs a `pnpm.overrides` entry or an upstream fix. Do this last, right before release, so the version bump is fresh. | 🔴 Planned |
 
 ### Deployment
