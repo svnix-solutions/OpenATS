@@ -13,8 +13,14 @@ vi.mock("jose", async (importOriginal) => {
 });
 
 import { generateKeyPair, SignJWT } from "jose";
-import { db } from "../../src/db";
+import { db, runInOrganization, unscopedDb } from "../../src/db";
+import { sql } from "drizzle-orm";
 import { users } from "../../src/db/schema/users";
+import { organizationMembers } from "../../src/db/schema/organizations";
+import {
+  createTestOrganization,
+  dropTestOrganization,
+} from "../helpers/scenario";
 import {
   AuthError,
   verifyAccessToken,
@@ -27,6 +33,33 @@ const ISSUER = process.env.ASGARDEO_ISSUER!;
 let privateKey: unknown;
 let otherKey: unknown;
 const createdEmails: string[] = [];
+let organizationId: number;
+
+/**
+ * Puts an identity in an organization before the token is presented.
+ *
+ * Provisioning and membership are separate now: verifyAccessToken creates the
+ * user, but which organization they belong to is a question only their
+ * sub-organization can answer (phase 3). Everything below that expects a
+ * successful login therefore places the user first.
+ */
+async function seedMember(tag: string) {
+  createdEmails.push(email(tag));
+  await runInOrganization(organizationId, async () => {
+    const [row] = await db
+      .insert(users)
+      .values({
+        asgardeoUserId: `${SUFFIX}-${tag}`,
+        firstName: "Test",
+        lastName: "User",
+        email: email(tag),
+      })
+      .returning({ id: users.id });
+    await db
+      .insert(organizationMembers)
+      .values({ organizationId, userId: row!.id, role: "recruiter" });
+  });
+}
 
 function email(tag: string) {
   return `${tag}.${SUFFIX}@example.test`;
@@ -58,6 +91,7 @@ function validClaims(tag: string, overrides: Claims = {}): Claims {
 }
 
 beforeAll(async () => {
+  organizationId = await createTestOrganization(SUFFIX);
   const pair = await generateKeyPair("RS256");
   privateKey = pair.privateKey;
   jwks.publicKey = pair.publicKey;
@@ -67,6 +101,10 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  await unscopedDb.execute(
+    sql`DELETE FROM organization_members WHERE organization_id = ${organizationId}`,
+  );
+  await dropTestOrganization(organizationId);
   if (createdEmails.length) {
     await db.delete(users).where(inArray(users.email, createdEmails));
   }
@@ -74,7 +112,7 @@ afterAll(async () => {
 
 describe("verifyAccessToken - token validity", () => {
   it("accepts a well-formed token and resolves the local user", async () => {
-    createdEmails.push(email("happy"));
+    await seedMember("happy");
     const user = await verifyAccessToken(await sign(validClaims("happy")));
 
     expect(user.email).toBe(email("happy"));
@@ -132,7 +170,7 @@ describe("verifyAccessToken - claims", () => {
   });
 
   it("reads the role from the wso2 claim as well", async () => {
-    createdEmails.push(email("wso2"));
+    await seedMember("wso2");
     const token = await sign(
       validClaims("wso2", {
         roles: undefined,
@@ -145,16 +183,26 @@ describe("verifyAccessToken - claims", () => {
 });
 
 describe("verifyAccessToken - user provisioning", () => {
-  it("provisions a user on first login", async () => {
+  it("creates the identity but refuses login when the organization is ambiguous", async () => {
     createdEmails.push(email("new"));
-    const user = await verifyAccessToken(await sign(validClaims("new")));
 
-    expect(user.id).toBeTypeOf("number");
-    expect(user.firstName).toBe("Test");
+    // More than one organization exists here, so nothing can say which one a
+    // first-time user belongs to. Attaching them anyway would put a person
+    // inside someone else's data, so login is refused instead.
+    await expect(
+      verifyAccessToken(await sign(validClaims("new"))),
+    ).rejects.toThrow(/not attached to an organization/);
+
+    // The identity itself was still created — provisioning and membership are
+    // separate steps.
+    const found = await unscopedDb.execute<{ count: number }>(
+      sql`SELECT count(*)::int AS count FROM users WHERE email = ${email("new")}`,
+    );
+    expect(found.rows[0]!.count).toBe(1);
   });
 
   it("returns the same row on a second login", async () => {
-    createdEmails.push(email("repeat"));
+    await seedMember("repeat");
     const first = await verifyAccessToken(await sign(validClaims("repeat")));
     const second = await verifyAccessToken(await sign(validClaims("repeat")));
 
@@ -162,7 +210,7 @@ describe("verifyAccessToken - user provisioning", () => {
   });
 
   it("reconciles onto the existing row when sub changes for a known email", async () => {
-    createdEmails.push(email("moved"));
+    await seedMember("moved");
     const original = await verifyAccessToken(await sign(validClaims("moved")));
 
     const withNewSub = await verifyAccessToken(
@@ -193,6 +241,8 @@ function runAuth(headers: Record<string, string>) {
   return new Promise<{ status: number | null; body: unknown; passed: boolean }>(
     (resolve) => {
       let status: number | null = null;
+      const finishHandlers: Array<() => void> = [];
+
       const res = {
         status(code: number) {
           status = code;
@@ -202,10 +252,23 @@ function runAuth(headers: Record<string, string>) {
           resolve({ status, body, passed: false });
           return this;
         },
+        // The middleware holds the organization's transaction open until the
+        // response ends, so the double has to be able to say when that is.
+        on(event: string, handler: () => void) {
+          if (event === "finish" || event === "close") {
+            finishHandlers.push(handler);
+          }
+          return this;
+        },
+        headersSent: false,
       } as unknown as Response;
 
-      const next: NextFunction = () =>
+      const next: NextFunction = () => {
         resolve({ status: null, body: null, passed: true });
+        // Stand in for the handler completing, so the transaction closes
+        // instead of leaking a connection for every test.
+        finishHandlers.forEach((h) => h());
+      };
 
       void authMiddleware({ headers } as unknown as Request, res, next);
     },
@@ -240,7 +303,7 @@ describe("authMiddleware", () => {
   });
 
   it("calls next and attaches the user for a valid token", async () => {
-    createdEmails.push(email("mw-ok"));
+    await seedMember("mw-ok");
     const token = await sign(validClaims("mw-ok"));
     const result = await runAuth({ authorization: `Bearer ${token}` });
 

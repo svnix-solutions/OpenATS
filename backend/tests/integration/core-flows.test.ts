@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
-import { eq, inArray } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 import request from "supertest";
 
 // Serve the locally generated key instead of fetching a real JWKS. Everything
@@ -28,7 +28,7 @@ vi.mock("../../src/shared/services/mail.service", () => ({
 }));
 
 import app from "../../src/app";
-import { db } from "../../src/db";
+import { db, runInOrganization, unscopedDb } from "../../src/db";
 import { company, departments } from "../../src/db/schema/company";
 import { jobs } from "../../src/db/schema/jobs";
 import { jobPipelineStages, jobHiringTeam } from "../../src/db/schema/pipeline";
@@ -36,6 +36,11 @@ import { candidates } from "../../src/db/schema/candidates";
 import { candidateInterviews } from "../../src/db/schema/interviews";
 import { offers } from "../../src/db/schema/offers";
 import { users } from "../../src/db/schema/users";
+import { organizationMembers } from "../../src/db/schema/organizations";
+import {
+  createTestOrganization,
+  dropTestOrganization,
+} from "../helpers/scenario";
 import { initTestKeys, bearer } from "../helpers/jwt";
 
 const SUFFIX = `flow-${Date.now()}`;
@@ -51,6 +56,8 @@ let offerStageId: number;
 let candidateId: number;
 let offerId: number;
 
+let organizationId: number;
+
 beforeAll(async () => {
   await initTestKeys();
   auth = await bearer({
@@ -59,6 +66,15 @@ beforeAll(async () => {
     role: "super_admin",
   });
 
+  organizationId = await createTestOrganization(SUFFIX);
+
+  // The requests below go through authMiddleware, which establishes the
+  // organization for itself. Only this fixture seeding runs outside a request,
+  // so only it has to say which tenant it is writing into.
+  await runInOrganization(organizationId, seedFixtures);
+});
+
+async function seedFixtures() {
   const [co] = await db
     .insert(company)
     .values({ name: `Co ${SUFFIX}`, email: `co.${SUFFIX}@example.test` })
@@ -83,6 +99,12 @@ beforeAll(async () => {
     })
     .returning({ id: users.id });
   managerId = manager!.id;
+
+  // Membership, not just the user row: login resolves which organization the
+  // token acts for, and without this the first request has none.
+  await db
+    .insert(organizationMembers)
+    .values({ organizationId, userId: managerId, role: "recruiter" });
 
   const [job] = await db
     .insert(jobs)
@@ -112,9 +134,17 @@ beforeAll(async () => {
   appliedStageId = stages[0]!.id;
   interviewStageId = stages[1]!.id;
   offerStageId = stages[2]!.id;
-});
+}
 
 afterAll(async () => {
+  await runInOrganization(organizationId, teardownFixtures);
+  await unscopedDb.execute(
+    sql`DELETE FROM organization_members WHERE organization_id = ${organizationId}`,
+  );
+  await dropTestOrganization(organizationId);
+});
+
+async function teardownFixtures() {
   await db
     .delete(candidateInterviews)
     .where(eq(candidateInterviews.jobId, jobId));
@@ -130,7 +160,7 @@ afterAll(async () => {
   await db
     .delete(users)
     .where(inArray(users.email, [`manager.${SUFFIX}@example.test`]));
-});
+}
 
 // Ordered on purpose: each step uses the record the previous one created,
 // which is what makes this a flow rather than four isolated cases.
