@@ -20,20 +20,21 @@ pool.on("error", (err) => {
 const rootDb = drizzle(pool, { schema });
 
 type Db = typeof rootDb;
-type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
+
+// A client-bound handle differs from the pool-bound one only in `$client`,
+// which nothing in the app touches.
+type ScopedDb = Omit<Db, "$client">;
 
 /**
- * The transaction the current request is running inside, if any.
+ * The connection the current request is bound to, if any.
  *
- * Row-level security reads the organization from a session setting, and that
- * setting has to be transaction-local — a bare `SET` outlives the statement
- * and rides the pooled connection into whatever request is served next, which
- * is a cross-tenant read. Holding the transaction here means every query a
- * request makes lands on the connection that carries its context, without a
- * single service having to thread it through.
+ * Row-level security reads the organization from a session setting, so every
+ * query a request makes has to land on the connection carrying it. Holding one
+ * here means services keep importing `db` and never thread it through.
  */
 interface RequestContext {
-  tx: Tx;
+  /** Bound to one connection, which is the one carrying the org setting. */
+  scoped: ScopedDb;
   organizationId: number;
 }
 
@@ -50,25 +51,52 @@ const orgContext = new AsyncLocalStorage<RequestContext>();
  */
 export const db = new Proxy(rootDb, {
   get(target, property, receiver) {
-    const active: Db | Tx = orgContext.getStore()?.tx ?? target;
+    const active: ScopedDb = orgContext.getStore()?.scoped ?? target;
     const value = Reflect.get(active, property, receiver);
     return typeof value === "function" ? value.bind(active) : value;
   },
 }) as Db;
 
-/** Runs `fn` with every query scoped to one organization. */
+/**
+ * Runs `fn` with every query scoped to one organization.
+ *
+ * Deliberately NOT a transaction around the whole callback. An HTTP request
+ * writes its response from inside this callback, so a wrapping transaction
+ * would commit only after the response had already been flushed — the client
+ * would see a 200 for work that had not been committed yet, and a read issued
+ * straight afterwards would return the old row. Worse, a commit that then
+ * failed would have no way to un-send the response.
+ *
+ * Instead the setting is session-scoped on a connection checked out for the
+ * duration, so each statement commits as it runs, exactly as it did before
+ * tenancy. Callers that want atomicity still use `db.transaction`, which now
+ * nests on this same connection.
+ */
 export async function runInOrganization<T>(
   organizationId: number,
   fn: () => Promise<T>,
 ): Promise<T> {
-  return rootDb.transaction(async (tx) => {
-    // Transaction-local (the `true` argument), so it is discarded when the
-    // connection returns to the pool.
-    await tx.execute(
-      sql`SELECT set_config('app.org_id', ${String(organizationId)}, true)`,
-    );
-    return orgContext.run({ tx, organizationId }, fn);
-  });
+  const client = await pool.connect();
+  let poisoned = false;
+
+  try {
+    await client.query("SELECT set_config('app.org_id', $1, false)", [
+      String(organizationId),
+    ]);
+    const scoped = drizzle(client, { schema });
+    return await orgContext.run({ scoped, organizationId }, fn);
+  } finally {
+    try {
+      // Clearing this matters more than it looks: a connection handed back
+      // still carrying an organization would silently scope whatever request
+      // picks it up next.
+      await client.query("SELECT set_config('app.org_id', '', false)");
+    } catch {
+      // If it cannot be cleared, it must not go back in the pool.
+      poisoned = true;
+    }
+    client.release(poisoned);
+  }
 }
 
 /**
