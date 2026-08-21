@@ -9,14 +9,20 @@ import {
   varchar,
   boolean,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 
 import { questionType } from "./enums";
 import { users } from "./users";
 import { jobs } from "./jobs";
 import { jobPipelineStages } from "./pipeline";
+import { organizations } from "./organizations";
 
 export const assessments = pgTable("assessments", {
   id: serial("id").primaryKey(),
+  organizationId: integer("organization_id")
+    .notNull()
+    .default(sql`app_current_org()`)
+    .references(() => organizations.id, { onDelete: "cascade" }),
   title: varchar("title", { length: 255 }).notNull(),
   description: text("description"),
   timeLimit: integer("time_limit").notNull(),
@@ -29,6 +35,10 @@ export const assessments = pgTable("assessments", {
 
 export const assessmentQuestions = pgTable("assessment_questions", {
   id: serial("id").primaryKey(),
+  organizationId: integer("organization_id")
+    .notNull()
+    .default(sql`app_current_org()`)
+    .references(() => organizations.id, { onDelete: "cascade" }),
   assessmentId: integer("assessment_id")
     .notNull()
     .references(() => assessments.id, { onDelete: "cascade" }),
@@ -48,6 +58,10 @@ export const assessmentQuestionOptions = pgTable(
   "assessment_question_options",
   {
     id: serial("id").primaryKey(),
+    organizationId: integer("organization_id")
+      .notNull()
+      .default(sql`app_current_org()`)
+      .references(() => organizations.id, { onDelete: "cascade" }),
     questionId: integer("question_id")
       .notNull()
       .references(() => assessmentQuestions.id, { onDelete: "cascade" }),
@@ -60,6 +74,10 @@ export const assessmentQuestionOptions = pgTable(
 
 export const jobCustomQuestions = pgTable("job_custom_questions", {
   id: serial("id").primaryKey(),
+  organizationId: integer("organization_id")
+    .notNull()
+    .default(sql`app_current_org()`)
+    .references(() => organizations.id, { onDelete: "cascade" }),
   jobId: integer("job_id")
     .notNull()
     .references(() => jobs.id, { onDelete: "cascade" }),
@@ -73,6 +91,10 @@ export const jobCustomQuestions = pgTable("job_custom_questions", {
 
 export const jobCustomQuestionOptions = pgTable("job_custom_question_options", {
   id: serial("id").primaryKey(),
+  organizationId: integer("organization_id")
+    .notNull()
+    .default(sql`app_current_org()`)
+    .references(() => organizations.id, { onDelete: "cascade" }),
   questionId: integer("question_id")
     .notNull()
     .references(() => jobCustomQuestions.id, { onDelete: "cascade" }),
@@ -86,6 +108,10 @@ export const jobAssessmentAttachments = pgTable(
   "job_assessment_attachments",
   {
     id: serial("id").primaryKey(),
+    organizationId: integer("organization_id")
+      .notNull()
+      .default(sql`app_current_org()`)
+      .references(() => organizations.id, { onDelete: "cascade" }),
     jobId: integer("job_id")
       .notNull()
       .references(() => jobs.id, { onDelete: "cascade" }),

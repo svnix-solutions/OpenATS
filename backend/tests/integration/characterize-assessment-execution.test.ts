@@ -1,7 +1,8 @@
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { describe, expect, beforeAll, afterAll } from "vitest";
 import { eq, inArray } from "drizzle-orm";
-import { db } from "../../src/db";
+import { db, runInOrganization } from "../../src/db";
 import {
+  itInOrg,
   createScenario,
   destroyScenario,
   shape,
@@ -27,7 +28,10 @@ let wrongOptionId: number;
 
 beforeAll(async () => {
   s = await createScenario("ae");
+  await runInOrganization(s.organizationId, seedQuestions);
+});
 
+async function seedQuestions() {
   const questions = await db
     .insert(assessmentQuestions)
     .values([
@@ -71,20 +75,24 @@ beforeAll(async () => {
 
   correctOptionId = options[0]!.id;
   wrongOptionId = options[1]!.id;
-});
+}
 
 afterAll(async () => {
+  await runInOrganization(s.organizationId, cleanupQuestions);
+  await destroyScenario(s);
+});
+
+async function cleanupQuestions() {
   await db
     .delete(assessmentQuestionOptions)
     .where(inArray(assessmentQuestionOptions.questionId, [radioQuestionId]));
   await db
     .delete(assessmentQuestions)
     .where(eq(assessmentQuestions.assessmentId, s.assessmentId));
-  await destroyScenario(s);
-});
+}
 
 describe("assessmentExecutionService.getAttemptsByCandidate", () => {
-  it("returns a summary row per attempt, with the assessment title joined", async () => {
+  itInOrg("returns a summary row per attempt, with the assessment title joined", async () => {
     expect(
       shape(await assessmentExecutionService.getAttemptsByCandidate(s.candidateA1)),
     ).toEqual([
@@ -101,7 +109,7 @@ describe("assessmentExecutionService.getAttemptsByCandidate", () => {
     ]);
   });
 
-  it("includes the invite token, which is the candidate's credential", async () => {
+  itInOrg("includes the invite token, which is the candidate's credential", async () => {
     // Worth pinning: this endpoint is staff-only, and the token it returns is
     // the whole of a candidate's authentication for their assessment.
     const rows = await assessmentExecutionService.getAttemptsByCandidate(
@@ -110,7 +118,7 @@ describe("assessmentExecutionService.getAttemptsByCandidate", () => {
     expect(rows[0]!.token).toMatch(/^token-a1-/);
   });
 
-  it("scopes to the candidate", async () => {
+  itInOrg("scopes to the candidate", async () => {
     const rows = await assessmentExecutionService.getAttemptsByCandidate(
       s.candidateA1,
     );
@@ -119,7 +127,7 @@ describe("assessmentExecutionService.getAttemptsByCandidate", () => {
 });
 
 describe("assessmentExecutionService.getAttemptByToken", () => {
-  it("nests the assessment and candidate the public page needs", async () => {
+  itInOrg("nests the assessment and candidate the public page needs", async () => {
     const attempt = await assessmentExecutionService.getAttemptByToken(
       `token-a1-${s.suffix}`,
     );
@@ -130,7 +138,7 @@ describe("assessmentExecutionService.getAttemptByToken", () => {
     expect(keys).toContain("expiresAt");
   });
 
-  it("returns null for an unknown token", async () => {
+  itInOrg("returns null for an unknown token", async () => {
     expect(
       await assessmentExecutionService.getAttemptByToken("no-such-token"),
     ).toBeNull();
@@ -158,7 +166,7 @@ describe("assessmentExecutionService scoring", () => {
     return assessmentExecutionService.completeAttempt(s.attemptA1);
   }
 
-  it("counts written answers toward the total but never awards them points", async () => {
+  itInOrg("counts written answers toward the total but never awards them points", async () => {
     const completed = await scoreWith(correctOptionId);
 
     // Every choice question answered correctly, and the written answer
@@ -177,26 +185,26 @@ describe("assessmentExecutionService scoring", () => {
   // scoring code gets away with it by calling Number() on points; anything
   // that does arithmetic on one of these directly would concatenate instead.
   // The same applies to offers.salary and assessmentQuestions.points.
-  it("returns numeric columns as strings despite their declared type", async () => {
+  itInOrg("returns numeric columns as strings despite their declared type", async () => {
     const completed = await scoreWith(correctOptionId);
     expect(typeof completed!.scoreRaw).toBe("string");
     expect(completed!.scoreRaw as unknown as string).toBe("10.00");
   });
 
-  it("never decides pass or fail", async () => {
+  itInOrg("never decides pass or fail", async () => {
     const completed = await scoreWith(correctOptionId);
     // There is no passing threshold anywhere in the schema, so `passed` is
     // written as null on every completion regardless of score.
     expect(completed!.passed).toBeNull();
   });
 
-  it("awards nothing for the wrong option", async () => {
+  itInOrg("awards nothing for the wrong option", async () => {
     const completed = await scoreWith(wrongOptionId);
     expect(Number(completed!.scoreRaw)).toBe(0);
     expect(Number(completed!.scorePercentage)).toBe(0);
   });
 
-  it("refuses to complete an attempt that is not started", async () => {
+  itInOrg("refuses to complete an attempt that is not started", async () => {
     await expect(
       assessmentExecutionService.completeAttempt(s.attemptB1),
     ).rejects.toThrow(/not in 'started' status/);
@@ -204,14 +212,14 @@ describe("assessmentExecutionService scoring", () => {
 });
 
 describe("assessmentExecutionService.getAttemptResults", () => {
-  it("returns the attempt summary alongside a questions array", async () => {
+  itInOrg("returns the attempt summary alongside a questions array", async () => {
     const keys = shape(await assessmentExecutionService.getAttemptResults(s.attemptA1));
     expect(keys).toContain("attempt.scorePercentage");
     expect(keys).toContain("attempt.candidateName");
     expect(keys.some((k) => k.startsWith("questions[]."))).toBe(true);
   });
 
-  it("returns null for an attempt that does not exist", async () => {
+  itInOrg("returns null for an attempt that does not exist", async () => {
     expect(
       await assessmentExecutionService.getAttemptResults(2_000_000_000),
     ).toBeNull();

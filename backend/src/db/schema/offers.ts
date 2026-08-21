@@ -10,17 +10,23 @@ import {
   unique,
   varchar,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 
 import { employmentType, offerStatus } from "./enums";
 import { candidates } from "./candidates";
 import { jobs } from "./jobs";
 import { templates } from "./templates";
 import { users } from "./users";
+import { organizations } from "./organizations";
 
 export const offers = pgTable(
   "offers",
   {
     id: serial("id").primaryKey(),
+    organizationId: integer("organization_id")
+      .notNull()
+      .default(sql`app_current_org()`)
+      .references(() => organizations.id, { onDelete: "cascade" }),
 
     candidateId: integer("candidate_id")
       .notNull()

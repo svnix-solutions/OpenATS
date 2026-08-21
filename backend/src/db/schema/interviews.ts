@@ -8,16 +8,22 @@ import {
   varchar,
   index,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 import { interviewOutcome, meetingProvider } from "./enums";
 import { candidates } from "./candidates";
 import { jobPipelineStages } from "./pipeline";
 import { jobs } from "./jobs";
 import { users } from "./users";
+import { organizations } from "./organizations";
 
 export const candidateInterviews = pgTable(
   "candidate_interviews",
   {
     id: serial("id").primaryKey(),
+    organizationId: integer("organization_id")
+      .notNull()
+      .default(sql`app_current_org()`)
+      .references(() => organizations.id, { onDelete: "cascade" }),
     candidateId: integer("candidate_id")
       .notNull()
       .references(() => candidates.id, { onDelete: "cascade" }),

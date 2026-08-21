@@ -16,13 +16,18 @@ import { employmentType, jobStatus, payFrequency, salaryType } from "./enums";
 import { departments } from "./company";
 import { users } from "./users";
 import { templates } from "./templates";
+import { organizations } from "./organizations";
 
 export const jobs = pgTable(
   "jobs",
   {
     id: serial("id").primaryKey(),
+    organizationId: integer("organization_id")
+      .notNull()
+      .default(sql`app_current_org()`)
+      .references(() => organizations.id, { onDelete: "cascade" }),
 
-    slug: varchar("slug", { length: 255 }).notNull().unique(),
+    slug: varchar("slug", { length: 255 }).notNull(),
 
     title: varchar("title", { length: 255 }).notNull(),
     departmentId: integer("department_id")
@@ -81,6 +86,8 @@ export const jobs = pgTable(
       "chk_salary_min_max",
       sql`${t.salaryMin} IS NULL OR ${t.salaryMax} IS NULL OR ${t.salaryMax} >= ${t.salaryMin}`,
     ),
+    unique().on(t.organizationId, t.slug),
+    index("idx_jobs_organization_id").on(t.organizationId),
     index("idx_jobs_department_id").on(t.departmentId),
     index("idx_jobs_created_by").on(t.createdBy),
   ],
@@ -90,6 +97,10 @@ export const jobSkills = pgTable(
   "job_skills",
   {
     id: serial("id").primaryKey(),
+    organizationId: integer("organization_id")
+      .notNull()
+      .default(sql`app_current_org()`)
+      .references(() => organizations.id, { onDelete: "cascade" }),
     jobId: integer("job_id")
       .notNull()
       .references(() => jobs.id, { onDelete: "cascade" }),

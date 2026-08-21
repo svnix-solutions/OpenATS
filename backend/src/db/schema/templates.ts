@@ -6,9 +6,11 @@ import {
   timestamp,
   varchar,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 
 import { templateType } from "./enums";
 import { users } from "./users";
+import { organizations } from "./organizations";
 
 export type ContentBlock =
   | { type: "heading"; content: string }
@@ -23,6 +25,10 @@ export type TemplateBody = ContentBlock[] | string;
 
 export const templates = pgTable("templates", {
   id: serial("id").primaryKey(),
+  organizationId: integer("organization_id")
+    .notNull()
+    .default(sql`app_current_org()`)
+    .references(() => organizations.id, { onDelete: "cascade" }),
   name: varchar("name", { length: 255 }).notNull(),
   type: templateType("type").notNull(),
   subject: varchar("subject", { length: 500 }).notNull(),

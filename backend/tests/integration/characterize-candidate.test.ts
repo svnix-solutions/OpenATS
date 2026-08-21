@@ -1,5 +1,6 @@
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { describe, expect, beforeAll, afterAll } from "vitest";
 import {
+  itInOrg,
   createScenario,
   destroyScenario,
   shape,
@@ -40,7 +41,7 @@ const ROW_SHAPE = [
 ];
 
 describe("candidateService.getAll", () => {
-  it("joins the stage name and job title onto each row", async () => {
+  itInOrg("joins the stage name and job title onto each row", async () => {
     const result = await candidateService.getAll(s.jobA.id, {});
     expect(shape(result)).toEqual([
       "limit",
@@ -51,7 +52,7 @@ describe("candidateService.getAll", () => {
     ]);
   });
 
-  it("scopes to a job when given one", async () => {
+  itInOrg("scopes to a job when given one", async () => {
     const { rows, total } = await candidateService.getAll(s.jobA.id, {});
     expect(total).toBe(2);
     expect(rows.map((r) => r.id).sort()).toEqual(
@@ -59,13 +60,13 @@ describe("candidateService.getAll", () => {
     );
   });
 
-  it("defaults to a page size of 25", async () => {
+  itInOrg("defaults to a page size of 25", async () => {
     const result = await candidateService.getAll(s.jobA.id, {});
     expect(result.limit).toBe(25);
     expect(result.page).toBe(1);
   });
 
-  it("hides other teams' candidates from a team-scoped user", async () => {
+  itInOrg("hides other teams' candidates from a team-scoped user", async () => {
     const forInterviewer = await candidateService.getAll(undefined, {
       teamUserId: s.interviewer.id,
     });
@@ -75,7 +76,7 @@ describe("candidateService.getAll", () => {
     expect(ids).not.toContain(s.candidateB1);
   });
 
-  it("combines a job filter with the team filter rather than overriding it", async () => {
+  itInOrg("combines a job filter with the team filter rather than overriding it", async () => {
     // Asking for jobB as someone only on jobA's team yields nothing, rather
     // than jobB's candidates.
     const result = await candidateService.getAll(s.jobB.id, {
@@ -85,32 +86,32 @@ describe("candidateService.getAll", () => {
     expect(result.total).toBe(0);
   });
 
-  it("filters by status", async () => {
+  itInOrg("filters by status", async () => {
     const rejected = await candidateService.getAll(s.jobA.id, {
       status: "rejected",
     });
     expect(rejected.rows.map((r) => r.id)).toEqual([s.candidateA2]);
   });
 
-  it("filters by stage", async () => {
+  itInOrg("filters by stage", async () => {
     const inFirstStage = await candidateService.getAll(s.jobA.id, {
       stageId: s.jobA.stageIds[0],
     });
     expect(inFirstStage.rows.map((r) => r.id)).toEqual([s.candidateA1]);
   });
 
-  it("searches across name and email", async () => {
+  itInOrg("searches across name and email", async () => {
     const byName = await candidateService.getAll(s.jobA.id, { search: "Ada" });
     expect(byName.rows.map((r) => r.id)).toEqual([s.candidateA1]);
   });
 
-  it("orders by application date, newest first", async () => {
+  itInOrg("orders by application date, newest first", async () => {
     const { rows } = await candidateService.getAll(s.jobA.id, {});
     const times = rows.map((r) => r.appliedAt.getTime());
     expect(times).toEqual([...times].sort((a, b) => b - a));
   });
 
-  it("paginates without changing the reported total", async () => {
+  itInOrg("paginates without changing the reported total", async () => {
     const page1 = await candidateService.getAll(s.jobA.id, {
       page: 1,
       limit: 1,
@@ -122,7 +123,7 @@ describe("candidateService.getAll", () => {
 });
 
 describe("candidateService.getById", () => {
-  it("assembles the whole candidate detail panel in one call", async () => {
+  itInOrg("assembles the whole candidate detail panel in one call", async () => {
     const candidate = await candidateService.getById(s.candidateA1);
     const keys = shape(candidate);
 
@@ -142,13 +143,13 @@ describe("candidateService.getById", () => {
     }
   });
 
-  it("includes the candidate's interviews and current offer", async () => {
+  itInOrg("includes the candidate's interviews and current offer", async () => {
     const candidate = await candidateService.getById(s.candidateA1);
     expect(candidate!.interviews.map((i) => i.id)).toEqual([s.interviewA1]);
     expect(candidate!.offer?.id).toBe(s.offerA1);
   });
 
-  it("returns null for a candidate that does not exist", async () => {
+  itInOrg("returns null for a candidate that does not exist", async () => {
     expect(await candidateService.getById(2_000_000_000)).toBeNull();
   });
 });

@@ -6,6 +6,7 @@ import {
   timestamp,
   index,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 
 import { candidateActivityType } from "./enums";
 import { candidates } from "./candidates";
@@ -13,11 +14,16 @@ import { jobs } from "./jobs";
 import { offers } from "./offers";
 import { jobPipelineStages } from "./pipeline";
 import { users } from "./users";
+import { organizations } from "./organizations";
 
 export const candidateActivities = pgTable(
   "candidate_activities",
   {
     id: serial("id").primaryKey(),
+    organizationId: integer("organization_id")
+      .notNull()
+      .default(sql`app_current_org()`)
+      .references(() => organizations.id, { onDelete: "cascade" }),
 
     candidateId: integer("candidate_id")
       .notNull()

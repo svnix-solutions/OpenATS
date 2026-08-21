@@ -1,5 +1,6 @@
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { describe, expect, beforeAll, afterAll } from "vitest";
 import {
+  itInOrg,
   createScenario,
   destroyScenario,
   shape,
@@ -35,6 +36,7 @@ const LIST_SHAPE = [
   "[].employmentType",
   "[].id",
   "[].location",
+  "[].organizationId",
   "[].payFrequency",
   "[].salaryFixed",
   "[].salaryMax",
@@ -48,30 +50,30 @@ const LIST_SHAPE = [
 ];
 
 describe("jobService.getAll", () => {
-  it("returns the full job row plus a flattened skills array", async () => {
+  itInOrg("returns the full job row plus a flattened skills array", async () => {
     expect(shape(await jobService.getAll())).toEqual(LIST_SHAPE);
   });
 
-  it("returns every job when given no user", async () => {
+  itInOrg("returns every job when given no user", async () => {
     const ids = (await jobService.getAll()).map((j) => j.id);
     expect(ids).toContain(s.jobA.id);
     expect(ids).toContain(s.jobB.id);
   });
 
-  it("narrows to hiring-team membership when given a user id", async () => {
+  itInOrg("narrows to hiring-team membership when given a user id", async () => {
     const ids = (await jobService.getAll(s.interviewer.id)).map((j) => j.id);
     expect(ids).toContain(s.jobA.id);
     expect(ids).not.toContain(s.jobB.id);
   });
 
-  it("gives a manager on both teams both jobs", async () => {
+  itInOrg("gives a manager on both teams both jobs", async () => {
     const ids = (await jobService.getAll(s.manager.id)).map((j) => j.id);
     expect(ids).toEqual(expect.arrayContaining([s.jobA.id, s.jobB.id]));
   });
 });
 
 describe("jobService.getPaginated", () => {
-  it("wraps rows with total, page, limit and totalPages", async () => {
+  itInOrg("wraps rows with total, page, limit and totalPages", async () => {
     const result = await jobService.getPaginated({
       departmentId: s.departmentId,
       page: 1,
@@ -89,7 +91,7 @@ describe("jobService.getPaginated", () => {
     expect(result.totalPages).toBe(1);
   });
 
-  it("computes totalPages from the unpaged total, not the page size", async () => {
+  itInOrg("computes totalPages from the unpaged total, not the page size", async () => {
     const page1 = await jobService.getPaginated({
       departmentId: s.departmentId,
       page: 1,
@@ -108,7 +110,7 @@ describe("jobService.getPaginated", () => {
     expect(page1.rows[0]!.id).not.toBe(page2.rows[0]!.id);
   });
 
-  it("orders newest first", async () => {
+  itInOrg("orders newest first", async () => {
     const { rows } = await jobService.getPaginated({
       departmentId: s.departmentId,
       page: 1,
@@ -120,7 +122,7 @@ describe("jobService.getPaginated", () => {
 });
 
 describe("jobService.getById", () => {
-  it("nests hiringTeam and pipelineStages that the list endpoints omit", async () => {
+  itInOrg("nests hiringTeam and pipelineStages that the list endpoints omit", async () => {
     const job = await jobService.getById(s.jobA.id);
 
     expect(shape(job)).toEqual([
@@ -134,14 +136,17 @@ describe("jobService.getById", () => {
       "hiringTeam[].addedAt",
       "hiringTeam[].id",
       "hiringTeam[].jobId",
+      "hiringTeam[].organizationId",
       "hiringTeam[].userId",
       "id",
       "location",
+      "organizationId",
       "payFrequency",
       "pipelineStages[].createdAt",
       "pipelineStages[].id",
       "pipelineStages[].jobId",
       "pipelineStages[].name",
+      "pipelineStages[].organizationId",
       "pipelineStages[].position",
       "pipelineStages[].sourceTemplateId",
       "pipelineStages[].stageType",
@@ -158,24 +163,24 @@ describe("jobService.getById", () => {
     ]);
   });
 
-  it("orders pipeline stages by position", async () => {
+  itInOrg("orders pipeline stages by position", async () => {
     const job = await jobService.getById(s.jobA.id);
     expect(job!.pipelineStages.map((p) => p.position)).toEqual([1, 2, 3]);
     expect(job!.pipelineStages.map((p) => p.id)).toEqual(s.jobA.stageIds);
   });
 
-  it("returns skills as plain strings, not rows", async () => {
+  itInOrg("returns skills as plain strings, not rows", async () => {
     const job = await jobService.getById(s.jobA.id);
     expect([...job!.skills].sort()).toEqual(["postgres", "typescript"]);
   });
 
-  it("returns null for a job that does not exist", async () => {
+  itInOrg("returns null for a job that does not exist", async () => {
     expect(await jobService.getById(2_000_000_000)).toBeNull();
   });
 });
 
 describe("jobService.getBySlug", () => {
-  it("returns a flatter row than getById — no team, no stages", async () => {
+  itInOrg("returns a flatter row than getById — no team, no stages", async () => {
     const job = await jobService.getBySlug(s.jobA.slug);
     expect(shape(job)).toEqual(LIST_SHAPE.map((k) => k.replace("[].", "")));
     expect(job!.id).toBe(s.jobA.id);
@@ -183,7 +188,7 @@ describe("jobService.getBySlug", () => {
 });
 
 describe("jobService.listPublishedForCareers", () => {
-  it("projects only the seven fields the public careers page needs", async () => {
+  itInOrg("projects only the seven fields the public careers page needs", async () => {
     expect(shape(await jobService.listPublishedForCareers())).toEqual([
       "[].createdAt",
       "[].departmentName",
@@ -195,7 +200,7 @@ describe("jobService.listPublishedForCareers", () => {
     ]);
   });
 
-  it("resolves the department name rather than exposing its id", async () => {
+  itInOrg("resolves the department name rather than exposing its id", async () => {
     const rows = await jobService.listPublishedForCareers();
     const mine = rows.find((r) => r.id === s.jobA.id);
     expect(mine?.departmentName).toBe(`Dept ${s.suffix}`);

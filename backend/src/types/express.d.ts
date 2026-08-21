@@ -1,11 +1,12 @@
-import { User } from "../db";
-
-type AppRole = "super_admin" | "hiring_manager" | "interviewer";
+import type { AuthenticatedUser } from "../shared/auth/verify-token";
 
 declare global {
   namespace Express {
     interface Request {
-      user: User & { role: AppRole };
+      // Kept in step with what authMiddleware actually puts here, rather than
+      // restated — the two drifting is how `organizationId` would silently go
+      // missing on a route.
+      user: AuthenticatedUser;
     }
   }
 }

@@ -1,7 +1,8 @@
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { describe, expect, beforeAll, afterAll } from "vitest";
 import { eq } from "drizzle-orm";
 import { db } from "../../src/db";
 import {
+  itInOrg,
   createScenario,
   destroyScenario,
   shape,
@@ -26,7 +27,7 @@ afterAll(async () => {
 });
 
 describe("reportService.getAnalytics", () => {
-  it("returns a summary plus five report sections", async () => {
+  itInOrg("returns a summary plus five report sections", async () => {
     const report = await reportService.getAnalytics("7d", s.departmentId);
 
     expect(Object.keys(report).sort()).toEqual([
@@ -39,7 +40,7 @@ describe("reportService.getAnalytics", () => {
     ]);
   });
 
-  it("reports the summary metrics the dashboard tiles read", async () => {
+  itInOrg("reports the summary metrics the dashboard tiles read", async () => {
     const report = await reportService.getAnalytics("7d", s.departmentId);
 
     expect(shape(report.summary)).toEqual([
@@ -54,7 +55,7 @@ describe("reportService.getAnalytics", () => {
     ]);
   });
 
-  it("counts only the requested department", async () => {
+  itInOrg("counts only the requested department", async () => {
     const report = await reportService.getAnalytics("90d", s.departmentId);
 
     // Both fixture jobs are published, and all three fixture candidates
@@ -63,7 +64,7 @@ describe("reportService.getAnalytics", () => {
     expect(report.summary.totalCandidates).toBe(3);
   });
 
-  it("has no notion of who is asking", async () => {
+  itInOrg("has no notion of who is asking", async () => {
     // getAnalytics takes a period and a department and nothing else. There is
     // no user, so no team scoping: an interviewer on one job sees figures
     // aggregated across every job in the department. Phase 1 has to give this
@@ -73,7 +74,7 @@ describe("reportService.getAnalytics", () => {
 });
 
 describe("reportService.getAnalytics caching", () => {
-  it("serves a stale result for the same period and department", async () => {
+  itInOrg("serves a stale result for the same period and department", async () => {
     const before = await reportService.getAnalytics("90d", s.departmentId);
     expect(before.summary.totalCandidates).toBe(3);
 
@@ -95,7 +96,7 @@ describe("reportService.getAnalytics caching", () => {
     expect(other).toBe(after);
   });
 
-  it("keys separately per period", async () => {
+  itInOrg("keys separately per period", async () => {
     const sevenDay = await reportService.getAnalytics("7d", s.departmentId);
     const ninetyDay = await reportService.getAnalytics("90d", s.departmentId);
     expect(sevenDay).not.toBe(ninetyDay);

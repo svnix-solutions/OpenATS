@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from "express";
 import { errors as joseErrors } from "jose";
 import { AuthError, verifyAccessToken } from "../shared/auth/verify-token";
+import { runInOrganization } from "../db";
 import logger from "../utils/logger";
 
 export const authMiddleware = async (
@@ -43,5 +44,25 @@ export const authMiddleware = async (
   }
 
   req.user = user;
-  next();
+
+  // Everything downstream runs inside a transaction carrying this user's
+  // organization, which is what every row-level-security policy reads. A
+  // handler that escapes it sees an empty database rather than another
+  // tenant's rows.
+  runInOrganization(user.organizationId, async () => {
+    await new Promise<void>((resolve, reject) => {
+      res.on("finish", resolve);
+      res.on("close", resolve);
+      try {
+        next(reject);
+      } catch (err) {
+        reject(err);
+      }
+    });
+  }).catch((err: unknown) => {
+    logger.error("[authMiddleware] request context failed:", err);
+    if (!res.headersSent) {
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
 };
