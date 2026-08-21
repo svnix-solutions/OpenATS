@@ -40,3 +40,4 @@ When a later decision changes an earlier one, write a new record and set the old
 | # | Title | Status |
 | --- | --- | --- |
 | [0001](0001-multi-tenancy.md) | Multi-tenancy: agencies, client companies, and applications | Proposed |
+| [0002](0002-testing-multi-tenancy.md) | Testing the tenancy boundary | Proposed |
