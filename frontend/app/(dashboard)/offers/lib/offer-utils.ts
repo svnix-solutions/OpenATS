@@ -33,7 +33,10 @@ export function getStatusStyle(status: string) {
 
 export function fmtSalary(offer: Offer): string {
   if (!offer.salary) return "—";
-  return `${offer.currency ?? ""} ${Number(offer.salary).toLocaleString()}`.trim();
+  // Pinned to en-US, like fmtDate below. Without a locale this follows the
+  // machine's, so the same offer renders "120,000" for one viewer and
+  // "1,20,000" for another, and the test suite fails outside en-US.
+  return `${offer.currency ?? ""} ${Number(offer.salary).toLocaleString("en-US")}`.trim();
 }
 
 export function fmtDate(val: string | null): string {
