@@ -10,6 +10,7 @@ import {
 } from "../helpers/scenario";
 import { candidates } from "../../src/db/schema/candidates";
 import { reportService } from "../../src/modules/report/report.service";
+import { runInOrganization } from "../../src/db";
 
 // See characterize-job.test.ts for what these suites are for.
 //
@@ -64,11 +65,11 @@ describe("reportService.getAnalytics", () => {
     expect(report.summary.totalCandidates).toBe(3);
   });
 
-  itInOrg("has no notion of who is asking", async () => {
-    // getAnalytics takes a period and a department and nothing else. There is
-    // no user, so no team scoping: an interviewer on one job sees figures
-    // aggregated across every job in the department. Phase 1 has to give this
-    // an organization dimension.
+  itInOrg("still has no notion of which *user* is asking", async () => {
+    // Phase 1 gave this an organization dimension, so figures no longer cross
+    // tenants. It still has no user dimension: an interviewer on one job sees
+    // everything in their organization's department. That is a phase 3
+    // question, not an isolation one.
     expect(reportService.getAnalytics).toHaveLength(2);
   });
 });
@@ -88,12 +89,19 @@ describe("reportService.getAnalytics caching", () => {
     // invisible. Correct enough for a dashboard tile today.
     expect(after.summary.totalCandidates).toBe(3);
 
-    // ...but the cache key is `${period}|${departmentId}` and nothing else.
-    // Once rows carry an organization, two tenants asking for the same period
-    // collide on that key and one is served the other's figures. This test
-    // exists to make that concrete before it is a leak.
     const other = await reportService.getAnalytics("90d", s.departmentId);
     expect(other).toBe(after);
+  });
+
+  itInOrg("keys separately per organization, not just per period", async () => {
+    // The cache sits in front of the queries, so row-level security cannot
+    // help here — the key has to carry the organization itself.
+    const mine = await reportService.getAnalytics("7d", s.departmentId);
+    const theirs = await runInOrganization(s.organizationId + 100_000, () =>
+      reportService.getAnalytics("7d", s.departmentId),
+    );
+    expect(theirs).not.toBe(mine);
+    expect(theirs.summary.totalCandidates).toBe(0);
   });
 
   itInOrg("keys separately per period", async () => {

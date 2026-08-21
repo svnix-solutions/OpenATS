@@ -32,7 +32,12 @@ type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
  * request makes lands on the connection that carries its context, without a
  * single service having to thread it through.
  */
-const orgContext = new AsyncLocalStorage<Tx>();
+interface RequestContext {
+  tx: Tx;
+  organizationId: number;
+}
+
+const orgContext = new AsyncLocalStorage<RequestContext>();
 
 /**
  * The database handle every module imports.
@@ -45,7 +50,7 @@ const orgContext = new AsyncLocalStorage<Tx>();
  */
 export const db = new Proxy(rootDb, {
   get(target, property, receiver) {
-    const active: Db | Tx = orgContext.getStore() ?? target;
+    const active: Db | Tx = orgContext.getStore()?.tx ?? target;
     const value = Reflect.get(active, property, receiver);
     return typeof value === "function" ? value.bind(active) : value;
   },
@@ -62,7 +67,7 @@ export async function runInOrganization<T>(
     await tx.execute(
       sql`SELECT set_config('app.org_id', ${String(organizationId)}, true)`,
     );
-    return orgContext.run(tx, fn);
+    return orgContext.run({ tx, organizationId }, fn);
   });
 }
 
@@ -96,6 +101,17 @@ export async function resolveMembership(asgardeoUserId: string): Promise<{
     role: row.role,
     clientCompanyId: row.client_company_id,
   };
+}
+
+/**
+ * The organization the current request is acting for, or null outside one.
+ *
+ * Anything that keys a cache, a file path or a queue job needs this: row-level
+ * security scopes the *rows*, and cannot help with state the application keeps
+ * beside them.
+ */
+export function currentOrganizationId(): number | null {
+  return orgContext.getStore()?.organizationId ?? null;
 }
 
 /** Escape hatch for migrations, seeding and tests. Bypasses the proxy. */

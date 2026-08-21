@@ -232,6 +232,20 @@
       "when": 1787339270089,
       "tag": "0032_login_provisioning",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1787341393589,
+      "tag": "0033_provision_returns_table",
+      "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1787341430869,
+      "tag": "0034_attach_single_org",
+      "breakpoints": true
     }
   ]
 }

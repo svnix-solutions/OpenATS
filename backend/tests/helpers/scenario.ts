@@ -84,6 +84,17 @@ export function itInOrg(name: string, fn: () => Promise<void>) {
  * for an owner connection exactly once, to create the tenant they then work
  * inside.
  */
+export async function createTestOrganization(suffix: string): Promise<number> {
+  const id = await createOrganization(suffix);
+  activeOrganizationId = id;
+  return id;
+}
+
+export async function dropTestOrganization(id: number): Promise<void> {
+  await dropOrganization(id);
+  activeOrganizationId = null;
+}
+
 async function createOrganization(suffix: string): Promise<number> {
   const url = process.env.MIGRATION_DATABASE_URL;
   if (!url) {
@@ -131,7 +142,12 @@ async function makeUser(
       email: `${tag}.${suffix}@example.test`,
     })
     .returning();
-  return { ...row!, role };
+  return {
+    ...row!,
+    role,
+    organizationId: currentOrganization(),
+    clientCompanyId: null,
+  };
 }
 
 async function makeJob(

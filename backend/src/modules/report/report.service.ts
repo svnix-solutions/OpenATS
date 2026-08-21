@@ -1,4 +1,4 @@
-import { db } from "../../db";
+import { currentOrganizationId, db } from "../../db";
 import { sql } from "drizzle-orm";
 
 export type ReportPeriod = "7d" | "30d" | "90d";
@@ -133,7 +133,12 @@ export const reportService = {
     period: ReportPeriod,
     departmentId?: number,
   ): Promise<AnalyticsReport> {
-    const cacheKey = `${period}|${departmentId ?? "all"}`;
+    // The organization belongs in the key. Row-level security scopes the
+    // queries below, but this cache sits in front of them: without it, two
+    // tenants asking for the same period collide and one is served the
+    // other's figures.
+    const organizationId = currentOrganizationId();
+    const cacheKey = `${organizationId ?? "none"}|${period}|${departmentId ?? "all"}`;
     const cached = analyticsCache.get(cacheKey);
     if (cached && cached.expiresAt > Date.now()) return cached.value;
 

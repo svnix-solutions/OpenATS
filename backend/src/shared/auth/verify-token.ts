@@ -120,14 +120,44 @@ export async function verifyAccessToken(
   // go through a row-level-security policy that needs one. Both calls below
   // are SECURITY DEFINER functions that take a subject and return an
   // identity — see drizzle/0032_login_provisioning.sql.
-  const provisioned = await unscopedDb.execute<User>(
+  const provisioned = await unscopedDb.execute<{
+    id: number;
+    asgardeo_user_id: string;
+    first_name: string;
+    last_name: string;
+    email: string;
+    avatar_url: string | null;
+    is_active: boolean;
+    created_at: Date;
+    updated_at: Date;
+  }>(
     sql`SELECT * FROM app_provision_user(${sub}, ${email}, ${firstName}, ${lastName})`,
   );
 
-  const user = provisioned.rows[0];
-  if (!user) {
+  const row = provisioned.rows[0];
+  if (!row) {
     throw new AuthError(500, "Failed to provision user");
   }
+
+  // Raw SQL comes back in the database's snake_case, not the schema's
+  // camelCase, so this mapping is deliberate rather than a spread.
+  const user: User = {
+    id: row.id,
+    asgardeoUserId: row.asgardeo_user_id,
+    firstName: row.first_name,
+    lastName: row.last_name,
+    email: row.email,
+    avatarUrl: row.avatar_url,
+    isActive: row.is_active,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+
+  // Bridges first login until sub-organizations land: attaches only when a
+  // single organization exists, and declines to guess otherwise.
+  await unscopedDb.execute(
+    sql`SELECT app_attach_default_membership(${user.id})`,
+  );
 
   const membership = await resolveMembership(sub);
   if (!membership) {
