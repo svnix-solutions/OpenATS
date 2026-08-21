@@ -1,11 +1,17 @@
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { describe, expect, beforeAll, afterAll } from "vitest";
 import { eq, inArray } from "drizzle-orm";
-import { db } from "../../src/db";
+import { db, runInOrganization } from "../../src/db";
+import {
+  createTestOrganization,
+  dropTestOrganization,
+  itInOrg,
+} from "../helpers/scenario";
 import { company, departments } from "../../src/db/schema/company";
 import { jobs } from "../../src/db/schema/jobs";
 import { jobHiringTeam } from "../../src/db/schema/pipeline";
 import { candidates } from "../../src/db/schema/candidates";
 import { users } from "../../src/db/schema/users";
+import { organizationMembers } from "../../src/db/schema/organizations";
 import { canAccessJob, canAccessCandidate } from "../../src/shared/auth/job-access";
 import {
   requireCandidateAccess,
@@ -42,10 +48,17 @@ async function makeUser(
       email: `${tag}.${SUFFIX}@example.test`,
     })
     .returning();
-  return { ...row!, role };
+  return { ...row!, role, organizationId, clientCompanyId: null };
 }
 
+let organizationId: number;
+
 beforeAll(async () => {
+  organizationId = await createTestOrganization(SUFFIX);
+  await runInOrganization(organizationId, seedFixtures);
+});
+
+async function seedFixtures() {
   const [co] = await db
     .insert(company)
     .values({ name: `Co ${SUFFIX}`, email: `co.${SUFFIX}@example.test` })
@@ -63,6 +76,11 @@ beforeAll(async () => {
   interviewerOffTeamUser = await makeUser(
     "interviewer-off-team",
     "interviewer",
+  );
+
+  await db.insert(organizationMembers).values(
+    [memberUser, outsiderUser, adminUser, interviewerOnTeamUser, interviewerOffTeamUser]
+      .map((u) => ({ organizationId, userId: u.id, role: "recruiter" as const })),
   );
 
   const inserted = await db
@@ -113,43 +131,50 @@ beforeAll(async () => {
 
   teamCandidateId = insertedCandidates[0]!.id;
   otherCandidateId = insertedCandidates[1]!.id;
-});
+}
 
 afterAll(async () => {
+  await runInOrganization(organizationId, teardownFixtures);
+  await dropTestOrganization(organizationId);
+});
+
+async function teardownFixtures() {
   await db
     .delete(candidates)
     .where(inArray(candidates.id, [teamCandidateId, otherCandidateId]));
   await db.delete(jobs).where(inArray(jobs.id, [teamJobId, otherJobId]));
-  await db.delete(users).where(
-    inArray(users.id, [
-      memberUser.id,
-      outsiderUser.id,
-      adminUser.id,
-      interviewerOnTeamUser.id,
-      interviewerOffTeamUser.id,
-    ]),
-  );
+  const userIds = [
+    memberUser.id,
+    outsiderUser.id,
+    adminUser.id,
+    interviewerOnTeamUser.id,
+    interviewerOffTeamUser.id,
+  ];
+  await db
+    .delete(organizationMembers)
+    .where(inArray(organizationMembers.userId, userIds));
+  await db.delete(users).where(inArray(users.id, userIds));
   await db.delete(company).where(eq(company.email, `co.${SUFFIX}@example.test`));
-});
+}
 
 describe("canAccessJob", () => {
-  it("allows a member of the hiring team", async () => {
+  itInOrg("allows a member of the hiring team", async () => {
     expect(await canAccessJob(memberUser, teamJobId)).toBe(true);
   });
 
-  it("denies a logged-in user who is not on the hiring team", async () => {
+  itInOrg("denies a logged-in user who is not on the hiring team", async () => {
     expect(await canAccessJob(outsiderUser, teamJobId)).toBe(false);
   });
 
-  it("denies a member for a different job", async () => {
+  itInOrg("denies a member for a different job", async () => {
     expect(await canAccessJob(memberUser, otherJobId)).toBe(false);
   });
 
-  it("allows super_admin without team membership", async () => {
+  itInOrg("allows super_admin without team membership", async () => {
     expect(await canAccessJob(adminUser, teamJobId)).toBe(true);
   });
 
-  it("denies a job that does not exist", async () => {
+  itInOrg("denies a job that does not exist", async () => {
     expect(await canAccessJob(memberUser, 2_000_000_000)).toBe(false);
   });
 });
@@ -183,14 +208,14 @@ function runMiddleware(
 }
 
 describe("requireJobAccess", () => {
-  it("passes a hiring team member through", async () => {
+  itInOrg("passes a hiring team member through", async () => {
     const result = await runMiddleware(requireJobAccess(), memberUser, {
       jobId: String(teamJobId),
     });
     expect(result.passed).toBe(true);
   });
 
-  it("rejects an outsider with 403", async () => {
+  itInOrg("rejects an outsider with 403", async () => {
     const result = await runMiddleware(requireJobAccess(), outsiderUser, {
       jobId: String(teamJobId),
     });
@@ -198,7 +223,7 @@ describe("requireJobAccess", () => {
     expect(result.status).toBe(403);
   });
 
-  it("rejects a malformed id with 400", async () => {
+  itInOrg("rejects a malformed id with 400", async () => {
     const result = await runMiddleware(requireJobAccess(), memberUser, {
       jobId: "not-a-number",
     });
@@ -207,7 +232,7 @@ describe("requireJobAccess", () => {
 });
 
 describe("requireCandidateAccess", () => {
-  it("rejects a candidate on another job with 403", async () => {
+  itInOrg("rejects a candidate on another job with 403", async () => {
     const result = await runMiddleware(
       requireCandidateAccess(),
       memberUser,
@@ -217,7 +242,7 @@ describe("requireCandidateAccess", () => {
     expect(result.status).toBe(403);
   });
 
-  it("passes for a candidate on the user's own job", async () => {
+  itInOrg("passes for a candidate on the user's own job", async () => {
     const result = await runMiddleware(
       requireCandidateAccess(),
       memberUser,
@@ -228,23 +253,23 @@ describe("requireCandidateAccess", () => {
 });
 
 describe("canAccessCandidate", () => {
-  it("allows a member of the candidate's job", async () => {
+  itInOrg("allows a member of the candidate's job", async () => {
     expect(await canAccessCandidate(memberUser, teamCandidateId)).toBe(true);
   });
 
-  it("denies a candidate belonging to another job", async () => {
+  itInOrg("denies a candidate belonging to another job", async () => {
     expect(await canAccessCandidate(memberUser, otherCandidateId)).toBe(false);
   });
 
-  it("denies an outsider", async () => {
+  itInOrg("denies an outsider", async () => {
     expect(await canAccessCandidate(outsiderUser, teamCandidateId)).toBe(false);
   });
 
-  it("allows super_admin", async () => {
+  itInOrg("allows super_admin", async () => {
     expect(await canAccessCandidate(adminUser, otherCandidateId)).toBe(true);
   });
 
-  it("denies a candidate that does not exist", async () => {
+  itInOrg("denies a candidate that does not exist", async () => {
     expect(await canAccessCandidate(memberUser, 2_000_000_000)).toBe(false);
   });
 });
@@ -278,35 +303,35 @@ describe("getCandidateById authorization", () => {
   // scoped to their own hiring team, exactly like the list endpoint already
   // is; hiring_manager/super_admin must stay company-wide (see the comment
   // on the check itself in candidate.controller.ts for why).
-  it("allows an interviewer on the candidate's hiring team", async () => {
+  itInOrg("allows an interviewer on the candidate's hiring team", async () => {
     const result = await runController(getCandidateById, interviewerOnTeamUser, {
       id: String(teamCandidateId),
     });
     expect(result.status).toBe(200);
   });
 
-  it("denies an interviewer not on the candidate's hiring team with 403", async () => {
+  itInOrg("denies an interviewer not on the candidate's hiring team with 403", async () => {
     const result = await runController(getCandidateById, interviewerOffTeamUser, {
       id: String(teamCandidateId),
     });
     expect(result.status).toBe(403);
   });
 
-  it("allows hiring_manager for a candidate outside their own hiring team (no regression)", async () => {
+  itInOrg("allows hiring_manager for a candidate outside their own hiring team (no regression)", async () => {
     const result = await runController(getCandidateById, outsiderUser, {
       id: String(teamCandidateId),
     });
     expect(result.status).toBe(200);
   });
 
-  it("allows super_admin unconditionally", async () => {
+  itInOrg("allows super_admin unconditionally", async () => {
     const result = await runController(getCandidateById, adminUser, {
       id: String(otherCandidateId),
     });
     expect(result.status).toBe(200);
   });
 
-  it("returns 403, not a leaking 404, for an interviewer probing a nonexistent id", async () => {
+  itInOrg("returns 403, not a leaking 404, for an interviewer probing a nonexistent id", async () => {
     const result = await runController(getCandidateById, interviewerOffTeamUser, {
       id: "2000000000",
     });

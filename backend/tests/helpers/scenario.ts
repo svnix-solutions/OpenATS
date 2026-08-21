@@ -1,5 +1,7 @@
+import { it } from "vitest";
+import { Client } from "pg";
 import { eq, inArray } from "drizzle-orm";
-import { db } from "../../src/db";
+import { db, runInOrganization } from "../../src/db";
 import { company, departments } from "../../src/db/schema/company";
 import { jobs, jobSkills } from "../../src/db/schema/jobs";
 import { jobHiringTeam, jobPipelineStages } from "../../src/db/schema/pipeline";
@@ -11,6 +13,7 @@ import { assessments } from "../../src/db/schema/assessments";
 import { candidateInterviews } from "../../src/db/schema/interviews";
 import { offers } from "../../src/db/schema/offers";
 import { users } from "../../src/db/schema/users";
+import { organizationMembers } from "../../src/db/schema/organizations";
 import type { AuthenticatedUser } from "../../src/shared/auth/verify-token";
 
 // One coherent world for the characterization suites to read.
@@ -27,6 +30,8 @@ export interface ScenarioJob {
 
 export interface Scenario {
   suffix: string;
+  /** The tenant every row below belongs to. */
+  organizationId: number;
   companyId: number;
   departmentId: number;
   admin: AuthenticatedUser;
@@ -50,6 +55,79 @@ export interface Scenario {
 
 let counter = 0;
 
+// The organization the current file's fixtures live in. `itInOrg` reads it so
+// individual tests do not have to thread it through.
+let activeOrganizationId: number | null = null;
+
+export function currentOrganization(): number {
+  if (activeOrganizationId === null) {
+    throw new Error("createScenario() must run before currentOrganization()");
+  }
+  return activeOrganizationId;
+}
+
+/**
+ * `it`, with the body running under the scenario's organization.
+ *
+ * Every query now goes through a row-level-security policy that reads the
+ * organization from the connection, so a test that does not establish one sees
+ * an empty database. This is the whole of what a test file needs to change.
+ */
+export function itInOrg(name: string, fn: () => Promise<void>) {
+  return it(name, () => runInOrganization(currentOrganization(), fn));
+}
+
+/**
+ * Organizations cannot be created through the application role — their policy
+ * is `WITH CHECK (id = app_current_org())`, so no tenant can bring another
+ * into existence. Provisioning is a platform operation, so the fixtures reach
+ * for an owner connection exactly once, to create the tenant they then work
+ * inside.
+ */
+export async function createTestOrganization(suffix: string): Promise<number> {
+  const id = await createOrganization(suffix);
+  activeOrganizationId = id;
+  return id;
+}
+
+export async function dropTestOrganization(id: number): Promise<void> {
+  await dropOrganization(id);
+  activeOrganizationId = null;
+}
+
+async function createOrganization(suffix: string): Promise<number> {
+  const url = process.env.MIGRATION_DATABASE_URL;
+  if (!url) {
+    throw new Error("MIGRATION_DATABASE_URL is required to create fixtures");
+  }
+
+  const owner = new Client({ connectionString: url });
+  await owner.connect();
+  try {
+    const result = await owner.query<{ id: number }>(
+      "INSERT INTO organizations (name, slug) VALUES ($1, $2) RETURNING id",
+      [`Org ${suffix}`, suffix],
+    );
+    return result.rows[0]!.id;
+  } finally {
+    await owner.end();
+  }
+}
+
+async function dropOrganization(organizationId: number): Promise<void> {
+  const owner = new Client({
+    connectionString: process.env.MIGRATION_DATABASE_URL,
+  });
+  await owner.connect();
+  try {
+    await owner.query("DELETE FROM organizations WHERE id = $1", [
+      organizationId,
+    ]);
+  } finally {
+    await owner.end();
+  }
+}
+
 async function makeUser(
   suffix: string,
   tag: string,
@@ -64,7 +142,12 @@ async function makeUser(
       email: `${tag}.${suffix}@example.test`,
     })
     .returning();
-  return { ...row!, role };
+  return {
+    ...row!,
+    role,
+    organizationId: currentOrganization(),
+    clientCompanyId: null,
+  };
 }
 
 async function makeJob(
@@ -72,6 +155,7 @@ async function makeJob(
   tag: string,
   departmentId: number,
   createdBy: number,
+  createdAt: Date,
 ): Promise<ScenarioJob> {
   const slug = `${tag}-${suffix}`;
   const [job] = await db
@@ -83,6 +167,7 @@ async function makeJob(
       employmentType: "full_time",
       status: "published",
       createdBy,
+      createdAt,
     })
     .returning({ id: jobs.id });
 
@@ -109,7 +194,16 @@ export async function createScenario(tag: string): Promise<Scenario> {
   // Unique per call: vitest runs files in parallel, and jobs.slug and
   // users.email are globally unique.
   const suffix = `${tag}-${Date.now()}-${counter++}`;
+  const organizationId = await createOrganization(suffix);
+  activeOrganizationId = organizationId;
 
+  return runInOrganization(organizationId, () => buildScenario(suffix, organizationId));
+}
+
+async function buildScenario(
+  suffix: string,
+  organizationId: number,
+): Promise<Scenario> {
   const [co] = await db
     .insert(company)
     .values({ name: `Co ${suffix}`, email: `co.${suffix}@example.test` })
@@ -123,8 +217,22 @@ export async function createScenario(tag: string): Promise<Scenario> {
   const manager = await makeUser(suffix, "manager", "hiring_manager");
   const interviewer = await makeUser(suffix, "interviewer", "interviewer");
 
-  const jobA = await makeJob(suffix, "alpha", dept!.id, admin.id);
-  const jobB = await makeJob(suffix, "bravo", dept!.id, admin.id);
+  // A user row is invisible until a membership places it in this organization.
+  await db.insert(organizationMembers).values([
+    { organizationId, userId: admin.id, role: "agency_owner" },
+    { organizationId, userId: manager.id, role: "recruiter" },
+    { organizationId, userId: interviewer.id, role: "interviewer" },
+  ]);
+
+  // Distinct timestamps: everything below runs in one transaction, so
+  // defaultNow() would give both jobs the same value and any ordering
+  // assertion would be a coin toss.
+  const jobA = await makeJob(
+    suffix, "alpha", dept!.id, admin.id, new Date("2026-01-01T00:00:00Z"),
+  );
+  const jobB = await makeJob(
+    suffix, "bravo", dept!.id, admin.id, new Date("2026-02-01T00:00:00Z"),
+  );
 
   await db.insert(jobHiringTeam).values([
     { jobId: jobA.id, userId: manager.id },
@@ -238,6 +346,7 @@ export async function createScenario(tag: string): Promise<Scenario> {
 
   return {
     suffix,
+    organizationId,
     companyId: co!.id,
     departmentId: dept!.id,
     admin,
@@ -259,6 +368,12 @@ export async function createScenario(tag: string): Promise<Scenario> {
 }
 
 export async function destroyScenario(s: Scenario): Promise<void> {
+  await runInOrganization(s.organizationId, () => teardown(s));
+  await dropOrganization(s.organizationId);
+  activeOrganizationId = null;
+}
+
+async function teardown(s: Scenario): Promise<void> {
   const jobIds = [s.jobA.id, s.jobB.id];
   const candidateIds = [s.candidateA1, s.candidateA2, s.candidateB1];
   const userIds = [s.admin.id, s.manager.id, s.interviewer.id];
@@ -280,6 +395,9 @@ export async function destroyScenario(s: Scenario): Promise<void> {
     .delete(jobPipelineStages)
     .where(inArray(jobPipelineStages.jobId, jobIds));
   await db.delete(jobs).where(inArray(jobs.id, jobIds));
+  await db
+    .delete(organizationMembers)
+    .where(inArray(organizationMembers.userId, userIds));
   await db.delete(users).where(inArray(users.id, userIds));
   await db.delete(departments).where(eq(departments.id, s.departmentId));
   await db.delete(company).where(eq(company.id, s.companyId));

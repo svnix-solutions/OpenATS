@@ -7,9 +7,15 @@ import {
   unique,
   varchar,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
+import { organizations } from "./organizations";
 
 export const company = pgTable("company", {
   id: serial("id").primaryKey(),
+  organizationId: integer("organization_id")
+    .notNull()
+    .default(sql`app_current_org()`)
+    .references(() => organizations.id, { onDelete: "cascade" }),
   name: varchar("name", { length: 255 }).notNull(),
   email: varchar("email", { length: 255 }).notNull(),
   website: varchar("website", { length: 500 }),
@@ -25,6 +31,10 @@ export const departments = pgTable(
   "departments",
   {
     id: serial("id").primaryKey(),
+    organizationId: integer("organization_id")
+      .notNull()
+      .default(sql`app_current_org()`)
+      .references(() => organizations.id, { onDelete: "cascade" }),
     companyId: integer("company_id")
       .notNull()
       .references(() => company.id, { onDelete: "cascade" }),

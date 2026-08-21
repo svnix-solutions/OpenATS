@@ -1,7 +1,6 @@
 import { createRemoteJWKSet, jwtVerify } from "jose";
-import { eq } from "drizzle-orm";
-import { db } from "../../db";
-import { users } from "../../db/schema/users";
+import { sql } from "drizzle-orm";
+import { resolveMembership, unscopedDb } from "../../db";
 import type { User } from "../../db/schema/users";
 
 /**
@@ -14,7 +13,13 @@ const JWKS = createRemoteJWKSet(new URL(process.env.ASGARDEO_JWKS_URL!));
 
 export type AppRole = "super_admin" | "hiring_manager" | "interviewer";
 
-export type AuthenticatedUser = User & { role: AppRole };
+export type AuthenticatedUser = User & {
+  role: AppRole;
+  /** The tenant every query this request makes will be scoped to. */
+  organizationId: number;
+  /** Set only for client contacts; null for agency staff. */
+  clientCompanyId: number | null;
+};
 
 /** An authentication failure with the HTTP status it maps to. */
 export class AuthError extends Error {
@@ -111,39 +116,67 @@ export async function verifyAccessToken(
     throw new AuthError(403, "Token missing required email claim");
   }
 
-  let [user] = await db
-    .select()
-    .from(users)
-    .where(eq(users.asgardeoUserId, sub))
-    .limit(1);
+  // Identity resolution runs before any organization is known, so it cannot
+  // go through a row-level-security policy that needs one. Both calls below
+  // are SECURITY DEFINER functions that take a subject and return an
+  // identity — see drizzle/0032_login_provisioning.sql.
+  const provisioned = await unscopedDb.execute<{
+    id: number;
+    asgardeo_user_id: string;
+    first_name: string;
+    last_name: string;
+    email: string;
+    avatar_url: string | null;
+    is_active: boolean;
+    created_at: Date;
+    updated_at: Date;
+  }>(
+    sql`SELECT * FROM app_provision_user(${sub}, ${email}, ${firstName}, ${lastName})`,
+  );
 
-  if (!user) {
-    // The `sub` can change for an existing account when the Asgardeo tenant
-    // or user is re-provisioned. Email is the stable identity, so reconcile
-    // onto the existing row instead of colliding with its unique constraint.
-    [user] = await db
-      .update(users)
-      .set({ asgardeoUserId: sub, updatedAt: new Date() })
-      .where(eq(users.email, email))
-      .returning();
+  const row = provisioned.rows[0];
+  if (!row) {
+    throw new AuthError(500, "Failed to provision user");
   }
 
-  if (!user) {
-    // JIT provision — genuinely first login for this email
-    [user] = await db
-      .insert(users)
-      .values({ asgardeoUserId: sub, firstName, lastName, email })
-      .returning();
+  // Raw SQL comes back in the database's snake_case, not the schema's
+  // camelCase, so this mapping is deliberate rather than a spread.
+  const user: User = {
+    id: row.id,
+    asgardeoUserId: row.asgardeo_user_id,
+    firstName: row.first_name,
+    lastName: row.last_name,
+    email: row.email,
+    avatarUrl: row.avatar_url,
+    isActive: row.is_active,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
 
-    if (!user) {
-      throw new AuthError(500, "Failed to provision user");
-    }
+  // Bridges first login until sub-organizations land: attaches only when a
+  // single organization exists, and declines to guess otherwise.
+  await unscopedDb.execute(
+    sql`SELECT app_attach_default_membership(${user.id})`,
+  );
+
+  const membership = await resolveMembership(sub);
+  if (!membership) {
+    throw new AuthError(
+      403,
+      "Your account is not attached to an organization. Contact your administrator.",
+    );
   }
 
   if (!user.isActive) {
     throw new AuthError(403, "User account is deactivated");
   }
 
-  // Role comes from JWT — DB row has no role column
-  return { ...user, role };
+  // Role still comes from the JWT. organization_members.role exists for the
+  // client portal in phase 3 and is deliberately not read yet.
+  return {
+    ...user,
+    role,
+    organizationId: membership.organizationId,
+    clientCompanyId: membership.clientCompanyId,
+  };
 }

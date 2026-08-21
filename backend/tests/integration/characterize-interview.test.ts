@@ -1,5 +1,6 @@
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { describe, expect, beforeAll, afterAll } from "vitest";
 import {
+  itInOrg,
   createScenario,
   destroyScenario,
   shape,
@@ -19,7 +20,7 @@ afterAll(async () => {
 });
 
 describe("interviewService.getAll", () => {
-  it("flattens candidate, job and stage onto each row", async () => {
+  itInOrg("flattens candidate, job and stage onto each row", async () => {
     const keys = shape(await interviewService.getAll({ jobId: s.jobA.id }));
     for (const key of [
       "[].candidateName",
@@ -32,21 +33,21 @@ describe("interviewService.getAll", () => {
     }
   });
 
-  it("does not expose the raw scheduling columns the detail view uses", async () => {
+  itInOrg("does not expose the raw scheduling columns the detail view uses", async () => {
     // publicToken and timeSlots are on the row in getByCandidate but not here.
     const keys = shape(await interviewService.getAll({ jobId: s.jobA.id }));
     expect(keys).not.toContain("[].publicToken");
     expect(keys).not.toContain("[].timeSlots");
   });
 
-  it("returns every interview when unscoped", async () => {
+  itInOrg("returns every interview when unscoped", async () => {
     const ids = (await interviewService.getAll()).map((i) => i.id);
     expect(ids).toEqual(
       expect.arrayContaining([s.interviewA1, s.interviewB1]),
     );
   });
 
-  it("hides other teams' interviews from a team-scoped user", async () => {
+  itInOrg("hides other teams' interviews from a team-scoped user", async () => {
     const ids = (
       await interviewService.getAll({ teamUserId: s.interviewer.id })
     ).map((i) => i.id);
@@ -55,7 +56,7 @@ describe("interviewService.getAll", () => {
     expect(ids).not.toContain(s.interviewB1);
   });
 
-  it("combines the job filter with the team filter", async () => {
+  itInOrg("combines the job filter with the team filter", async () => {
     const rows = await interviewService.getAll({
       jobId: s.jobB.id,
       teamUserId: s.interviewer.id,
@@ -63,7 +64,7 @@ describe("interviewService.getAll", () => {
     expect(rows).toEqual([]);
   });
 
-  it("filters by department", async () => {
+  itInOrg("filters by department", async () => {
     const ids = (
       await interviewService.getAll({ departmentId: s.departmentId })
     ).map((i) => i.id);
@@ -72,7 +73,7 @@ describe("interviewService.getAll", () => {
     );
   });
 
-  it("searches candidate name and job title", async () => {
+  itInOrg("searches candidate name and job title", async () => {
     const ids = (
       await interviewService.getAll({
         departmentId: s.departmentId,
@@ -84,7 +85,7 @@ describe("interviewService.getAll", () => {
 });
 
 describe("interviewService.getByCandidate", () => {
-  it("returns raw interview rows, a different shape from the list", async () => {
+  itInOrg("returns raw interview rows, a different shape from the list", async () => {
     const keys = shape(await interviewService.getByCandidate(s.candidateA1));
 
     expect(keys).toContain("[].publicToken");
@@ -95,12 +96,12 @@ describe("interviewService.getByCandidate", () => {
     expect(keys).not.toContain("[].jobTitle");
   });
 
-  it("scopes to the candidate", async () => {
+  itInOrg("scopes to the candidate", async () => {
     const rows = await interviewService.getByCandidate(s.candidateA1);
     expect(rows.map((i) => i.id)).toEqual([s.interviewA1]);
   });
 
-  it("returns an empty array for a candidate with no interviews", async () => {
+  itInOrg("returns an empty array for a candidate with no interviews", async () => {
     expect(await interviewService.getByCandidate(s.candidateA2)).toEqual([]);
   });
 });

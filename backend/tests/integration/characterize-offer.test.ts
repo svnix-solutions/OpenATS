@@ -1,5 +1,6 @@
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { describe, expect, beforeAll, afterAll } from "vitest";
 import {
+  itInOrg,
   createScenario,
   destroyScenario,
   shape,
@@ -19,7 +20,7 @@ afterAll(async () => {
 });
 
 describe("offerService.getAllDetails", () => {
-  it("nests the candidate's current stage and the job's department", async () => {
+  itInOrg("nests the candidate's current stage and the job's department", async () => {
     const keys = shape(await offerService.getAllDetails());
     for (const key of [
       "[].candidate.currentStage.name",
@@ -33,12 +34,12 @@ describe("offerService.getAllDetails", () => {
     }
   });
 
-  it("returns every offer when unscoped", async () => {
+  itInOrg("returns every offer when unscoped", async () => {
     const ids = (await offerService.getAllDetails()).map((o) => o.id);
     expect(ids).toEqual(expect.arrayContaining([s.offerA1, s.offerB1]));
   });
 
-  it("hides other teams' offers from a team-scoped user", async () => {
+  itInOrg("hides other teams' offers from a team-scoped user", async () => {
     const ids = (await offerService.getAllDetails(s.interviewer.id)).map(
       (o) => o.id,
     );
@@ -48,7 +49,7 @@ describe("offerService.getAllDetails", () => {
 });
 
 describe("offerService.getPaginated", () => {
-  it("applies the same team scoping as the unpaged list", async () => {
+  itInOrg("applies the same team scoping as the unpaged list", async () => {
     const result = await offerService.getPaginated({
       teamUserId: s.interviewer.id,
       page: 1,
@@ -60,7 +61,7 @@ describe("offerService.getPaginated", () => {
     expect(ids).not.toContain(s.offerB1);
   });
 
-  it("filters by status", async () => {
+  itInOrg("filters by status", async () => {
     const sent = await offerService.getPaginated({
       jobId: s.jobB.id,
       status: "sent",
@@ -79,7 +80,7 @@ describe("offerService.getPaginated", () => {
   // So a search reports the unfiltered count, and only finds matches that
   // happen to land on the current page. Whoever fixes this should expect these
   // two tests to fail, and should delete them rather than adjust them.
-  it("counts without applying search, so total disagrees with rows", async () => {
+  itInOrg("counts without applying search, so total disagrees with rows", async () => {
     const result = await offerService.getPaginated({
       jobId: s.jobA.id,
       search: "definitely-no-such-candidate",
@@ -90,7 +91,7 @@ describe("offerService.getPaginated", () => {
     expect(result.totalPages).toBe(1);
   });
 
-  it("searches only within the current page", async () => {
+  itInOrg("searches only within the current page", async () => {
     const matching = await offerService.getPaginated({
       jobId: s.jobA.id,
       search: "Ada",
@@ -112,7 +113,7 @@ describe("offerService.getPaginated", () => {
 });
 
 describe("offerService.getById", () => {
-  it("nests less than the list does — no currentStage, no department", async () => {
+  itInOrg("nests less than the list does — no currentStage, no department", async () => {
     const keys = shape(await offerService.getById(s.offerA1));
 
     expect(keys).toContain("candidate.email");
@@ -124,20 +125,20 @@ describe("offerService.getById", () => {
   // jobService.getById and candidateService.getById both return null here.
   // This one returns undefined. Callers use `if (!result)` so nothing is
   // broken today, but the two are easy to conflate during a rewrite.
-  it("returns undefined — not null — for an offer that does not exist", async () => {
+  itInOrg("returns undefined — not null — for an offer that does not exist", async () => {
     expect(await offerService.getById(2_000_000_000)).toBeUndefined();
   });
 });
 
 describe("offerService.getAllByJob", () => {
-  it("returns flat offer rows with nothing nested", async () => {
+  itInOrg("returns flat offer rows with nothing nested", async () => {
     const keys = shape(await offerService.getAllByJob(s.jobA.id));
     expect(keys).toContain("[].candidateId");
     expect(keys.some((k) => k.includes("candidate."))).toBe(false);
     expect(keys.some((k) => k.includes("job."))).toBe(false);
   });
 
-  it("scopes to the job", async () => {
+  itInOrg("scopes to the job", async () => {
     const ids = (await offerService.getAllByJob(s.jobA.id)).map((o) => o.id);
     expect(ids).toEqual([s.offerA1]);
   });

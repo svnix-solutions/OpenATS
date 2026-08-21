@@ -1,13 +1,46 @@
 import "dotenv/config";
-import { drizzle } from "drizzle-orm/node-postgres";
+import { sql } from "drizzle-orm";
+import { db, runInOrganization, unscopedDb } from "./index";
 import { pipelineStageTemplates } from "./schema";
 import logger from "../utils/logger";
 
-const db = drizzle(process.env.DATABASE_URL!);
+/**
+ * Stage templates belong to an organization now, so seeding has to say which.
+ *
+ * Refuses rather than guesses when there is more than one, for the same reason
+ * first login does: putting defaults in the wrong tenant is worse than not
+ * seeding. Pass SEED_ORGANIZATION_ID to be explicit.
+ */
+async function resolveOrganization(): Promise<number> {
+  const explicit = process.env.SEED_ORGANIZATION_ID;
+  if (explicit) return Number(explicit);
+
+  const result = await unscopedDb.execute<{ id: number; total: number }>(
+    sql`SELECT id, (SELECT count(*)::int FROM organizations) AS total
+        FROM organizations ORDER BY id LIMIT 1`,
+  );
+  const row = result.rows[0];
+
+  if (!row) {
+    throw new Error("No organization exists to seed into.");
+  }
+  if (row.total > 1) {
+    throw new Error(
+      `${row.total} organizations exist. Set SEED_ORGANIZATION_ID to choose one.`,
+    );
+  }
+  return row.id;
+}
 
 async function seed() {
   console.log("Seeding pipeline stage templates...");
+  const organizationId = await resolveOrganization();
+  await runInOrganization(organizationId, seedTemplates);
+  // Exit after the transaction commits, not from inside it.
+  process.exit(0);
+}
 
+async function seedTemplates() {
   await db.delete(pipelineStageTemplates);
 
   await db.insert(pipelineStageTemplates).values([
@@ -46,7 +79,6 @@ async function seed() {
   ]);
 
   logger.info("Pipeline stage templates seeded (7 default stages).");
-  process.exit(0);
 }
 
 seed().catch((err) => {

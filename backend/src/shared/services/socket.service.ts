@@ -1,6 +1,6 @@
 import { Server, Socket } from "socket.io";
 import { Server as HttpServer } from "http";
-import { db } from "../../db";
+import { db, runInOrganization } from "../../db";
 import { jobChatMessages, candidateChatMessages, users } from "../../db/schema";
 import { eq, and } from "drizzle-orm";
 import { verifyAccessToken } from "../auth/verify-token";
@@ -79,11 +79,29 @@ export class SocketService {
       const socket = rawSocket as AuthedSocket;
       const user = socket.data.user;
 
+      // Socket handlers never pass through Express, so nothing establishes
+      // the organization for them. Without this every read returns nothing and
+      // every write is refused — silently, since a socket handler has no
+      // response to fail.
+      const inOrg = <A extends unknown[]>(
+        handler: (...args: A) => Promise<void>,
+      ) => {
+        return (...args: A) => {
+          void runInOrganization(user.organizationId, () =>
+            handler(...args),
+          ).catch((err: unknown) => {
+            logger.error(
+              `[socket] handler failed for user ${user.id}: ${getErrorMessage(err)}`,
+            );
+          });
+        };
+      };
+
       socket.join(STAFF_ROOM);
       logger.info(`Socket connected: ${socket.id} (user ${user.id})`);
 
       // job room — hiring team members only
-      socket.on("join_job", async (rawJobId: unknown) => {
+      socket.on("join_job", inOrg(async (rawJobId: unknown) => {
         const jobId = parseRoomId(rawJobId);
         if (jobId === null) return;
 
@@ -97,10 +115,10 @@ export class SocketService {
 
         socket.join(jobRoom(jobId));
         logger.info(`Socket ${socket.id} joined job room: job_${jobId}`);
-      });
+      }));
 
       // candidate room — follows the candidate's job
-      socket.on("join_candidate", async (rawCandidateId: unknown) => {
+      socket.on("join_candidate", inOrg(async (rawCandidateId: unknown) => {
         const candidateId = parseRoomId(rawCandidateId);
         if (candidateId === null) return;
 
@@ -116,7 +134,7 @@ export class SocketService {
         logger.info(
           `Socket ${socket.id} joined candidate room: candidate_${candidateId}`,
         );
-      });
+      }));
 
       // Writes require the room, which the join already checked.
       const inJobRoom = (jobId: number) => socket.rooms.has(jobRoom(jobId));
@@ -132,7 +150,7 @@ export class SocketService {
 
       socket.on(
         "send_job_message",
-        async (data: {
+        inOrg(async (data: {
           jobId: number;
           message: string;
           replyToId?: number;
@@ -174,12 +192,12 @@ export class SocketService {
           } catch (error) {
             logger.error(`Error saving job message: ${getErrorMessage(error)}`);
           }
-        },
+        }),
       );
 
       socket.on(
         "edit_job_message",
-        async (data: { jobId: number; messageId: number; message: string }) => {
+        inOrg(async (data: { jobId: number; messageId: number; message: string }) => {
           const jobId = parseRoomId(data?.jobId);
           if (jobId === null || !inJobRoom(jobId)) {
             denyWrite("edit_job_message", jobId);
@@ -222,12 +240,12 @@ export class SocketService {
           } catch (error) {
             logger.error(`Error updating job message: ${getErrorMessage(error)}`);
           }
-        },
+        }),
       );
 
       socket.on(
         "delete_job_message",
-        async (data: { jobId: number; messageId: number }) => {
+        inOrg(async (data: { jobId: number; messageId: number }) => {
           const jobId = parseRoomId(data?.jobId);
           if (jobId === null || !inJobRoom(jobId)) {
             denyWrite("delete_job_message", jobId);
@@ -255,12 +273,12 @@ export class SocketService {
           } catch (error) {
             logger.error(`Error deleting job message: ${getErrorMessage(error)}`);
           }
-        },
+        }),
       );
 
       socket.on(
         "send_candidate_message",
-        async (data: {
+        inOrg(async (data: {
           candidateId: number;
           message: string;
           replyToId?: number;
@@ -289,7 +307,7 @@ export class SocketService {
           } catch (error) {
             logger.error(`Error saving candidate message: ${getErrorMessage(error)}`);
           }
-        },
+        }),
       );
 
       socket.on("disconnect", () => {

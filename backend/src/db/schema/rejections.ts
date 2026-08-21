@@ -6,15 +6,21 @@ import {
   timestamp,
   varchar,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 import { rejectionEmailStatus } from "./enums";
 import { candidates } from "./candidates";
 import { jobs } from "./jobs";
 import { jobPipelineStages } from "./pipeline";
 import { templates } from "./templates";
 import { users } from "./users";
+import { organizations } from "./organizations";
 
 export const candidateRejections = pgTable("candidate_rejections", {
   id: serial("id").primaryKey(),
+  organizationId: integer("organization_id")
+    .notNull()
+    .default(sql`app_current_org()`)
+    .references(() => organizations.id, { onDelete: "cascade" }),
   candidateId: integer("candidate_id")
     .notNull()
     .references(() => candidates.id, { onDelete: "cascade" }),

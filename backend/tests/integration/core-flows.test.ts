@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
-import { eq, inArray } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 import request from "supertest";
 
 // Serve the locally generated key instead of fetching a real JWKS. Everything
@@ -28,7 +28,7 @@ vi.mock("../../src/shared/services/mail.service", () => ({
 }));
 
 import app from "../../src/app";
-import { db } from "../../src/db";
+import { db, runInOrganization, unscopedDb } from "../../src/db";
 import { company, departments } from "../../src/db/schema/company";
 import { jobs } from "../../src/db/schema/jobs";
 import { jobPipelineStages, jobHiringTeam } from "../../src/db/schema/pipeline";
@@ -36,6 +36,11 @@ import { candidates } from "../../src/db/schema/candidates";
 import { candidateInterviews } from "../../src/db/schema/interviews";
 import { offers } from "../../src/db/schema/offers";
 import { users } from "../../src/db/schema/users";
+import { organizationMembers } from "../../src/db/schema/organizations";
+import {
+  createTestOrganization,
+  dropTestOrganization,
+} from "../helpers/scenario";
 import { initTestKeys, bearer } from "../helpers/jwt";
 
 const SUFFIX = `flow-${Date.now()}`;
@@ -51,6 +56,19 @@ let offerStageId: number;
 let candidateId: number;
 let offerId: number;
 
+let organizationId: number;
+
+/**
+ * `it`, with the body inside the organization.
+ *
+ * The HTTP calls establish their own context through the middleware; this is
+ * for the assertions afterwards, which read the database directly and would
+ * otherwise see nothing.
+ */
+function itInOrg(name: string, fn: () => Promise<void>) {
+  return it(name, () => runInOrganization(organizationId, fn));
+}
+
 beforeAll(async () => {
   await initTestKeys();
   auth = await bearer({
@@ -59,6 +77,15 @@ beforeAll(async () => {
     role: "super_admin",
   });
 
+  organizationId = await createTestOrganization(SUFFIX);
+
+  // The requests below go through authMiddleware, which establishes the
+  // organization for itself. Only this fixture seeding runs outside a request,
+  // so only it has to say which tenant it is writing into.
+  await runInOrganization(organizationId, seedFixtures);
+});
+
+async function seedFixtures() {
   const [co] = await db
     .insert(company)
     .values({ name: `Co ${SUFFIX}`, email: `co.${SUFFIX}@example.test` })
@@ -83,6 +110,12 @@ beforeAll(async () => {
     })
     .returning({ id: users.id });
   managerId = manager!.id;
+
+  // Membership, not just the user row: login resolves which organization the
+  // token acts for, and without this the first request has none.
+  await db
+    .insert(organizationMembers)
+    .values({ organizationId, userId: managerId, role: "recruiter" });
 
   const [job] = await db
     .insert(jobs)
@@ -112,9 +145,17 @@ beforeAll(async () => {
   appliedStageId = stages[0]!.id;
   interviewStageId = stages[1]!.id;
   offerStageId = stages[2]!.id;
-});
+}
 
 afterAll(async () => {
+  await runInOrganization(organizationId, teardownFixtures);
+  await unscopedDb.execute(
+    sql`DELETE FROM organization_members WHERE organization_id = ${organizationId}`,
+  );
+  await dropTestOrganization(organizationId);
+});
+
+async function teardownFixtures() {
   await db
     .delete(candidateInterviews)
     .where(eq(candidateInterviews.jobId, jobId));
@@ -130,17 +171,17 @@ afterAll(async () => {
   await db
     .delete(users)
     .where(inArray(users.email, [`manager.${SUFFIX}@example.test`]));
-});
+}
 
 // Ordered on purpose: each step uses the record the previous one created,
 // which is what makes this a flow rather than four isolated cases.
 describe("core hiring flow", () => {
-  it("rejects an unauthenticated request", async () => {
+  itInOrg("rejects an unauthenticated request", async () => {
     const res = await request(app).get(`/api/candidates/jobs/${jobId}`);
     expect(res.status).toBe(401);
   });
 
-  it("accepts an application and puts the candidate in the first stage", async () => {
+  itInOrg("accepts an application and puts the candidate in the first stage", async () => {
     const res = await request(app)
       .post(`/api/candidates/jobs/${jobId}/apply`)
       .set("Authorization", auth)
@@ -164,7 +205,7 @@ describe("core hiring flow", () => {
     expect(row!.status).toBe("active");
   });
 
-  it("rejects a duplicate application to the same job", async () => {
+  itInOrg("rejects a duplicate application to the same job", async () => {
     const res = await request(app)
       .post(`/api/candidates/jobs/${jobId}/apply`)
       .set("Authorization", auth)
@@ -177,7 +218,7 @@ describe("core hiring flow", () => {
     expect(res.status).toBe(409);
   });
 
-  it("moves the candidate to another stage", async () => {
+  itInOrg("moves the candidate to another stage", async () => {
     const res = await request(app)
       .put(`/api/candidates/${candidateId}/stage`)
       .set("Authorization", auth)
@@ -192,7 +233,7 @@ describe("core hiring flow", () => {
     expect(row!.currentStageId).toBe(interviewStageId);
   });
 
-  it("schedules an interview", async () => {
+  itInOrg("schedules an interview", async () => {
     const scheduledAt = new Date(Date.now() + 86_400_000).toISOString();
     const res = await request(app)
       .post(`/api/candidates/${candidateId}/interviews`)
@@ -215,7 +256,7 @@ describe("core hiring flow", () => {
     expect(rows[0]!.durationMinutes).toBe(45);
   });
 
-  it("creates an offer as a draft", async () => {
+  itInOrg("creates an offer as a draft", async () => {
     const res = await request(app)
       .post("/api/offers")
       .set("Authorization", auth)
@@ -236,7 +277,7 @@ describe("core hiring flow", () => {
     expect(res.body.data.status).toBe("draft");
   });
 
-  it("refuses to send an offer that is missing required fields", async () => {
+  itInOrg("refuses to send an offer that is missing required fields", async () => {
     const res = await request(app)
       .post(`/api/offers/${offerId}/send`)
       .set("Authorization", auth)
@@ -247,7 +288,7 @@ describe("core hiring flow", () => {
     expect(sendOfferEmail).not.toHaveBeenCalled();
   });
 
-  it("accepts the remaining offer details", async () => {
+  itInOrg("accepts the remaining offer details", async () => {
     const res = await request(app)
       .patch(`/api/offers/${offerId}`)
       .set("Authorization", auth)
@@ -263,13 +304,13 @@ describe("core hiring flow", () => {
   // Regression: a partial update used to null out startDate because it was
   // normalized to null before being handed to clean(), which only drops
   // undefined. The offer then became unsendable.
-  it("leaves fields the update did not mention alone", async () => {
+  itInOrg("leaves fields the update did not mention alone", async () => {
     const [row] = await db.select().from(offers).where(eq(offers.id, offerId));
     expect(row!.startDate).not.toBeNull();
     expect(row!.currency).toBe("USD");
   });
 
-  it("sends the offer and emails the candidate", async () => {
+  itInOrg("sends the offer and emails the candidate", async () => {
     const res = await request(app)
       .post(`/api/offers/${offerId}/send`)
       .set("Authorization", auth)
@@ -286,7 +327,7 @@ describe("core hiring flow", () => {
     expect(row!.sentAt).not.toBeNull();
   });
 
-  it("moves the candidate to the offer stage", async () => {
+  itInOrg("moves the candidate to the offer stage", async () => {
     const res = await request(app)
       .put(`/api/candidates/${candidateId}/stage`)
       .set("Authorization", auth)

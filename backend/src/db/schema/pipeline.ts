@@ -8,25 +8,39 @@ import {
   unique,
   varchar,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 
 import { stageType } from "./enums";
 import { jobs } from "./jobs";
 import { users } from "./users";
+import { organizations } from "./organizations";
 
-export const pipelineStageTemplates = pgTable("pipeline_stage_templates", {
+export const pipelineStageTemplates = pgTable(
+  "pipeline_stage_templates",
+  {
   id: serial("id").primaryKey(),
-  name: varchar("name", { length: 100 }).notNull().unique(),
+  organizationId: integer("organization_id")
+    .notNull()
+    .default(sql`app_current_org()`)
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  name: varchar("name", { length: 100 }).notNull(),
   position: integer("position").notNull(),
   stageType: stageType("stage_type").notNull().default("screening"),
   isDeletable: boolean("is_deletable").notNull().default(true),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
-});
+  },
+  (t) => [unique().on(t.organizationId, t.name)],
+);
 
 export const jobPipelineStages = pgTable(
   "job_pipeline_stages",
   {
     id: serial("id").primaryKey(),
+    organizationId: integer("organization_id")
+      .notNull()
+      .default(sql`app_current_org()`)
+      .references(() => organizations.id, { onDelete: "cascade" }),
     jobId: integer("job_id")
       .notNull()
       .references(() => jobs.id, { onDelete: "cascade" }),
@@ -52,6 +66,10 @@ export const jobHiringTeam = pgTable(
   "job_hiring_team",
   {
     id: serial("id").primaryKey(),
+    organizationId: integer("organization_id")
+      .notNull()
+      .default(sql`app_current_org()`)
+      .references(() => organizations.id, { onDelete: "cascade" }),
     jobId: integer("job_id")
       .notNull()
       .references(() => jobs.id, { onDelete: "cascade" }),

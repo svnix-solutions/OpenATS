@@ -9,16 +9,22 @@ import {
   timestamp,
   varchar,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 
 import { candidates } from "./candidates";
 import { jobs } from "./jobs";
 import { templates } from "./templates";
 import { users } from "./users";
+import { organizations } from "./organizations";
 
 export const emailMessages = pgTable(
   "email_messages",
   {
     id: serial("id").primaryKey(),
+    organizationId: integer("organization_id")
+      .notNull()
+      .default(sql`app_current_org()`)
+      .references(() => organizations.id, { onDelete: "cascade" }),
 
     candidateId: integer("candidate_id")
       .notNull()
@@ -47,6 +53,10 @@ export const jobChatMessages = pgTable(
   "job_chat_messages",
   {
     id: serial("id").primaryKey(),
+    organizationId: integer("organization_id")
+      .notNull()
+      .default(sql`app_current_org()`)
+      .references(() => organizations.id, { onDelete: "cascade" }),
 
     jobId: integer("job_id")
       .notNull()
@@ -77,6 +87,10 @@ export const candidateChatMessages = pgTable(
   "candidate_chat_messages",
   {
     id: serial("id").primaryKey(),
+    organizationId: integer("organization_id")
+      .notNull()
+      .default(sql`app_current_org()`)
+      .references(() => organizations.id, { onDelete: "cascade" }),
 
     candidateId: integer("candidate_id")
       .notNull()

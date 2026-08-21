@@ -1,6 +1,11 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { eq, inArray } from "drizzle-orm";
-import { db } from "../../src/db";
+import { db, runInOrganization } from "../../src/db";
+import {
+  createTestOrganization,
+  dropTestOrganization,
+  itInOrg,
+} from "../helpers/scenario";
 import { company, departments } from "../../src/db/schema/company";
 import { jobs } from "../../src/db/schema/jobs";
 import { jobHiringTeam, jobPipelineStages } from "../../src/db/schema/pipeline";
@@ -12,6 +17,7 @@ import { assessments } from "../../src/db/schema/assessments";
 import { candidateInterviews } from "../../src/db/schema/interviews";
 import { offers } from "../../src/db/schema/offers";
 import { users } from "../../src/db/schema/users";
+import { organizationMembers } from "../../src/db/schema/organizations";
 import {
   canReadAttempt,
   canReadCandidate,
@@ -70,10 +76,17 @@ async function makeUser(
       email: `${tag}.${SUFFIX}@example.test`,
     })
     .returning();
-  return { ...row!, role };
+  return { ...row!, role, organizationId, clientCompanyId: null };
 }
 
+let organizationId: number;
+
 beforeAll(async () => {
+  organizationId = await createTestOrganization(SUFFIX);
+  await runInOrganization(organizationId, seedFixtures);
+});
+
+async function seedFixtures() {
   const [co] = await db
     .insert(company)
     .values({ name: `Co ${SUFFIX}`, email: `co.${SUFFIX}@example.test` })
@@ -89,6 +102,12 @@ beforeAll(async () => {
   offTeam = await makeUser("off-team", "interviewer");
 
   teamJobSlug = `team-job-${SUFFIX}`;
+  await db.insert(organizationMembers).values(
+    [manager, admin, onTeam, offTeam].map((u) => ({
+      organizationId, userId: u.id, role: "recruiter" as const,
+    })),
+  );
+
   const insertedJobs = await db
     .insert(jobs)
     .values([
@@ -201,9 +220,14 @@ beforeAll(async () => {
     .returning({ id: candidateAssessmentAttempts.id });
   teamAttemptId = insertedAttempts[0]!.id;
   otherAttemptId = insertedAttempts[1]!.id;
-});
+}
 
 afterAll(async () => {
+  await runInOrganization(organizationId, teardownFixtures);
+  await dropTestOrganization(organizationId);
+});
+
+async function teardownFixtures() {
   await db
     .delete(candidateAssessmentAttempts)
     .where(
@@ -221,44 +245,46 @@ afterAll(async () => {
     .delete(jobPipelineStages)
     .where(inArray(jobPipelineStages.jobId, [teamJobId, otherJobId]));
   await db.delete(jobs).where(inArray(jobs.id, [teamJobId, otherJobId]));
+  const userIds = [manager.id, admin.id, onTeam.id, offTeam.id];
   await db
-    .delete(users)
-    .where(inArray(users.id, [manager.id, admin.id, onTeam.id, offTeam.id]));
+    .delete(organizationMembers)
+    .where(inArray(organizationMembers.userId, userIds));
+  await db.delete(users).where(inArray(users.id, userIds));
   await db.delete(company).where(eq(company.email, `co.${SUFFIX}@example.test`));
-});
+}
 
 describe("canReadJob", () => {
-  it("allows an interviewer on the hiring team", async () => {
+  itInOrg("allows an interviewer on the hiring team", async () => {
     expect(await canReadJob(onTeam, teamJobId)).toBe(true);
   });
 
-  it("denies an interviewer not on the hiring team", async () => {
+  itInOrg("denies an interviewer not on the hiring team", async () => {
     expect(await canReadJob(offTeam, teamJobId)).toBe(false);
   });
 
-  it("allows hiring_manager for a job they are not on (no regression)", async () => {
+  itInOrg("allows hiring_manager for a job they are not on (no regression)", async () => {
     expect(await canReadJob(manager, teamJobId)).toBe(true);
   });
 
-  it("allows super_admin", async () => {
+  itInOrg("allows super_admin", async () => {
     expect(await canReadJob(admin, teamJobId)).toBe(true);
   });
 
-  it("denies an interviewer for a job that does not exist", async () => {
+  itInOrg("denies an interviewer for a job that does not exist", async () => {
     expect(await canReadJob(offTeam, MISSING_ID)).toBe(false);
   });
 });
 
 describe("canReadJobSlug", () => {
-  it("resolves the slug and allows an interviewer on the team", async () => {
+  itInOrg("resolves the slug and allows an interviewer on the team", async () => {
     expect(await canReadJobSlug(onTeam, teamJobSlug)).toBe(true);
   });
 
-  it("denies an interviewer off the team", async () => {
+  itInOrg("denies an interviewer off the team", async () => {
     expect(await canReadJobSlug(offTeam, teamJobSlug)).toBe(false);
   });
 
-  it("denies an unknown slug rather than leaking that it is unknown", async () => {
+  itInOrg("denies an unknown slug rather than leaking that it is unknown", async () => {
     expect(await canReadJobSlug(offTeam, `no-such-slug-${SUFFIX}`)).toBe(false);
   });
 });
@@ -279,10 +305,13 @@ describe("record reads resolve through to the owning job", () => {
     ["an off-team interviewer may not read a candidate on that job", () => canReadCandidate(offTeam, teamCandidateId), false],
     ["a manager may read a candidate on a job they are not on", () => canReadCandidate(manager, otherCandidateId), true],
   ])("%s", async (_label, run, expected) => {
-    expect(await run()).toBe(expected);
+    // it.each cannot go through itInOrg, so the context is established here.
+    await runInOrganization(organizationId, async () => {
+      expect(await run()).toBe(expected);
+    });
   });
 
-  it("denies records that do not exist", async () => {
+  itInOrg("denies records that do not exist", async () => {
     expect(await canReadOffer(offTeam, MISSING_ID)).toBe(false);
     expect(await canReadInterview(offTeam, MISSING_ID)).toBe(false);
     expect(await canReadAttempt(offTeam, MISSING_ID)).toBe(false);
@@ -315,14 +344,14 @@ function runMiddleware(
 }
 
 describe("read middleware", () => {
-  it("lets an on-team interviewer through to a job", async () => {
+  itInOrg("lets an on-team interviewer through to a job", async () => {
     const result = await runMiddleware(requireJobRead("id"), onTeam, {
       id: String(teamJobId),
     });
     expect(result.passed).toBe(true);
   });
 
-  it("rejects an off-team interviewer with 403", async () => {
+  itInOrg("rejects an off-team interviewer with 403", async () => {
     const result = await runMiddleware(requireJobRead("id"), offTeam, {
       id: String(teamJobId),
     });
@@ -330,14 +359,14 @@ describe("read middleware", () => {
     expect(result.status).toBe(403);
   });
 
-  it("rejects a malformed id with 400 before touching the database", async () => {
+  itInOrg("rejects a malformed id with 400 before touching the database", async () => {
     const result = await runMiddleware(requireJobRead("id"), offTeam, {
       id: "not-a-number",
     });
     expect(result.status).toBe(400);
   });
 
-  it("guards offers by their job", async () => {
+  itInOrg("guards offers by their job", async () => {
     expect(
       (await runMiddleware(requireOfferRead(), offTeam, {
         id: String(teamOfferId),
@@ -350,7 +379,7 @@ describe("read middleware", () => {
     ).toBe(true);
   });
 
-  it("guards interviews by their job", async () => {
+  itInOrg("guards interviews by their job", async () => {
     expect(
       (await runMiddleware(requireInterviewRead(), offTeam, {
         id: String(teamInterviewId),
@@ -363,7 +392,7 @@ describe("read middleware", () => {
     ).toBe(true);
   });
 
-  it("guards assessment attempts through the candidate's job", async () => {
+  itInOrg("guards assessment attempts through the candidate's job", async () => {
     expect(
       (await runMiddleware(requireAttemptRead(), offTeam, {
         attemptId: String(teamAttemptId),

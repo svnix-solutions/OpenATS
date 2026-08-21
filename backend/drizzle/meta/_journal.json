@@ -197,6 +197,62 @@
       "when": 1785756015414,
       "tag": "0027_gifted_tony_stark",
       "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1787338758521,
+      "tag": "0028_tenancy_skeleton",
+      "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1787338856771,
+      "tag": "0029_row_level_security",
+      "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1787339107220,
+      "tag": "0030_users_policy_per_command",
+      "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1787339156714,
+      "tag": "0031_users_select_orphans",
+      "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1787339270089,
+      "tag": "0032_login_provisioning",
+      "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1787341393589,
+      "tag": "0033_provision_returns_table",
+      "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1787341430869,
+      "tag": "0034_attach_single_org",
+      "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1787342017525,
+      "tag": "0035_public_org_resolver",
+      "breakpoints": true
     }
   ]
 }

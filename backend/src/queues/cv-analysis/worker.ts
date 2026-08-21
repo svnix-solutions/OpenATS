@@ -4,6 +4,7 @@ import {
   type CvAnalysisJobData,
 } from "./queue";
 import { createRedisConnection } from "../../config/redis";
+import { runInOrganization } from "../../db";
 import { cvAnalysisService } from "../../modules/candidate/cv-analysis.service";
 import { publishCvAnalysisEvent } from "./events";
 import logger from "../../utils/logger";
@@ -12,11 +13,14 @@ export function startCvAnalysisWorker(): Worker<CvAnalysisJobData> {
   const worker = new Worker<CvAnalysisJobData>(
     CV_ANALYSIS_QUEUE,
     async (job) => {
-      const { candidateId, jobId, resumeUrl } = job.data;
+      const { candidateId, jobId, resumeUrl, organizationId } = job.data;
       logger.info(
-        `[worker] processing candidate=${candidateId} attempt=${job.attemptsMade + 1}`,
+        `[worker] processing candidate=${candidateId} org=${organizationId} attempt=${job.attemptsMade + 1}`,
       );
-      await cvAnalysisService.runAnalysis(candidateId, jobId, resumeUrl);
+      // No request behind this, so the context comes off the job itself.
+      await runInOrganization(organizationId, () =>
+        cvAnalysisService.runAnalysis(candidateId, jobId, resumeUrl),
+      );
     },
     {
       connection: createRedisConnection(),
@@ -43,7 +47,9 @@ export function startCvAnalysisWorker(): Worker<CvAnalysisJobData> {
     const exhausted = job.attemptsMade >= maxAttempts;
 
     if (exhausted) {
-      await cvAnalysisService.markFailed(job.data.candidateId, err.message);
+      await runInOrganization(job.data.organizationId, () =>
+        cvAnalysisService.markFailed(job.data.candidateId, err.message),
+      );
       await publishCvAnalysisEvent({
         candidateId: job.data.candidateId,
         jobId: job.data.jobId,

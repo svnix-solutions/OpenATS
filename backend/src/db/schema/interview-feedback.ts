@@ -6,13 +6,19 @@ import {
   text,
   timestamp,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 import { candidateInterviews } from "./interviews";
 import { users } from "./users";
+import { organizations } from "./organizations";
 
 export const interviewFeedback = pgTable(
   "interview_feedback",
   {
     id: serial("id").primaryKey(),
+    organizationId: integer("organization_id")
+      .notNull()
+      .default(sql`app_current_org()`)
+      .references(() => organizations.id, { onDelete: "cascade" }),
     interviewId: integer("interview_id")
       .notNull()
       .references(() => candidateInterviews.id, { onDelete: "cascade" }),

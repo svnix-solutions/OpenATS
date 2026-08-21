@@ -11,6 +11,7 @@ import {
   varchar,
   index,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 
 import { assessmentStatus, candidateStatus, cvAnalysisStatus } from "./enums";
 import { jobs } from "./jobs";
@@ -23,11 +24,16 @@ import {
   jobCustomQuestions,
   jobCustomQuestionOptions,
 } from "./assessments";
+import { organizations } from "./organizations";
 
 export const candidates = pgTable(
   "candidates",
   {
     id: serial("id").primaryKey(),
+    organizationId: integer("organization_id")
+      .notNull()
+      .default(sql`app_current_org()`)
+      .references(() => organizations.id, { onDelete: "cascade" }),
 
     firstName: varchar("first_name", { length: 100 }).notNull(),
     lastName: varchar("last_name", { length: 100 }).notNull(),
@@ -61,6 +67,10 @@ export const candidateStageHistory = pgTable(
   "candidate_stage_history",
   {
     id: serial("id").primaryKey(),
+    organizationId: integer("organization_id")
+      .notNull()
+      .default(sql`app_current_org()`)
+      .references(() => organizations.id, { onDelete: "cascade" }),
     candidateId: integer("candidate_id")
       .notNull()
       .references(() => candidates.id, { onDelete: "cascade" }),
@@ -82,6 +92,10 @@ export const candidateCustomAnswers = pgTable(
   "candidate_custom_answers",
   {
     id: serial("id").primaryKey(),
+    organizationId: integer("organization_id")
+      .notNull()
+      .default(sql`app_current_org()`)
+      .references(() => organizations.id, { onDelete: "cascade" }),
     candidateId: integer("candidate_id")
       .notNull()
       .references(() => candidates.id, { onDelete: "cascade" }),
@@ -99,6 +113,10 @@ export const candidateCustomAnswerSelections = pgTable(
   "candidate_custom_answer_selections",
   {
     id: serial("id").primaryKey(),
+    organizationId: integer("organization_id")
+      .notNull()
+      .default(sql`app_current_org()`)
+      .references(() => organizations.id, { onDelete: "cascade" }),
     candidateId: integer("candidate_id")
       .notNull()
       .references(() => candidates.id, { onDelete: "cascade" }),
@@ -117,6 +135,10 @@ export const candidateAssessmentAttempts = pgTable(
   "candidate_assessment_attempts",
   {
     id: serial("id").primaryKey(),
+    organizationId: integer("organization_id")
+      .notNull()
+      .default(sql`app_current_org()`)
+      .references(() => organizations.id, { onDelete: "cascade" }),
     candidateId: integer("candidate_id")
       .notNull()
       .references(() => candidates.id, { onDelete: "cascade" }),
@@ -158,6 +180,10 @@ export const candidateAssessmentAnswers = pgTable(
   "candidate_assessment_answers",
   {
     id: serial("id").primaryKey(),
+    organizationId: integer("organization_id")
+      .notNull()
+      .default(sql`app_current_org()`)
+      .references(() => organizations.id, { onDelete: "cascade" }),
     attemptId: integer("attempt_id")
       .notNull()
       .references(() => candidateAssessmentAttempts.id, {
@@ -181,6 +207,10 @@ export const candidateAssessmentAnswerSelections = pgTable(
   "candidate_assessment_answer_selections",
   {
     id: serial("id").primaryKey(),
+    organizationId: integer("organization_id")
+      .notNull()
+      .default(sql`app_current_org()`)
+      .references(() => organizations.id, { onDelete: "cascade" }),
     answerId: integer("answer_id")
       .notNull()
       .references(() => candidateAssessmentAnswers.id, { onDelete: "cascade" }),
@@ -196,6 +226,10 @@ export const candidateCvAnalysis = pgTable(
   "candidate_cv_analysis",
   {
     id: serial("id").primaryKey(),
+    organizationId: integer("organization_id")
+      .notNull()
+      .default(sql`app_current_org()`)
+      .references(() => organizations.id, { onDelete: "cascade" }),
     candidateId: integer("candidate_id")
       .notNull()
       .references(() => candidates.id, { onDelete: "cascade" }),
