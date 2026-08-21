@@ -1,0 +1,154 @@
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import {
+  createScenario,
+  destroyScenario,
+  shape,
+  type Scenario,
+} from "../helpers/scenario";
+import { candidateService } from "../../src/modules/candidate/candidate.service";
+
+// See characterize-job.test.ts for what these suites are for.
+//
+// The candidate service is the one phase 1 changes most: decisions/0001 §4
+// splits this table into a person and an application, so `jobId`, `status` and
+// `currentStageId` move off the row these tests describe. Expect this file to
+// fail loudly during that work — that is the job it is here to do.
+
+let s: Scenario;
+
+beforeAll(async () => {
+  s = await createScenario("cand");
+});
+afterAll(async () => {
+  await destroyScenario(s);
+});
+
+const ROW_SHAPE = [
+  "rows[].appliedAt",
+  "rows[].currentStageId",
+  "rows[].email",
+  "rows[].firstName",
+  "rows[].id",
+  "rows[].jobId",
+  "rows[].jobTitle",
+  "rows[].lastName",
+  "rows[].phone",
+  "rows[].resumeUrl",
+  "rows[].stageName",
+  "rows[].status",
+  "rows[].updatedAt",
+];
+
+describe("candidateService.getAll", () => {
+  it("joins the stage name and job title onto each row", async () => {
+    const result = await candidateService.getAll(s.jobA.id, {});
+    expect(shape(result)).toEqual([
+      "limit",
+      "page",
+      ...ROW_SHAPE,
+      "total",
+      "totalPages",
+    ]);
+  });
+
+  it("scopes to a job when given one", async () => {
+    const { rows, total } = await candidateService.getAll(s.jobA.id, {});
+    expect(total).toBe(2);
+    expect(rows.map((r) => r.id).sort()).toEqual(
+      [s.candidateA1, s.candidateA2].sort(),
+    );
+  });
+
+  it("defaults to a page size of 25", async () => {
+    const result = await candidateService.getAll(s.jobA.id, {});
+    expect(result.limit).toBe(25);
+    expect(result.page).toBe(1);
+  });
+
+  it("hides other teams' candidates from a team-scoped user", async () => {
+    const forInterviewer = await candidateService.getAll(undefined, {
+      teamUserId: s.interviewer.id,
+    });
+    const ids = forInterviewer.rows.map((r) => r.id);
+
+    expect(ids).toContain(s.candidateA1);
+    expect(ids).not.toContain(s.candidateB1);
+  });
+
+  it("combines a job filter with the team filter rather than overriding it", async () => {
+    // Asking for jobB as someone only on jobA's team yields nothing, rather
+    // than jobB's candidates.
+    const result = await candidateService.getAll(s.jobB.id, {
+      teamUserId: s.interviewer.id,
+    });
+    expect(result.rows).toEqual([]);
+    expect(result.total).toBe(0);
+  });
+
+  it("filters by status", async () => {
+    const rejected = await candidateService.getAll(s.jobA.id, {
+      status: "rejected",
+    });
+    expect(rejected.rows.map((r) => r.id)).toEqual([s.candidateA2]);
+  });
+
+  it("filters by stage", async () => {
+    const inFirstStage = await candidateService.getAll(s.jobA.id, {
+      stageId: s.jobA.stageIds[0],
+    });
+    expect(inFirstStage.rows.map((r) => r.id)).toEqual([s.candidateA1]);
+  });
+
+  it("searches across name and email", async () => {
+    const byName = await candidateService.getAll(s.jobA.id, { search: "Ada" });
+    expect(byName.rows.map((r) => r.id)).toEqual([s.candidateA1]);
+  });
+
+  it("orders by application date, newest first", async () => {
+    const { rows } = await candidateService.getAll(s.jobA.id, {});
+    const times = rows.map((r) => r.appliedAt.getTime());
+    expect(times).toEqual([...times].sort((a, b) => b - a));
+  });
+
+  it("paginates without changing the reported total", async () => {
+    const page1 = await candidateService.getAll(s.jobA.id, {
+      page: 1,
+      limit: 1,
+    });
+    expect(page1.rows).toHaveLength(1);
+    expect(page1.total).toBe(2);
+    expect(page1.totalPages).toBe(2);
+  });
+});
+
+describe("candidateService.getById", () => {
+  it("assembles the whole candidate detail panel in one call", async () => {
+    const candidate = await candidateService.getById(s.candidateA1);
+    const keys = shape(candidate);
+
+    // The nested collections are what makes this call expensive and what the
+    // application split will have to redistribute.
+    for (const key of [
+      "activities[]",
+      "answers[]",
+      "history[]",
+      "rejections[]",
+      "selections[]",
+      "cvAnalysis",
+      "jobTitle",
+      "stageName",
+    ]) {
+      expect(keys).toContain(key);
+    }
+  });
+
+  it("includes the candidate's interviews and current offer", async () => {
+    const candidate = await candidateService.getById(s.candidateA1);
+    expect(candidate!.interviews.map((i) => i.id)).toEqual([s.interviewA1]);
+    expect(candidate!.offer?.id).toBe(s.offerA1);
+  });
+
+  it("returns null for a candidate that does not exist", async () => {
+    expect(await candidateService.getById(2_000_000_000)).toBeNull();
+  });
+});
