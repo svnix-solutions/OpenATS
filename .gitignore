@@ -4,3 +4,6 @@ playwright-report/
 playwright/.cache/
 # Test coverage reports
 coverage/
+
+# npm lockfile: this is a pnpm workspace
+package-lock.json
