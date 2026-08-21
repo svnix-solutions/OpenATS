@@ -1,6 +1,11 @@
 import { Router } from "express";
 import { z } from "zod";
 import { requireManager } from "../../middlewares/role.middleware";
+import {
+  requireCandidateRead,
+  requireInterviewRead,
+} from "../../middlewares/job-access.middleware";
+import { isTeamScoped } from "../../shared/auth/job-access";
 import { interviewService } from "./interview.service";
 import { mailService } from "../../shared/services/mail.service";
 import { socketService } from "../../shared/services/socket.service";
@@ -87,7 +92,7 @@ router.post("/candidates/:candidateId/interviews", requireManager, async (req, r
   }
 });
 
-router.get("/candidates/:candidateId/interviews", async (req, res) => {
+router.get("/candidates/:candidateId/interviews", requireCandidateRead(), async (req, res) => {
   try {
     const candidateId = parseInt((req.params.candidateId ?? "").toString());
     if (isNaN(candidateId)) {
@@ -112,6 +117,7 @@ router.get("/interviews", async (req, res) => {
       search: req.query.search as string | undefined,
       fromDate: req.query.from as string | undefined,
       toDate: req.query.to as string | undefined,
+      teamUserId: isTeamScoped(req.user) ? req.user.id : undefined,
     };
     const interviews = await interviewService.getAll(filters);
     res.status(200).json({ data: interviews });
@@ -387,7 +393,7 @@ const feedbackSchema = z.object({
   rating: z.number().int().min(1).max(5).optional().nullable(),
 });
 
-router.post("/interviews/:id/feedback", async (req, res) => {
+router.post("/interviews/:id/feedback", requireInterviewRead(), async (req, res) => {
   try {
     const interviewId = parseInt((req.params.id ?? "").toString());
     if (isNaN(interviewId)) {
@@ -428,7 +434,7 @@ router.post("/interviews/:id/feedback", async (req, res) => {
   }
 });
 
-router.get("/interviews/:id/feedback", async (req, res) => {
+router.get("/interviews/:id/feedback", requireInterviewRead(), async (req, res) => {
   try {
     const interviewId = parseInt((req.params.id ?? "").toString());
     if (isNaN(interviewId)) {

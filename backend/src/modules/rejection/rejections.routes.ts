@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { requireManager } from "../../middlewares/role.middleware";
+import { requireCandidateRead } from "../../middlewares/job-access.middleware";
 import { z } from "zod";
 import { rejectionService } from "./rejection.service";
 import { templateEngineService } from "../template/template-engine.service";
@@ -121,7 +122,7 @@ router.post("/candidates/:id/unreject", requireManager, async (req, res) => {
 });
 
 // GET /candidates/:id/rejections — get rejection history
-router.get("/candidates/:id/rejections", async (req, res) => {
+router.get("/candidates/:id/rejections", requireCandidateRead("id"), async (req, res) => {
   try {
     const id = parseInt((req.params.id ?? "").toString());
     if (isNaN(id)) {

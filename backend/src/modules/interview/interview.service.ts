@@ -1,4 +1,14 @@
-import { eq, and, desc, asc, gte, lte, ilike, or } from "drizzle-orm";
+import {
+  eq,
+  and,
+  desc,
+  asc,
+  gte,
+  lte,
+  ilike,
+  or,
+  inArray,
+} from "drizzle-orm";
 import { db } from "../../db";
 import {
   candidateInterviews,
@@ -7,6 +17,7 @@ import {
   jobPipelineStages,
   interviewFeedback,
   users,
+  jobHiringTeam,
 } from "../../db/schema";
 import { cleanObject as clean } from "../../utils/object.utils";
 import * as gcal from "../../shared/services/google-calendar.service";
@@ -175,9 +186,23 @@ export const interviewService = {
     search?: string;
     fromDate?: string;
     toDate?: string;
+    teamUserId?: number;
   }) {
     const conditions = [];
 
+    // Set for team-scoped roles only, matching how the job and candidate
+    // lists narrow their results.
+    if (filters?.teamUserId) {
+      conditions.push(
+        inArray(
+          candidateInterviews.jobId,
+          db
+            .select({ id: jobHiringTeam.jobId })
+            .from(jobHiringTeam)
+            .where(eq(jobHiringTeam.userId, filters.teamUserId)),
+        ),
+      );
+    }
     if (filters?.jobId) {
       conditions.push(eq(candidateInterviews.jobId, filters.jobId));
     }

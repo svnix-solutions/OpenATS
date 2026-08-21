@@ -14,19 +14,23 @@ import {
 } from "./offer.controller";
 
 import { requireManager } from "../../middlewares/role.middleware";
+import {
+  requireJobRead,
+  requireOfferRead,
+} from "../../middlewares/job-access.middleware";
 
 const router: Router = Router();
 
 router.get("/", getAllOffers);
 router.delete("/bulk", requireManager, bulkDeleteOffers);
-router.get("/job/:jobId", getAllOffersByJob);
-router.get("/:id", getOfferById);
+router.get("/job/:jobId", requireJobRead(), getAllOffersByJob);
+router.get("/:id", requireOfferRead(), getOfferById);
 router.post("/", requireManager, createOffer);
 router.patch("/:id", requireManager, updateOffer);
 router.delete("/:id", requireManager, deleteOffer);
 router.post("/:id/send", requireManager, sendOffer);
-router.post("/:id/accept", acceptOffer);
-router.post("/:id/decline", declineOffer);
+router.post("/:id/accept", requireOfferRead(), acceptOffer);
+router.post("/:id/decline", requireOfferRead(), declineOffer);
 router.post("/:id/mark-hired", requireManager, markCandidateHired);
 
 export default router;

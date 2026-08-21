@@ -4,6 +4,7 @@ import { assessmentExecutionService } from "./assessment-execution.service";
 import { mailService } from "../../shared/services/mail.service";
 import { socketService } from "../../shared/services/socket.service";
 import logger from "../../utils/logger";
+import { canReadCandidate } from "../../shared/auth/job-access";
 import { getErrorMessage} from "../../utils/error.utils";
 
 const inviteCandidateSchema = z.object({
@@ -55,6 +56,19 @@ export const inviteCandidateToAssessment = async (
     }
 
     const { candidateId, assessmentId, expiryDays } = parsed.data;
+
+    // The candidate id is in the body, not the path, so `requireCandidateRead`
+    // cannot guard this route from the router.
+    if (!(await canReadCandidate(req.user, candidateId))) {
+      logger.warn(
+        `[access] user ${req.user.id} denied invite for candidate ${candidateId}`,
+      );
+      res
+        .status(403)
+        .json({ error: "You do not have access to this resource" });
+      return;
+    }
+
     const { attempt, didSendInvite } =
       await assessmentExecutionService.inviteCandidate(
         candidateId,
