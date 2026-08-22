@@ -28,6 +28,7 @@ afterAll(async () => {
 
 const LIST_SHAPE = [
   "[].applicationEmailTemplateId",
+  "[].clientCompanyId",
   "[].createdAt",
   "[].createdBy",
   "[].currency",
@@ -127,6 +128,7 @@ describe("jobService.getById", () => {
 
     expect(shape(job)).toEqual([
       "applicationEmailTemplateId",
+      "clientCompanyId",
       "createdAt",
       "createdBy",
       "currency",

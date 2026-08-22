@@ -4,6 +4,7 @@ import { eq, inArray } from "drizzle-orm";
 import { db, runInOrganization } from "../../src/db";
 import { company, departments } from "../../src/db/schema/company";
 import { jobs, jobSkills } from "../../src/db/schema/jobs";
+import { clientCompanies } from "../../src/db/schema/organizations";
 import { jobHiringTeam, jobPipelineStages } from "../../src/db/schema/pipeline";
 import {
   candidateAssessmentAttempts,
@@ -32,6 +33,8 @@ export interface Scenario {
   suffix: string;
   /** The tenant every row below belongs to. */
   organizationId: number;
+  /** The company the scenario's jobs are being filled for. */
+  clientCompanyId: number;
   companyId: number;
   departmentId: number;
   admin: AuthenticatedUser;
@@ -156,6 +159,7 @@ async function makeJob(
   departmentId: number,
   createdBy: number,
   createdAt: Date,
+  clientCompanyId: number,
 ): Promise<ScenarioJob> {
   const slug = `${tag}-${suffix}`;
   const [job] = await db
@@ -168,6 +172,7 @@ async function makeJob(
       status: "published",
       createdBy,
       createdAt,
+      clientCompanyId,
     })
     .returning({ id: jobs.id });
 
@@ -204,6 +209,13 @@ async function buildScenario(
   suffix: string,
   organizationId: number,
 ): Promise<Scenario> {
+  // Jobs belong to a client company now, so the scenario needs one.
+  const [client] = await db
+    .insert(clientCompanies)
+    .values({ organizationId, name: `Client ${suffix}`, slug: suffix })
+    .returning({ id: clientCompanies.id });
+  const clientCompanyId = client!.id;
+
   const [co] = await db
     .insert(company)
     .values({ name: `Co ${suffix}`, email: `co.${suffix}@example.test` })
@@ -228,10 +240,10 @@ async function buildScenario(
   // defaultNow() would give both jobs the same value and any ordering
   // assertion would be a coin toss.
   const jobA = await makeJob(
-    suffix, "alpha", dept!.id, admin.id, new Date("2026-01-01T00:00:00Z"),
+    suffix, "alpha", dept!.id, admin.id, new Date("2026-01-01T00:00:00Z"), clientCompanyId,
   );
   const jobB = await makeJob(
-    suffix, "bravo", dept!.id, admin.id, new Date("2026-02-01T00:00:00Z"),
+    suffix, "bravo", dept!.id, admin.id, new Date("2026-02-01T00:00:00Z"), clientCompanyId,
   );
 
   await db.insert(jobHiringTeam).values([
@@ -347,6 +359,7 @@ async function buildScenario(
   return {
     suffix,
     organizationId,
+    clientCompanyId,
     companyId: co!.id,
     departmentId: dept!.id,
     admin,
@@ -395,6 +408,9 @@ async function teardown(s: Scenario): Promise<void> {
     .delete(jobPipelineStages)
     .where(inArray(jobPipelineStages.jobId, jobIds));
   await db.delete(jobs).where(inArray(jobs.id, jobIds));
+  await db
+    .delete(clientCompanies)
+    .where(eq(clientCompanies.id, s.clientCompanyId));
   await db
     .delete(organizationMembers)
     .where(inArray(organizationMembers.userId, userIds));

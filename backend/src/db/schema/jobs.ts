@@ -16,7 +16,7 @@ import { employmentType, jobStatus, payFrequency, salaryType } from "./enums";
 import { departments } from "./company";
 import { users } from "./users";
 import { templates } from "./templates";
-import { organizations } from "./organizations";
+import { clientCompanies, organizations } from "./organizations";
 
 export const jobs = pgTable(
   "jobs",
@@ -26,6 +26,17 @@ export const jobs = pgTable(
       .notNull()
       .default(sql`app_current_org()`)
       .references(() => organizations.id, { onDelete: "cascade" }),
+
+    /**
+     * The company this role is being filled for.
+     *
+     * An agency recruits for many; a company hiring for itself has exactly one.
+     * Either way a job always belongs to one, so there is no in-house special
+     * case to carry around.
+     */
+    clientCompanyId: integer("client_company_id")
+      .notNull()
+      .references(() => clientCompanies.id, { onDelete: "restrict" }),
 
     slug: varchar("slug", { length: 255 }).notNull(),
 
@@ -86,8 +97,9 @@ export const jobs = pgTable(
       "chk_salary_min_max",
       sql`${t.salaryMin} IS NULL OR ${t.salaryMax} IS NULL OR ${t.salaryMax} >= ${t.salaryMin}`,
     ),
-    unique().on(t.organizationId, t.slug),
+    unique().on(t.clientCompanyId, t.slug),
     index("idx_jobs_organization_id").on(t.organizationId),
+    index("idx_jobs_client_company_id").on(t.clientCompanyId),
     index("idx_jobs_department_id").on(t.departmentId),
     index("idx_jobs_created_by").on(t.createdBy),
   ],

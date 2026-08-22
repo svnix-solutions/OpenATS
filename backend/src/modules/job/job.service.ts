@@ -1,6 +1,7 @@
 import { eq, desc, ilike, inArray, and, sql } from "drizzle-orm";
 import { db, NewJob } from "../../db";
 import {
+  clientCompanies,
   jobs,
   jobSkills,
   pipelineStageTemplates,
@@ -23,6 +24,12 @@ export type JobListFilters = {
 
 export type CreateJobInput = {
   title: string;
+  /**
+   * The company this job is for. Optional on the way in: an organization with
+   * exactly one client company has an unambiguous answer, which is every
+   * company hiring for itself.
+   */
+  clientCompanyId?: number;
   departmentId: number;
   employmentType:
     | "full_time"
@@ -214,7 +221,36 @@ export const jobService = {
     };
   },
 
+  /**
+   * The client company a new job belongs to.
+   *
+   * Unlike the organization, this is not something the request context can
+   * supply — it is a choice. Defaulting is only safe when there is nothing to
+   * choose between, so an organization with several client companies must say
+   * which, rather than have one picked for it.
+   */
+  async resolveClientCompany(explicit?: number): Promise<number> {
+    if (explicit) return explicit;
+
+    const rows = await db
+      .select({ id: clientCompanies.id })
+      .from(clientCompanies)
+      .limit(2);
+
+    if (rows.length === 0) {
+      throw new Error("This organization has no client company to create a job for.");
+    }
+    if (rows.length > 1) {
+      throw new Error("clientCompanyId is required when more than one client company exists.");
+    }
+    return rows[0]!.id;
+  },
+
   async create(input: CreateJobInput) {
+    const clientCompanyId = await this.resolveClientCompany(
+      input.clientCompanyId,
+    );
+
     const slug = generateSlug(input.title);
     const { skills, ...jobData } = input;
 
@@ -222,6 +258,7 @@ export const jobService = {
       const newJob: NewJob = {
         title: jobData.title,
         slug,
+        clientCompanyId,
         departmentId: jobData.departmentId,
         employmentType: jobData.employmentType,
         location: jobData.location ?? null,

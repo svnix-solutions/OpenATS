@@ -11,7 +11,10 @@ import { jobs } from "../../src/db/schema/jobs";
 import { jobHiringTeam } from "../../src/db/schema/pipeline";
 import { candidates } from "../../src/db/schema/candidates";
 import { users } from "../../src/db/schema/users";
-import { organizationMembers } from "../../src/db/schema/organizations";
+import {
+  clientCompanies,
+  organizationMembers,
+} from "../../src/db/schema/organizations";
 import { canAccessJob, canAccessCandidate } from "../../src/shared/auth/job-access";
 import {
   requireCandidateAccess,
@@ -59,6 +62,13 @@ beforeAll(async () => {
 });
 
 async function seedFixtures() {
+  // Jobs belong to a client company now.
+  const [client] = await db
+    .insert(clientCompanies)
+    .values({ organizationId, name: `Client ${SUFFIX}`, slug: SUFFIX })
+    .returning({ id: clientCompanies.id });
+  const clientCompanyId = client!.id;
+
   const [co] = await db
     .insert(company)
     .values({ name: `Co ${SUFFIX}`, email: `co.${SUFFIX}@example.test` })
@@ -91,6 +101,7 @@ async function seedFixtures() {
         title: "Team Job",
         departmentId: dept!.id,
         employmentType: "full_time",
+        clientCompanyId,
         createdBy: adminUser.id,
       },
       {
@@ -98,6 +109,7 @@ async function seedFixtures() {
         title: "Other Job",
         departmentId: dept!.id,
         employmentType: "full_time",
+        clientCompanyId,
         createdBy: adminUser.id,
       },
     ])
