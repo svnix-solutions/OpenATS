@@ -36,7 +36,10 @@ import { candidates } from "../../src/db/schema/candidates";
 import { candidateInterviews } from "../../src/db/schema/interviews";
 import { offers } from "../../src/db/schema/offers";
 import { users } from "../../src/db/schema/users";
-import { organizationMembers } from "../../src/db/schema/organizations";
+import {
+  clientCompanies,
+  organizationMembers,
+} from "../../src/db/schema/organizations";
 import {
   createTestOrganization,
   dropTestOrganization,
@@ -57,6 +60,7 @@ let candidateId: number;
 let offerId: number;
 
 let organizationId: number;
+let clientCompanyId: number;
 
 /**
  * `it`, with the body inside the organization.
@@ -86,6 +90,13 @@ beforeAll(async () => {
 });
 
 async function seedFixtures() {
+  // Jobs belong to a client company now.
+  const [client] = await db
+    .insert(clientCompanies)
+    .values({ organizationId, name: `Client ${SUFFIX}`, slug: SUFFIX })
+    .returning({ id: clientCompanies.id });
+  clientCompanyId = client!.id;
+
   const [co] = await db
     .insert(company)
     .values({ name: `Co ${SUFFIX}`, email: `co.${SUFFIX}@example.test` })
@@ -124,6 +135,7 @@ async function seedFixtures() {
       slug: `engineer-${SUFFIX}`,
       description: "Test job",
       employmentType: "full_time",
+      clientCompanyId,
       departmentId,
       status: "published",
       createdBy: managerId,
@@ -166,6 +178,7 @@ async function teardownFixtures() {
     .delete(jobPipelineStages)
     .where(eq(jobPipelineStages.jobId, jobId));
   await db.delete(jobs).where(eq(jobs.id, jobId));
+  await db.delete(clientCompanies).where(eq(clientCompanies.id, clientCompanyId));
   await db.delete(departments).where(eq(departments.id, departmentId));
   await db.delete(company).where(eq(company.id, companyId));
   await db

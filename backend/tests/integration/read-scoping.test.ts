@@ -17,7 +17,10 @@ import { assessments } from "../../src/db/schema/assessments";
 import { candidateInterviews } from "../../src/db/schema/interviews";
 import { offers } from "../../src/db/schema/offers";
 import { users } from "../../src/db/schema/users";
-import { organizationMembers } from "../../src/db/schema/organizations";
+import {
+  clientCompanies,
+  organizationMembers,
+} from "../../src/db/schema/organizations";
 import {
   canReadAttempt,
   canReadCandidate,
@@ -87,6 +90,13 @@ beforeAll(async () => {
 });
 
 async function seedFixtures() {
+  // Jobs belong to a client company now.
+  const [client] = await db
+    .insert(clientCompanies)
+    .values({ organizationId, name: `Client ${SUFFIX}`, slug: SUFFIX })
+    .returning({ id: clientCompanies.id });
+  const clientCompanyId = client!.id;
+
   const [co] = await db
     .insert(company)
     .values({ name: `Co ${SUFFIX}`, email: `co.${SUFFIX}@example.test` })
@@ -116,6 +126,7 @@ async function seedFixtures() {
         title: "Team Job",
         departmentId: dept!.id,
         employmentType: "full_time",
+        clientCompanyId,
         createdBy: admin.id,
       },
       {
@@ -123,6 +134,7 @@ async function seedFixtures() {
         title: "Other Job",
         departmentId: dept!.id,
         employmentType: "full_time",
+        clientCompanyId,
         createdBy: admin.id,
       },
     ])
