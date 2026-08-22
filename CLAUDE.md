@@ -161,5 +161,5 @@ Two separate `.env` files are required (copy from `.env.example` in each directo
 
 - ⚠️ The deploy workflow currently fails on this fork with `missing server host`: `SSH_HOST` and friends are repository secrets, and GitHub does not copy secrets to forks. Nothing is being deployed from here.
 - `.github/workflows/deploy.yml` deploys the **backend only** to an Azure VM on push to `main` (when `backend/**` changes): SSH → git pull → pnpm install → build → pm2 restart.
-- CI runs backend lint, migrations, unit and integration tests, two type-check passes and the backend build on every pull request (`.github/workflows/test.yml`). It creates the `openats_app` role before migrating, because service containers start before checkout and cannot mount the init script.
-- Both packages have ESLint; only the backend is linted in CI.
+- CI runs lint for both packages, migrations, unit and integration tests, two type-check passes, and a build of both packages on every pull request (`.github/workflows/test.yml`). The frontend build is not redundant with lint: Next resolves routes at build time, so ambiguous dynamic segments and invalid page signatures surface only there. It creates the `openats_app` role before migrating, because service containers start before checkout and cannot mount the init script.
+- Both packages have ESLint, and both are linted in CI.
