@@ -63,6 +63,62 @@ export const candidates = pgTable(
   ],
 );
 
+/**
+ * One candidate's submission to one job.
+ *
+ * Today `candidates` is both a person and an application: it carries contact
+ * details alongside `job_id`, `status` and `current_stage_id`. That works for a
+ * company hiring for itself and breaks for an agency, where the same person is
+ * submitted to Acme in March and Globex in September and the two rows share
+ * nothing. See docs-draft/decisions/0001-multi-tenancy.md §4.
+ *
+ * This table is populated and constrained but not yet read: the service rewrite
+ * that moves `status` and `current_stage_id` off `candidates` is a separate
+ * change, per 0003.
+ */
+export const applications = pgTable(
+  "applications",
+  {
+    id: serial("id").primaryKey(),
+    organizationId: integer("organization_id")
+      .notNull()
+      .default(sql`app_current_org()`)
+      .references(() => organizations.id, { onDelete: "cascade" }),
+
+    candidateId: integer("candidate_id")
+      .notNull()
+      .references(() => candidates.id, { onDelete: "cascade" }),
+    jobId: integer("job_id")
+      .notNull()
+      .references(() => jobs.id, { onDelete: "restrict" }),
+
+    currentStageId: integer("current_stage_id").references(
+      () => jobPipelineStages.id,
+      { onDelete: "set null" },
+    ),
+
+    status: candidateStatus("status").notNull().default("active"),
+
+    /** Where the submission came from: careers page, referral, agency sourcing. */
+    source: varchar("source", { length: 100 }),
+
+    appliedAt: timestamp("applied_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (t) => [
+    // A person is submitted to a given job once. Re-applying reopens the same
+    // application rather than creating a second.
+    unique().on(t.candidateId, t.jobId),
+    index("idx_applications_candidate_id").on(t.candidateId),
+    index("idx_applications_job_id").on(t.jobId),
+    index("idx_applications_current_stage_id").on(t.currentStageId),
+    index("idx_applications_organization_id").on(t.organizationId),
+  ],
+);
+
+export type Application = typeof applications.$inferSelect;
+export type NewApplication = typeof applications.$inferInsert;
+
 export const candidateStageHistory = pgTable(
   "candidate_stage_history",
   {
