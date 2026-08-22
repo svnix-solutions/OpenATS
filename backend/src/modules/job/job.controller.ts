@@ -1,6 +1,9 @@
 import { Request, Response } from "express";
 import { z } from "zod";
 import { jobService } from "./job.service";
+import { db } from "../../db";
+import { clientCompanies } from "../../db/schema/organizations";
+import { eq } from "drizzle-orm";
 import { cleanObject as clean, asEnum } from "../../utils/object.utils";
 import logger from "../../utils/logger";
 import { getErrorCode, getErrorMessage} from "../../utils/error.utils";
@@ -85,6 +88,55 @@ export const listPublishedCareersJobs = async (
     res.status(200).json({ data: result });
   } catch (error) {
     logger.error(`Failed to fetch published careers jobs: ${getErrorMessage(error)}`);
+    res.status(500).json({ error: "Failed to fetch jobs" });
+  }
+};
+
+/**
+ * The careers listing for one client company.
+ *
+ * `withPublicOrganization("client_slug")` has already established the tenant
+ * from the same slug, so row-level security has narrowed everything below to
+ * that organization. This narrows again to the one company being advertised,
+ * because an agency's other clients are not part of this careers page.
+ */
+export const listCareersJobsForClient = async (
+  req: Request,
+  res: Response,
+) => {
+  try {
+    const slug = (req.params.clientSlug ?? "").toString();
+    const [client] = await db
+      .select({
+        id: clientCompanies.id,
+        name: clientCompanies.name,
+        logoUrl: clientCompanies.logoUrl,
+        description: clientCompanies.description,
+        website: clientCompanies.website,
+      })
+      .from(clientCompanies)
+      .where(eq(clientCompanies.slug, slug))
+      .limit(1);
+
+    if (!client) {
+      res.status(404).json({ error: "Not found" });
+      return;
+    }
+
+    const result = await jobService.listPublishedForCareers(client.id);
+    res.status(200).json({
+      data: {
+        company: {
+          name: client.name,
+          logoUrl: client.logoUrl,
+          description: client.description,
+          website: client.website,
+        },
+        jobs: result,
+      },
+    });
+  } catch (error) {
+    logger.error(`Failed to fetch careers page: ${getErrorMessage(error)}`);
     res.status(500).json({ error: "Failed to fetch jobs" });
   }
 };

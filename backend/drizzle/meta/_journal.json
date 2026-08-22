@@ -267,6 +267,13 @@
       "when": 1787438037678,
       "tag": "0037_jobs_belong_to_client",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1787439141463,
+      "tag": "0038_resolve_org_by_client_slug",
+      "breakpoints": true
     }
   ]
 }

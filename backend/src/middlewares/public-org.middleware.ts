@@ -13,12 +13,20 @@ export type PublicOrgSource =
   | "attempt_token"
   | "offer_token"
   | "interview_token"
+  | "client_slug"
   | "only";
 
 async function resolve(
   kind: PublicOrgSource,
   identifier: string,
 ): Promise<number | null> {
+  if (kind === "client_slug") {
+    const result = await unscopedDb.execute<{
+      app_resolve_org_by_client_slug: number | null;
+    }>(sql`SELECT app_resolve_org_by_client_slug(${identifier})`);
+    return result.rows[0]?.app_resolve_org_by_client_slug ?? null;
+  }
+
   const result = await unscopedDb.execute<{ app_resolve_public_org: number }>(
     sql`SELECT app_resolve_public_org(${kind}, ${identifier})`,
   );
