@@ -240,18 +240,19 @@ router.post("/candidates/:id/schedule", requireManager, async (req, res) => {
 
     const [candidate] = await db
       .select({
-        id: candidates.id,
+        id: applications.id,
+        candidateId: candidates.id,
         firstName: candidates.firstName,
         lastName: candidates.lastName,
         email: candidates.email,
         jobId: applications.jobId,
-        currentStageId: candidates.currentStageId,
+        currentStageId: applications.currentStageId,
         jobTitle: jobs.title,
       })
-      .from(candidates)
-      .leftJoin(applications, eq(applications.candidateId, candidates.id))
+      .from(applications)
+      .innerJoin(candidates, eq(applications.candidateId, candidates.id))
       .leftJoin(jobs, eq(applications.jobId, jobs.id))
-      .where(eq(candidates.id, candidateId));
+      .where(eq(applications.id, candidateId));
 
     if (!candidate) {
       res.status(404).json({ error: "Candidate not found" });
@@ -276,7 +277,7 @@ router.post("/candidates/:id/schedule", requireManager, async (req, res) => {
     const [interview] = await db
       .insert(candidateInterviews)
       .values({
-        candidateId: candidate.id,
+        candidateId: candidate.candidateId,
         stageId,
         jobId: candidate.jobId,
         eventName: parsed.data.eventName,

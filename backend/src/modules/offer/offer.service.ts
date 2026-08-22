@@ -3,6 +3,7 @@ import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "../../db";
 import {
   candidateStageHistory,
+  applications,
   candidates,
   jobPipelineStages,
   jobs,
@@ -183,9 +184,7 @@ export const offerService = {
     return await db.query.offers.findMany({
       where: teamJobFilter(teamUserId),
       with: {
-        candidate: {
-          with: { currentStage: true },
-        },
+        candidate: true,
         job: {
           with: { department: true },
         },
@@ -216,7 +215,7 @@ export const offerService = {
     const rows = await db.query.offers.findMany({
       where,
       with: {
-        candidate: { with: { currentStage: true } },
+        candidate: true,
         job: { with: { department: true } },
         template: true,
       },
@@ -663,14 +662,33 @@ export const offerService = {
       allOfferStages[allOfferStages.length - 1] ??
       hiredStage;
 
+    // Hiring resolves one submission. The offer names the job, so this is the
+    // application it belongs to — the person's other applications are
+    // untouched, which is right: being hired here does not withdraw them
+    // from someone else's pipeline.
+    const [application] = await db
+      .select({ id: applications.id })
+      .from(applications)
+      .where(
+        and(
+          eq(applications.candidateId, candidate.id),
+          eq(applications.jobId, offer.jobId),
+        ),
+      )
+      .limit(1);
+
+    if (!application) {
+      throw new Error("No application for this offer");
+    }
+
     const [updatedCandidate] = await db
-      .update(candidates)
+      .update(applications)
       .set({
         currentStageId: targetStage.id,
         status: "hired",
         updatedAt: new Date(),
       })
-      .where(eq(candidates.id, candidate.id))
+      .where(eq(applications.id, application.id))
       .returning();
 
     if (!updatedCandidate) {
@@ -678,14 +696,14 @@ export const offerService = {
     }
 
     await db.insert(candidateStageHistory).values({
-      candidateId: candidate.id,
+      applicationId: application.id,
       stageId: targetStage.id,
       movedBy: actorId,
     });
 
     await candidateActivityService.create({
       candidateId: candidate.id,
-      jobId: candidate.jobId,
+      jobId: offer.jobId,
       offerId: offer.id,
       stageId: targetStage.id,
       actorId,

@@ -12,6 +12,7 @@ import {
 import { db } from "../../db";
 import {
   candidateInterviews,
+  applications,
   candidates,
   jobs,
   jobPipelineStages,
@@ -59,21 +60,22 @@ export const interviewService = {
     // Look up candidate info — also get current stage as fallback
     const [row] = await db
       .select({
-        jobId: candidates.jobId,
+        jobId: applications.jobId,
         firstName: candidates.firstName,
         lastName: candidates.lastName,
         email: candidates.email,
-        currentStageId: candidates.currentStageId,
+        currentStageId: applications.currentStageId,
         jobTitle: jobs.title,
         stageName: jobPipelineStages.name,
       })
-      .from(candidates)
-      .leftJoin(jobs, eq(candidates.jobId, jobs.id))
+      .from(applications)
+      .innerJoin(candidates, eq(applications.candidateId, candidates.id))
+      .leftJoin(jobs, eq(applications.jobId, jobs.id))
       .leftJoin(
         jobPipelineStages,
-        eq(jobPipelineStages.id, input.stageId || candidates.currentStageId),
+        eq(jobPipelineStages.id, input.stageId || applications.currentStageId),
       )
-      .where(eq(candidates.id, input.candidateId));
+      .where(eq(applications.id, input.candidateId));
 
     if (!row) throw new Error("Candidate not found");
 
@@ -336,7 +338,7 @@ export const interviewService = {
             stageName: jobPipelineStages.name,
           })
           .from(candidates)
-          .leftJoin(jobs, eq(candidates.jobId, jobs.id))
+          .leftJoin(jobs, eq(applications.jobId, jobs.id))
           .leftJoin(
             jobPipelineStages,
             eq(jobPipelineStages.id, updated.stageId),

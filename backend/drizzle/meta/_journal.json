@@ -281,6 +281,13 @@
       "when": 1787440451297,
       "tag": "0039_applications_table",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1787442264680,
+      "tag": "0040_candidate_person_split",
+      "breakpoints": true
     }
   ]
 }

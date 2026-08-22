@@ -91,7 +91,7 @@ export const applyForJob = async (req: Request, res: Response) => {
     if (result.resumeUrl) {
       requestCvAnalysis({
         candidateId: result.id,
-        jobId: result.jobId,
+        jobId,
         resumeUrl: result.resumeUrl,
       }).catch((err) =>
         logger.error(
@@ -324,7 +324,7 @@ export const deleteCandidate = async (req: Request, res: Response) => {
     }
 
     logger.info(
-      `Candidate deleted: id=${id}, email="${result.email}", jobId=${result.jobId} by user ${req.user?.id}`,
+      `Candidate deleted: id=${id}, email="${result.email}", candidateId=${result.id} by user ${req.user?.id}`,
     );
     res.status(200).json({ data: result });
   } catch (error) {
@@ -417,15 +417,20 @@ export const updateCandidateBasicDetails = async (
     }
 
     if (newResumeUrl) {
-      requestCvAnalysis({
-        candidateId: updated.id,
-        jobId: updated.jobId,
-        resumeUrl: newResumeUrl,
-      }).catch((err) =>
-        logger.error(
-          `Failed to enqueue CV analysis for candidateId=${updated.id}: ${getErrorMessage(err)}`,
-        ),
-      );
+      // A person has no single job, so a new CV is re-scored against every
+      // role they are currently up for.
+      const open = await candidateService.applicationsFor(updated.id);
+      for (const application of open) {
+        requestCvAnalysis({
+          candidateId: updated.id,
+          jobId: application.jobId,
+          resumeUrl: newResumeUrl,
+        }).catch((err) =>
+          logger.error(
+            `Failed to enqueue CV analysis for candidateId=${updated.id}: ${getErrorMessage(err)}`,
+          ),
+        );
+      }
     }
 
     logger.info(

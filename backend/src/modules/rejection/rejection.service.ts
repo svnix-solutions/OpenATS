@@ -2,6 +2,7 @@ import { and, asc, desc, eq } from "drizzle-orm";
 import { db } from "../../db";
 import {
   candidateRejections,
+  applications,
   candidates,
   candidateStageHistory,
   jobPipelineStages,
@@ -26,22 +27,29 @@ export const rejectionService = {
     return await db.transaction(async (tx) => {
       const [candidate] = await tx
         .select()
-        .from(candidates)
-        .where(eq(candidates.id, input.candidateId));
+        .from(applications)
+        .where(
+          and(
+            eq(applications.candidateId, input.candidateId),
+            eq(applications.jobId, input.jobId),
+          ),
+        );
 
-      if (!candidate) throw new Error("Candidate not found");
+      // Rejecting is per submission: the same person may still be live on
+      // another role, which is the whole point of the split.
+      if (!candidate) throw new Error("Application not found");
       if (candidate.status === "rejected") {
         throw new Error("Candidate is already rejected");
       }
 
       await tx
-        .update(candidates)
+        .update(applications)
         .set({
           status: "rejected",
           currentStageId: null,
           updatedAt: new Date(),
         })
-        .where(eq(candidates.id, input.candidateId));
+        .where(eq(applications.id, candidate.id));
 
       const [rejection] = await tx
         .insert(candidateRejections)
@@ -99,8 +107,8 @@ export const rejectionService = {
     return await db.transaction(async (tx) => {
       const [candidate] = await tx
         .select()
-        .from(candidates)
-        .where(eq(candidates.id, candidateId));
+        .from(applications)
+        .where(eq(applications.id, candidateId));
 
       if (!candidate) throw new Error("Candidate not found");
       if (candidate.status !== "rejected") {
@@ -143,20 +151,20 @@ export const rejectionService = {
       }
 
       const [updated] = await tx
-        .update(candidates)
+        .update(applications)
         .set({
           status: "active",
           currentStageId: restoreStageId,
           updatedAt: new Date(),
         })
-        .where(eq(candidates.id, candidateId))
+        .where(eq(applications.id, candidateId))
         .returning();
 
       if (!updated) throw new Error("Failed to update candidate");
 
       if (restoreStageId) {
         await tx.insert(candidateStageHistory).values({
-          candidateId,
+          applicationId: candidateId,
           stageId: restoreStageId,
           movedBy: unrejectedBy,
         });

@@ -224,7 +224,7 @@ export const jobAssessmentAttachmentsRelations = relations(
 );
 
 // candidates
-export const candidatesRelations = relations(candidates, ({ one, many }) => ({
+export const candidatesRelations = relations(candidates, ({ many }) => ({
   applications: many(applications),
   stageHistory: many(candidateStageHistory),
   customAnswers: many(candidateCustomAnswers),

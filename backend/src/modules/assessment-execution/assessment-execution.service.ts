@@ -69,7 +69,7 @@ export const assessmentExecutionService = {
     const [attempt] = await db
       .insert(candidateAssessmentAttempts)
       .values({
-        candidateId,
+        applicationId: candidateId,
         assessmentId,
         token,
         expiresAt,

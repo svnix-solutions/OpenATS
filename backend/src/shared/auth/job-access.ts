@@ -61,7 +61,10 @@ export async function canAccessCandidate(
 ): Promise<boolean> {
   if (user.role === "super_admin") return true;
 
-  return isOnTeamForCandidate(user.id, candidateId);
+  const jobId = await jobIdForCandidate(candidateId);
+  if (jobId === null) return false;
+
+  return canAccessJob(user, jobId);
 }
 
 /**
@@ -80,29 +83,20 @@ export function isTeamScoped(user: AuthenticatedUser): boolean {
 // are real.
 
 /**
- * Whether the user is on the hiring team of any job this person applied to.
+ * The job a candidate route is about.
  *
- * A candidate is a person now, and a person can be up for several jobs. There
- * is no single job to resolve them to, so this asks the question directly:
- * being on one of their hiring teams is what grants access to them.
+ * `:id` on these routes is an application id, not a person id — the dashboard
+ * lists submissions and links to them, and a person has no single job to check
+ * against. The application names its job directly.
  */
-async function isOnTeamForCandidate(
-  userId: number,
-  candidateId: number,
-): Promise<boolean> {
+async function jobIdForCandidate(applicationId: number): Promise<number | null> {
   const [row] = await db
-    .select({ id: applications.id })
+    .select({ jobId: applications.jobId })
     .from(applications)
-    .innerJoin(jobHiringTeam, eq(jobHiringTeam.jobId, applications.jobId))
-    .where(
-      and(
-        eq(applications.candidateId, candidateId),
-        eq(jobHiringTeam.userId, userId),
-      ),
-    )
+    .where(eq(applications.id, applicationId))
     .limit(1);
 
-  return !!row;
+  return row?.jobId ?? null;
 }
 
 async function jobIdForOffer(offerId: number): Promise<number | null> {
@@ -180,7 +174,10 @@ export async function canReadCandidate(
   candidateId: number,
 ): Promise<boolean> {
   if (!isTeamScoped(user)) return true;
-  return isOnTeamForCandidate(user.id, candidateId);
+  const jobId = await jobIdForCandidate(candidateId);
+  if (jobId === null) return false;
+
+  return canAccessJob(user, jobId);
 }
 
 export function canReadOffer(

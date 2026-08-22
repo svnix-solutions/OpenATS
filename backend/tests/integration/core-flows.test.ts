@@ -32,7 +32,10 @@ import { db, runInOrganization, unscopedDb } from "../../src/db";
 import { company, departments } from "../../src/db/schema/company";
 import { jobs } from "../../src/db/schema/jobs";
 import { jobPipelineStages, jobHiringTeam } from "../../src/db/schema/pipeline";
-import { candidates } from "../../src/db/schema/candidates";
+import {
+  applications,
+  candidates,
+} from "../../src/db/schema/candidates";
 import { candidateInterviews } from "../../src/db/schema/interviews";
 import { offers } from "../../src/db/schema/offers";
 import { users } from "../../src/db/schema/users";
@@ -172,7 +175,7 @@ async function teardownFixtures() {
     .delete(candidateInterviews)
     .where(eq(candidateInterviews.jobId, jobId));
   await db.delete(offers).where(eq(offers.jobId, jobId));
-  await db.delete(candidates).where(eq(candidates.jobId, jobId));
+  await db.delete(candidates).where(eq(applications.jobId, jobId));
   await db.delete(jobHiringTeam).where(eq(jobHiringTeam.jobId, jobId));
   await db
     .delete(jobPipelineStages)
@@ -210,8 +213,8 @@ describe("core hiring flow", () => {
 
     const [row] = await db
       .select()
-      .from(candidates)
-      .where(eq(candidates.id, candidateId));
+      .from(applications)
+      .where(eq(applications.id, candidateId));
 
     expect(row!.jobId).toBe(jobId);
     expect(row!.currentStageId).toBe(appliedStageId);
@@ -241,8 +244,8 @@ describe("core hiring flow", () => {
 
     const [row] = await db
       .select()
-      .from(candidates)
-      .where(eq(candidates.id, candidateId));
+      .from(applications)
+      .where(eq(applications.id, candidateId));
     expect(row!.currentStageId).toBe(interviewStageId);
   });
 
@@ -350,8 +353,8 @@ describe("core hiring flow", () => {
 
     const [row] = await db
       .select()
-      .from(candidates)
-      .where(eq(candidates.id, candidateId));
+      .from(applications)
+      .where(eq(applications.id, candidateId));
     expect(row!.currentStageId).toBe(offerStageId);
   });
 });

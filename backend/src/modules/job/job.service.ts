@@ -10,7 +10,6 @@ import {
   jobAssessmentAttachments,
   offers,
   applications,
-  candidates,
   departments,
 } from "../../db/schema";
 

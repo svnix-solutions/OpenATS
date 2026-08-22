@@ -10,6 +10,7 @@ import { company, departments } from "../../src/db/schema/company";
 import { jobs } from "../../src/db/schema/jobs";
 import { jobHiringTeam, jobPipelineStages } from "../../src/db/schema/pipeline";
 import {
+  applications,
   candidateAssessmentAttempts,
   candidates,
 } from "../../src/db/schema/candidates";
@@ -161,18 +162,25 @@ async function seedFixtures() {
         firstName: "Team",
         lastName: "Candidate",
         email: `team.cand.${SUFFIX}@example.test`,
-        jobId: teamJobId,
       },
       {
         firstName: "Other",
         lastName: "Candidate",
         email: `other.cand.${SUFFIX}@example.test`,
-        jobId: otherJobId,
       },
     ])
     .returning({ id: candidates.id });
-  teamCandidateId = insertedCandidates[0]!.id;
-  otherCandidateId = insertedCandidates[1]!.id;
+  // These ids are submissions: that is what every access check here is about.
+  const submissions = await db
+    .insert(applications)
+    .values([
+      { candidateId: insertedCandidates[0]!.id, jobId: teamJobId },
+      { candidateId: insertedCandidates[1]!.id, jobId: otherJobId },
+    ])
+    .returning({ id: applications.id });
+
+  teamCandidateId = submissions[0]!.id;
+  otherCandidateId = submissions[1]!.id;
 
   const insertedOffers = await db
     .insert(offers)
@@ -217,13 +225,13 @@ async function seedFixtures() {
     .insert(candidateAssessmentAttempts)
     .values([
       {
-        candidateId: teamCandidateId,
+        applicationId: teamCandidateId,
         assessmentId,
         token: `team-token-${SUFFIX}`,
         expiresAt,
       },
       {
-        candidateId: otherCandidateId,
+        applicationId: otherCandidateId,
         assessmentId,
         token: `other-token-${SUFFIX}`,
         expiresAt,

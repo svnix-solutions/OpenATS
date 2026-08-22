@@ -6,7 +6,7 @@ import { rejectionService } from "./rejection.service";
 import { templateEngineService } from "../template/template-engine.service";
 import { variableService } from "../template/variable.service";
 import { db } from "../../db";
-import { templates, candidates } from "../../db/schema";
+import { templates, applications } from "../../db/schema";
 import { eq } from "drizzle-orm";
 import logger from "../../utils/logger";
 import { getErrorMessage} from "../../utils/error.utils";
@@ -48,8 +48,8 @@ router.post("/candidates/:id/reject", requireManager, async (req, res) => {
     // Look up candidate for email and context
     const [candidate] = await db
       .select()
-      .from(candidates)
-      .where(eq(candidates.id, id));
+      .from(applications)
+      .where(eq(applications.id, id));
 
     if (!candidate) {
       res.status(404).json({ error: "Candidate not found" });
@@ -80,7 +80,7 @@ router.post("/candidates/:id/reject", requireManager, async (req, res) => {
 
     const rejection = await rejectionService.reject(
       {
-        candidateId: id,
+        candidateId: candidate.candidateId,
         jobId: candidate.jobId,
         fromStageId: candidate.currentStageId,
         reason: parsed.data.reason,
