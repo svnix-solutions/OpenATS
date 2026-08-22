@@ -54,10 +54,11 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # Backend only. The frontend still has lint errors, so the root `lint`
-      # script would fail every run until those are cleared.
       - name: Lint backend
         run: pnpm --filter ./backend lint
+
+      - name: Lint frontend
+        run: pnpm --filter ./frontend lint
 
       # The service container starts before the repo is checked out, so its
       # init scripts cannot be mounted. Apply the role here instead.
@@ -85,3 +86,10 @@ jobs:
 
       - name: Build backend
         run: pnpm --filter ./backend build
+
+      # Next resolves routes at build time, and a whole class of errors —
+      # ambiguous dynamic segments, invalid page signatures, server/client
+      # boundary violations — appears here and nowhere else. Lint and tests
+      # both pass on a frontend that cannot build.
+      - name: Build frontend
+        run: pnpm --filter ./frontend build
