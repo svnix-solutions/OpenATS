@@ -141,6 +141,34 @@ export const listCareersJobsForClient = async (
   }
 };
 
+/**
+ * The client companies this organization advertises for.
+ *
+ * Used by /careers to send a visitor to the right careers page. On a
+ * single-tenant install there is one, and the redirect is unambiguous; an
+ * agency has several and the bare /careers URL cannot mean anything, which is
+ * the caller's problem to handle rather than something to guess at here.
+ */
+export const listPublicClientCompanies = async (
+  _req: Request,
+  res: Response,
+) => {
+  try {
+    const rows = await db
+      .select({
+        name: clientCompanies.name,
+        slug: clientCompanies.slug,
+      })
+      .from(clientCompanies)
+      .orderBy(clientCompanies.name);
+
+    res.status(200).json({ data: rows });
+  } catch (error) {
+    logger.error(`Failed to list client companies: ${getErrorMessage(error)}`);
+    res.status(500).json({ error: "Failed to list companies" });
+  }
+};
+
 export const getAllJobs = async (req: Request, res: Response) => {
   try {
     const { page, limit, search, status, departmentId } = req.query;

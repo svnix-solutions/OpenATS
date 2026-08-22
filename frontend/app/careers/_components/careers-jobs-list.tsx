@@ -33,11 +33,11 @@ const EMPLOYMENT_LABELS: Record<Job["employmentType"], string> = {
   freelance: "Freelance",
 };
 
-function JobCard({ job }: { job: CareerJobRow }) {
+function JobCard({ job, basePath }: { job: CareerJobRow; basePath: string }) {
   return (
     <li>
       <Link
-        href={`/careers/${job.id}`}
+        href={`${basePath}/${job.id}`}
         className="group flex items-center justify-between gap-4 rounded-lg border border-[var(--theme-color)]/30 bg-slate-100 dark:bg-neutral-900 px-5 py-4 transition-colors hover:border-[var(--theme-color)]/60 hover:bg-slate-200/70 dark:hover:bg-neutral-800"
       >
         <div className="min-w-0">
@@ -57,7 +57,15 @@ function JobCard({ job }: { job: CareerJobRow }) {
   );
 }
 
-export function CareersJobsList({ jobs }: { jobs: CareerJobRow[] }) {
+export function CareersJobsList({
+  jobs,
+  // Where job links point. A client-addressed careers page lives under
+  // /careers/<client>, so its job links have to stay inside it.
+  basePath = "/careers",
+}: {
+  jobs: CareerJobRow[];
+  basePath?: string;
+}) {
   const [search, setSearch] = useState("");
   const [department, setDepartment] = useState("all");
 
@@ -132,7 +140,7 @@ export function CareersJobsList({ jobs }: { jobs: CareerJobRow[] }) {
               </h3>
               <ul className="flex flex-col gap-2">
                 {deptJobs.map((job) => (
-                  <JobCard key={job.id} job={job} />
+                  <JobCard key={job.id} job={job} basePath={basePath} />
                 ))}
               </ul>
             </div>

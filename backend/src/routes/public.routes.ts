@@ -4,6 +4,7 @@ import multer from "multer";
 import {
   getPublicJobById,
   listCareersJobsForClient,
+  listPublicClientCompanies,
   listPublishedCareersJobs,
 } from "../modules/job/job.controller";
 import { getPublicCompany } from "../modules/company/company.controller";
@@ -101,11 +102,20 @@ const publicReadLimiter = rateLimit({
 // it needs no assumption about how many organizations exist — which is what
 // the "only" routes below still make.
 router.get(
+  "/clients",
+  checkOrigins,
+  publicReadLimiter,
+  withPublicOrganization("only"),
+  listPublicClientCompanies,
+);
+
+router.get(
   "/clients/:clientSlug/jobs",
   checkOrigins,
   publicReadLimiter,
   withPublicOrganization("client_slug", "clientSlug"),
   listCareersJobsForClient,
+  listPublicClientCompanies,
 );
 
 router.get("/company", checkOrigins, withPublicOrganization("only"), getPublicCompany);
