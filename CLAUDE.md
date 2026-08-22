@@ -41,8 +41,8 @@ pnpm lint     # eslint
 - **Shared code**: `backend/src/shared/auth/verify-token.ts` is the single Asgardeo JWT verification path, used by both `auth.middleware.ts` and the Socket.IO handshake so the two transports cannot drift on who counts as authenticated; `backend/src/shared/services/` holds services used by 2+ modules (`mail`, `socket`, `r2`, `google-calendar`); `backend/src/shared/integrations/` holds external-provider infra (`connection.service`, `registry`, `crypto`, `google-meet.provider`) — distinct from the `modules/integrations/` feature, which is CRUD for a company's configured integrations. Cross-module imports (e.g. `offer` → `../template/template-engine.service`) are fine; only promote to `shared/` when 2+ unrelated modules need it.
 - `backend/src/routes/` keeps only `index.ts` (mounts every module router) and `public.routes.ts` (cross-cutting `/public/*` aggregator that spans several modules). `modules/job/job.routes.ts` also mounts the `pipeline`, `hiring-team`, and `custom-question` modules as sub-routes under `/jobs`.
 - Imports are plain relative paths (no `@/` alias — `module: commonjs` + `moduleResolution: node` would emit unresolvable `require("@/…")` into `dist/`). Depth stays at `../../` at most.
-- **Auth middleware** (`backend/src/middlewares/auth.middleware.ts`): verifies WSO2 Asgardeo JWTs, maps roles (`super_admin`, `hiring_manager`, `interviewer`), and auto-provisions users on first login.
-- **Public routes** (`/public/*`) use origin-based access control, not auth middleware. Assessment endpoints (`/public/assessment/:token`) use token-based auth.
+- **Auth middleware** (`backend/src/middlewares/auth.middleware.ts`): verifies WSO2 Asgardeo JWTs, maps roles (`super_admin`, `hiring_manager`, `interviewer`), auto-provisions users on first login, resolves the organization, and runs the rest of the request inside it. Role still comes from the JWT; `organization_members.role` is populated but not yet read.
+- **Public routes** (`/public/*`) use origin-based access control, not auth middleware. Each one also passes through `withPublicOrganization`, which resolves the tenant from the resource being addressed — an unresolvable identifier is a 404, since "no such job" and "a job belonging to nobody" must look the same from outside. Assessment endpoints (`/public/assessment/:token`) use token-based auth.
 - **Rate limiting**: `/public/*` has its own IP-keyed limiters in `public.routes.ts`. The authenticated API is limited by `middlewares/rate-limit.middleware.ts`, keyed by **user id** rather than IP so one office behind a NAT does not share a budget — `apiLimiter` is mounted on all of `/api`, and `expensiveLimiter` on uploads. Both are tunable with `RATE_LIMIT_API` / `RATE_LIMIT_EXPENSIVE`.
 - **Per-job authorization**: `middlewares/job-access.middleware.ts` (`requireJobAccess`, `requireCandidateAccess`) gates HTTP routes on hiring-team membership using the same `shared/auth/job-access.ts` rule as the sockets. Job creation adds the creator to the hiring team, and `job.service.getAll` already filters by it, so membership is the app-wide notion of "your jobs".
 - **`req.user`** is available via augmentation in `backend/src/types/express.d.ts`.
@@ -52,10 +52,69 @@ pnpm lint     # eslint
 - `exactOptionalPropertyTypes: false` in tsconfig — deliberate.
 - **Redis + BullMQ**: CV analysis runs as a background job queue, colocated under `backend/src/queues/cv-analysis/` (`queue.ts`, `worker.ts`, `events.ts`); shared Redis connection factory is `backend/src/config/redis.ts`. Connection is read from `REDIS_URL` (defaults to `redis://localhost:6379`). A dedicated connection is created per Queue/Worker (BullMQ best practice), not a shared singleton.
 
+### Tenancy (read this before writing any query)
+
+OpenATS is multi-tenant. A **row-level security policy on every table** filters
+by the organization the current connection is acting for, so a query written
+without thinking about tenancy is not wrong — it simply returns nothing.
+
+- `organizations` is the tenant, one per recruiting agency. `client_companies`
+  are the companies an agency recruits for; `organization_members` places a
+  user in an organization, and carries `client_company_id` for client contacts.
+- Every other table has `organization_id NOT NULL DEFAULT app_current_org()`.
+  **Existing INSERT statements need no change** — the column fills itself from
+  the connection. Existing SELECTs need no change either — the policy filters
+  them. That is why the tenancy migration touched no service query.
+- `app_current_org()` reads `app.org_id` off the session. It is `NULLIF`-guarded
+  because `current_setting(..., true)` returns `''`, not `NULL`, once the
+  setting has been used in a session, and `''::int` raises.
+
+**Establishing the context.** `runInOrganization(orgId, fn)` in
+`db/index.ts` checks out a connection, sets `app.org_id` on it, and puts it in
+`AsyncLocalStorage`. The exported `db` is a proxy that resolves to that
+connection, so services keep importing `db` and never thread anything through.
+Outside a context `db` is the bare pool, where every policy sees a null
+organization: **reads return nothing and writes are refused.** It fails closed.
+
+It is deliberately *not* a transaction around the whole request — a request
+writes its response from inside the callback, so a wrapping transaction would
+commit only after the response had been flushed, and the client would see a 200
+for uncommitted work. Use `db.transaction` where you actually want atomicity.
+
+Four entry points establish the context, and they are the four places a new one
+could be forgotten:
+
+| Path | Establishes it via |
+| --- | --- |
+| Authenticated HTTP | `auth.middleware.ts`, from the user's membership |
+| Public HTTP | `withPublicOrganization(kind, param)`, from the resource in the URL |
+| Socket.IO | the `inOrg` wrapper in `socket.service.ts` |
+| CV analysis worker | `organizationId` carried on the BullMQ job |
+
+**The deliberate holes.** Four `SECURITY DEFINER` functions run outside the
+boundary because they answer "which tenant is this" before one is known:
+`app_provision_user`, `app_resolve_membership`,
+`app_attach_membership_by_asgardeo_org`, and `app_resolve_public_org`. Each
+takes an identifier and returns ids — never a row of tenant data. Do not add a
+fifth without a good reason.
+
+**Two database roles.** Migrations run as the owner via
+`MIGRATION_DATABASE_URL`; everything else runs as `openats_app` via
+`DATABASE_URL`. This is not cosmetic: Postgres lets superusers and table owners
+bypass RLS, so an app connecting as the owner would ignore every policy
+silently and every isolation test would pass without testing anything.
+
+**Which organization a user belongs to** comes from the `org_id` claim on the
+Asgardeo token (a B2B sub-organization). A token naming an organization with no
+`organizations` row is refused. Installs without sub-organizations fall back to
+"the only organization that exists", and refuse when that is ambiguous.
+
+The reasoning behind all of this is in `docs-draft/decisions/`.
+
 ### Database
 
 - PostgreSQL via **Drizzle ORM**. Schema files live in `backend/src/db/schema/` (one file per domain + `relations.ts`).
-- DB connection: `backend/src/db/index.ts` — pg Pool with Neon scale-to-zero handling (production uses Neon; local dev can point `DATABASE_URL` at any Postgres, including the local Docker container).
+- DB connection: `backend/src/db/index.ts` — pg Pool with Neon scale-to-zero handling. It also exports `runInOrganization`, the `db` proxy, `currentOrganizationId()`, and `unscopedDb` (which bypasses the proxy and is for migrations, seeding and tests only — it is still subject to RLS).
 - When changing the schema: run `pnpm drizzle-kit generate` in `backend/`, then **commit the generated `drizzle/*.sql` files**.
 - The seed (`backend/src/db/seed.ts`) creates 5 default pipeline stages (Applied, Screening, Interviewed, Offer, Rejected) - required for the app to function.
 - **Local Postgres + Redis**: `docker-compose.yml` at the repo root runs both as containers (`openats`/`openats`/`openats` for user/password/db on Postgres; Redis with no auth). Not required — Neon/hosted Redis work too — but this is the fastest path for local dev. See `CONTRIBUTING.md` for the full setup flow.
@@ -77,6 +136,7 @@ See `docs/TESTING.md` for the full guide. In short:
 
 - **Unit + integration tests** use Vitest and live in `backend/tests/` (`unit/`, `integration/`), excluded from `tsconfig.json` compilation. Config is `backend/vitest.config.mts` (`.mts` because the backend is a CommonJS package).
 - **End-to-end tests** use Playwright and live in `e2e/` at the repo root, because they span both packages. Config is `playwright.config.ts`, and `tsconfig.json` at the root covers them.
+- **Tests run inside an organization.** `tests/helpers/scenario.ts` builds one coherent world and exposes `itInOrg`, which is `it` with the body wrapped in `runInOrganization`. A test that skips it sees an empty database rather than an error. `tests/integration/rls-coverage.test.ts` reads the catalog and fails if any table is missing RLS, a policy, or the session default — so a new table cannot quietly escape the boundary.
 - **Integration tests hit a real database**: a separate Postgres on port **5433** (`postgres-test` in `docker-compose.yml`), never the dev database on 5432. `backend/tests/setup.ts` loads `backend/.env.test` with `override: true` to enforce this.
 - `backend/.env.test` is committed on purpose. It holds no secrets, only dummy values, so that tests pass on pull requests from forks (GitHub never gives secrets to those).
 - E2E tests also use the 5433 database, via `webServer.env` in `playwright.config.ts`. `reuseExistingServer` is `false` so an already-running `make dev` cannot be adopted, which would silently point tests at the dev database. **Stop `make dev` before running E2E.**
@@ -94,11 +154,12 @@ See `docs/TESTING.md` for the full guide. In short:
 
 Two separate `.env` files are required (copy from `.env.example` in each directory):
 
-- `backend/.env` — `DATABASE_URL`, `REDIS_URL`, `R2_*`, `RESEND_*`, `ASGARDEO_*`, `GEMINI_API_KEY`, `GOOGLE_SERVICE_ACCOUNT_JSON`, `GOOGLE_CALENDAR_ID`
+- `backend/.env` — `DATABASE_URL` (the least-privileged `openats_app` role), `MIGRATION_DATABASE_URL` (the owner, read only by drizzle-kit), `REDIS_URL`, `R2_*`, `RESEND_*`, `ASGARDEO_*`, `GEMINI_API_KEY`, `GOOGLE_SERVICE_ACCOUNT_JSON`, `GOOGLE_CALENDAR_ID`
 - `frontend/.env` — `NEXT_PUBLIC_ASGARDEO_*`, `ASGARDEO_*`, `OPENATS_API_URL`, `NEXT_PUBLIC_API_URL`
 
 ## CI/CD
 
+- ⚠️ The deploy workflow currently fails on this fork with `missing server host`: `SSH_HOST` and friends are repository secrets, and GitHub does not copy secrets to forks. Nothing is being deployed from here.
 - `.github/workflows/deploy.yml` deploys the **backend only** to an Azure VM on push to `main` (when `backend/**` changes): SSH → git pull → pnpm install → build → pm2 restart.
-- No CI for the frontend; no automated linting or tests in CI.
-- Only `frontend/` has ESLint. The backend has no lint config.
+- CI runs backend lint, migrations, unit and integration tests, two type-check passes and the backend build on every pull request (`.github/workflows/test.yml`). It creates the `openats_app` role before migrating, because service containers start before checkout and cannot mount the init script.
+- Both packages have ESLint; only the backend is linted in CI.
