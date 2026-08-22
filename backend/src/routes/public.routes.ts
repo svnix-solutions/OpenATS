@@ -3,6 +3,7 @@ import type { Request, Response, NextFunction } from "express";
 import multer from "multer";
 import {
   getPublicJobById,
+  listCareersJobsForClient,
   listPublishedCareersJobs,
 } from "../modules/job/job.controller";
 import { getPublicCompany } from "../modules/company/company.controller";
@@ -95,6 +96,17 @@ const publicReadLimiter = rateLimit({
   legacyHeaders: false,
   message: { error: "Too many requests. Please try again later." },
 });
+
+// Per-client careers page. Addressed by the company advertising the roles, so
+// it needs no assumption about how many organizations exist — which is what
+// the "only" routes below still make.
+router.get(
+  "/clients/:clientSlug/jobs",
+  checkOrigins,
+  publicReadLimiter,
+  withPublicOrganization("client_slug", "clientSlug"),
+  listCareersJobsForClient,
+);
 
 router.get("/company", checkOrigins, withPublicOrganization("only"), getPublicCompany);
 router.get("/jobs", checkOrigins, withPublicOrganization("only"), listPublishedCareersJobs);
