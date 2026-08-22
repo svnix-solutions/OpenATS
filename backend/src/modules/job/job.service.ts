@@ -9,6 +9,7 @@ import {
   jobHiringTeam,
   jobAssessmentAttachments,
   offers,
+  applications,
   candidates,
   departments,
 } from "../../db/schema";
@@ -180,7 +181,7 @@ export const jobService = {
     if (ids.length === 0) return [];
     return db.transaction(async (tx) => {
       await tx.delete(offers).where(inArray(offers.jobId, ids));
-      await tx.delete(candidates).where(inArray(candidates.jobId, ids));
+      await tx.delete(applications).where(inArray(applications.jobId, ids));
       return tx.delete(jobs).where(inArray(jobs.id, ids)).returning();
     });
   },
@@ -357,7 +358,7 @@ export const jobService = {
   async delete(id: number) {
     return await db.transaction(async (tx) => {
       await tx.delete(offers).where(eq(offers.jobId, id));
-      await tx.delete(candidates).where(eq(candidates.jobId, id));
+      await tx.delete(applications).where(eq(applications.jobId, id));
 
       const [deleted] = await tx
         .delete(jobs)

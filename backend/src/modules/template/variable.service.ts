@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
 import { db } from "../../db";
-import { candidates, jobs, departments, company } from "../../db/schema";
+import { applications, candidates, jobs, departments, company } from "../../db/schema";
 import { TemplateContext } from "./template-engine.service";
 
 export const variableService = {
@@ -13,7 +13,8 @@ export const variableService = {
         company: company,
       })
       .from(candidates)
-      .innerJoin(jobs, eq(candidates.jobId, jobs.id))
+      .innerJoin(applications, eq(applications.candidateId, candidates.id))
+      .innerJoin(jobs, eq(applications.jobId, jobs.id))
       .innerJoin(departments, eq(jobs.departmentId, departments.id))
       .innerJoin(company, eq(departments.companyId, company.id))
       .where(eq(candidates.id, candidateId));

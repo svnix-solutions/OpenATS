@@ -1,6 +1,7 @@
 import { eq, and, desc, asc, inArray, ilike, or, sql } from "drizzle-orm";
 import { db } from "../../db";
 import {
+  applications,
   candidates,
   candidateCvAnalysis,
   candidateStageHistory,
@@ -94,10 +95,13 @@ function buildCandidateWhere(
   filters: Omit<CandidateFilters, "page" | "limit">,
 ) {
   const conditions = [];
-  if (jobId) conditions.push(eq(candidates.jobId, jobId));
+  // The dashboard's "candidates" list is really a list of submissions: a
+  // person appears once per job they are up for, with that job's stage and
+  // status. Those columns live on `applications` now.
+  if (jobId) conditions.push(eq(applications.jobId, jobId));
   if (filters.stageId)
-    conditions.push(eq(candidates.currentStageId, filters.stageId));
-  if (filters.status) conditions.push(eq(candidates.status, filters.status));
+    conditions.push(eq(applications.currentStageId, filters.stageId));
+  if (filters.status) conditions.push(eq(applications.status, filters.status));
   if (filters.search) {
     conditions.push(
       or(
@@ -110,7 +114,7 @@ function buildCandidateWhere(
   if (filters.teamUserId) {
     conditions.push(
       inArray(
-        candidates.jobId,
+        applications.jobId,
         db.select({ id: jobHiringTeam.jobId }).from(jobHiringTeam).where(eq(jobHiringTeam.userId, filters.teamUserId)),
       ),
     );
@@ -259,34 +263,40 @@ export const candidateService = {
     const [rows, [countRow]] = await Promise.all([
       db
         .select({
-          id: candidates.id,
+          // The application id, not the person's. A row here is one
+          // submission, and the same person can appear twice under different
+          // jobs. Ids are opaque to the dashboard, so this keeps working.
+          id: applications.id,
+          candidateId: candidates.id,
           firstName: candidates.firstName,
           lastName: candidates.lastName,
           email: candidates.email,
           phone: candidates.phone,
           resumeUrl: candidates.resumeUrl,
-          jobId: candidates.jobId,
-          currentStageId: candidates.currentStageId,
-          status: candidates.status,
-          appliedAt: candidates.appliedAt,
-          updatedAt: candidates.updatedAt,
+          jobId: applications.jobId,
+          currentStageId: applications.currentStageId,
+          status: applications.status,
+          appliedAt: applications.appliedAt,
+          updatedAt: applications.updatedAt,
           stageName: jobPipelineStages.name,
           jobTitle: jobs.title,
         })
-        .from(candidates)
+        .from(applications)
+        .innerJoin(candidates, eq(applications.candidateId, candidates.id))
         .leftJoin(
           jobPipelineStages,
-          eq(candidates.currentStageId, jobPipelineStages.id),
+          eq(applications.currentStageId, jobPipelineStages.id),
         )
-        .leftJoin(jobs, eq(candidates.jobId, jobs.id))
+        .leftJoin(jobs, eq(applications.jobId, jobs.id))
         .where(where)
-        .orderBy(desc(candidates.appliedAt))
+        .orderBy(desc(applications.appliedAt))
         .limit(limit)
         .offset(offset),
 
       db
         .select({ count: sql<number>`count(*)::int` })
-        .from(candidates)
+        .from(applications)
+        .innerJoin(candidates, eq(applications.candidateId, candidates.id))
         .where(where),
     ]);
 
@@ -329,7 +339,7 @@ export const candidateService = {
     const answers = await db
       .select({
         id: candidateCustomAnswers.id,
-        candidateId: candidateCustomAnswers.candidateId,
+        candidateId: candidateCustomAnswers.applicationId,
         questionId: candidateCustomAnswers.questionId,
         answerText: candidateCustomAnswers.answerText,
         createdAt: candidateCustomAnswers.createdAt,
@@ -340,12 +350,12 @@ export const candidateService = {
         jobCustomQuestions,
         eq(candidateCustomAnswers.questionId, jobCustomQuestions.id),
       )
-      .where(eq(candidateCustomAnswers.candidateId, id));
+      .where(eq(candidateCustomAnswers.applicationId, id));
 
     const selections = await db
       .select({
         id: candidateCustomAnswerSelections.id,
-        candidateId: candidateCustomAnswerSelections.candidateId,
+        candidateId: candidateCustomAnswerSelections.applicationId,
         questionId: candidateCustomAnswerSelections.questionId,
         optionId: candidateCustomAnswerSelections.optionId,
         createdAt: candidateCustomAnswerSelections.createdAt,
@@ -364,12 +374,12 @@ export const candidateService = {
           jobCustomQuestionOptions.id,
         ),
       )
-      .where(eq(candidateCustomAnswerSelections.candidateId, id));
+      .where(eq(candidateCustomAnswerSelections.applicationId, id));
 
     const history = await db
       .select()
       .from(candidateStageHistory)
-      .where(eq(candidateStageHistory.candidateId, id))
+      .where(eq(candidateStageHistory.applicationId, id))
       .orderBy(asc(candidateStageHistory.movedAt));
 
     const [offer] = await db

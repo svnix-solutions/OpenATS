@@ -11,6 +11,7 @@ import { mailService } from "../../shared/services/mail.service";
 import { socketService } from "../../shared/services/socket.service";
 import { db } from "../../db";
 import {
+  applications,
   candidates,
   jobs,
   candidateInterviews,
@@ -243,12 +244,13 @@ router.post("/candidates/:id/schedule", requireManager, async (req, res) => {
         firstName: candidates.firstName,
         lastName: candidates.lastName,
         email: candidates.email,
-        jobId: candidates.jobId,
+        jobId: applications.jobId,
         currentStageId: candidates.currentStageId,
         jobTitle: jobs.title,
       })
       .from(candidates)
-      .leftJoin(jobs, eq(candidates.jobId, jobs.id))
+      .leftJoin(applications, eq(applications.candidateId, candidates.id))
+      .leftJoin(jobs, eq(applications.jobId, jobs.id))
       .where(eq(candidates.id, candidateId));
 
     if (!candidate) {

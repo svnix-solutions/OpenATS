@@ -2,8 +2,8 @@ import { and, eq } from "drizzle-orm";
 import { db } from "../../db";
 import { jobHiringTeam } from "../../db/schema/pipeline";
 import {
+  applications,
   candidateAssessmentAttempts,
-  candidates,
 } from "../../db/schema/candidates";
 import { candidateInterviews } from "../../db/schema/interviews";
 import { offers } from "../../db/schema/offers";
@@ -61,10 +61,7 @@ export async function canAccessCandidate(
 ): Promise<boolean> {
   if (user.role === "super_admin") return true;
 
-  const jobId = await jobIdForCandidate(candidateId);
-  if (jobId === null) return false;
-
-  return canAccessJob(user, jobId);
+  return isOnTeamForCandidate(user.id, candidateId);
 }
 
 /**
@@ -82,14 +79,30 @@ export function isTeamScoped(user: AuthenticatedUser): boolean {
 // offer is not yours" from "this offer does not exist" would leak which ids
 // are real.
 
-async function jobIdForCandidate(candidateId: number): Promise<number | null> {
+/**
+ * Whether the user is on the hiring team of any job this person applied to.
+ *
+ * A candidate is a person now, and a person can be up for several jobs. There
+ * is no single job to resolve them to, so this asks the question directly:
+ * being on one of their hiring teams is what grants access to them.
+ */
+async function isOnTeamForCandidate(
+  userId: number,
+  candidateId: number,
+): Promise<boolean> {
   const [row] = await db
-    .select({ jobId: candidates.jobId })
-    .from(candidates)
-    .where(eq(candidates.id, candidateId))
+    .select({ id: applications.id })
+    .from(applications)
+    .innerJoin(jobHiringTeam, eq(jobHiringTeam.jobId, applications.jobId))
+    .where(
+      and(
+        eq(applications.candidateId, candidateId),
+        eq(jobHiringTeam.userId, userId),
+      ),
+    )
     .limit(1);
 
-  return row?.jobId ?? null;
+  return !!row;
 }
 
 async function jobIdForOffer(offerId: number): Promise<number | null> {
@@ -113,13 +126,14 @@ async function jobIdForInterview(interviewId: number): Promise<number | null> {
 }
 
 // An attempt points at a candidate, and the candidate points at the job.
+// An attempt belongs to a submission, which names its job directly.
 async function jobIdForAttempt(attemptId: number): Promise<number | null> {
   const [row] = await db
-    .select({ jobId: candidates.jobId })
+    .select({ jobId: applications.jobId })
     .from(candidateAssessmentAttempts)
     .innerJoin(
-      candidates,
-      eq(candidateAssessmentAttempts.candidateId, candidates.id),
+      applications,
+      eq(candidateAssessmentAttempts.applicationId, applications.id),
     )
     .where(eq(candidateAssessmentAttempts.id, attemptId))
     .limit(1);
@@ -161,11 +175,12 @@ async function canReadVia(
   return isOnHiringTeam(user.id, jobId);
 }
 
-export function canReadCandidate(
+export async function canReadCandidate(
   user: AuthenticatedUser,
   candidateId: number,
 ): Promise<boolean> {
-  return canReadVia(user, () => jobIdForCandidate(candidateId));
+  if (!isTeamScoped(user)) return true;
+  return isOnTeamForCandidate(user.id, candidateId);
 }
 
 export function canReadOffer(

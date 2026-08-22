@@ -44,7 +44,7 @@ export const assessmentExecutionService = {
       .from(candidateAssessmentAttempts)
       .where(
         and(
-          eq(candidateAssessmentAttempts.candidateId, candidateId),
+          eq(candidateAssessmentAttempts.applicationId, candidateId),
           eq(candidateAssessmentAttempts.assessmentId, assessmentId),
           or(
             eq(candidateAssessmentAttempts.status, "started"),
@@ -143,7 +143,7 @@ export const assessmentExecutionService = {
         assessments,
         eq(candidateAssessmentAttempts.assessmentId, assessments.id),
       )
-      .where(eq(candidateAssessmentAttempts.candidateId, candidateId))
+      .where(eq(candidateAssessmentAttempts.applicationId, candidateId))
       .orderBy(desc(candidateAssessmentAttempts.createdAt));
   },
 
@@ -175,7 +175,7 @@ export const assessmentExecutionService = {
       )
       .innerJoin(
         candidates,
-        eq(candidateAssessmentAttempts.candidateId, candidates.id),
+        eq(candidateAssessmentAttempts.applicationId, candidates.id),
       )
       .where(eq(candidateAssessmentAttempts.token, token));
 
@@ -227,7 +227,7 @@ export const assessmentExecutionService = {
       .from(candidateAssessmentAttempts)
       .innerJoin(
         candidates,
-        eq(candidateAssessmentAttempts.candidateId, candidates.id),
+        eq(candidateAssessmentAttempts.applicationId, candidates.id),
       )
       .innerJoin(
         assessments,
@@ -416,7 +416,7 @@ export const assessmentExecutionService = {
     const [attempt] = await db
       .select({
         id: candidateAssessmentAttempts.id,
-        candidateId: candidateAssessmentAttempts.candidateId,
+        candidateId: candidateAssessmentAttempts.applicationId,
         assessmentId: candidateAssessmentAttempts.assessmentId,
         status: candidateAssessmentAttempts.status,
         startedAt: candidateAssessmentAttempts.startedAt,
@@ -432,7 +432,7 @@ export const assessmentExecutionService = {
       })
       .from(candidateAssessmentAttempts)
       .innerJoin(assessments, eq(candidateAssessmentAttempts.assessmentId, assessments.id))
-      .innerJoin(candidates, eq(candidateAssessmentAttempts.candidateId, candidates.id))
+      .innerJoin(candidates, eq(candidateAssessmentAttempts.applicationId, candidates.id))
       .where(eq(candidateAssessmentAttempts.id, attemptId));
 
     if (!attempt) return null;
