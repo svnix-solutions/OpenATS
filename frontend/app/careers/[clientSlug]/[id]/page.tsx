@@ -38,7 +38,7 @@ async function getQuestions(id: number): Promise<CustomQuestion[]> {
 export default async function JobApplicationPage({
   params,
 }: {
-  params: Promise<{ id: string }>;
+  params: Promise<{ clientSlug: string; id: string }>;
 }) {
   const { id } = await params;
   const jobId = Number(id);
