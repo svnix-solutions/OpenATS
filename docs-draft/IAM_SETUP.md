@@ -71,11 +71,20 @@ Add these to `NEXT_PUBLIC_ASGARDEO_SCOPES` in your `frontend/.env`, alongside `o
 
 ## 7. Create application roles
 
-Open the **Roles** tab. With **Role Audience** set to `Application`, click **New Role** and create these three roles, with the exact names:
+Open the **Roles** tab. With **Role Audience** set to `Application`, click **New Role** and create these roles, with the exact names:
 
 - `Super Admin`
 - `Hiring Manager`
 - `Interviewer`
+
+Multi-tenant installs need two more, for contacts at the client companies an
+agency recruits for:
+
+- `Client Admin`
+- `Client Reviewer`
+
+They cost nothing on a single-company install, where nothing will assign them.
+`setup-asgardeo.sh` creates all five.
 
 ## 8. Enable App-Native Authentication
 
@@ -132,5 +141,11 @@ provider and not here, and creating one on the strength of a claim is how a
 person ends up inside another tenant's data.
 
 Users created inside the sub-organization get their roles there, not in the
-root organization. The three application roles from step 7 need to exist in
-each sub-organization that uses them.
+root organization. The application roles from step 7 need to exist in each
+sub-organization that uses them.
+
+`setup-asgardeo.sh` creates the roles in whichever organization it is pointed
+at, which is the root one. It does **not** create them inside a
+sub-organization it has just made, so a new agency needs its roles adding
+before anyone there can sign in. Once per agency, by hand, is fine; automating
+it belongs with the rest of agency signup rather than here.

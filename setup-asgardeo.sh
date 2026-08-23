@@ -562,7 +562,12 @@ SUPER_ADMIN_ROLE_ID=""
 HIRING_MANAGER_ROLE_ID=""
 INTERVIEWER_ROLE_ID=""
 
-for ROLE_NAME in "Super Admin" "Hiring Manager" "Interviewer"; do
+# The last two are client contacts — people at a company the agency recruits
+# for. They are only useful on an install that has client companies, but
+# creating them costs nothing and a role that does not exist cannot be
+# assigned, which is a confusing way to discover the gap.
+for ROLE_NAME in "Super Admin" "Hiring Manager" "Interviewer" \
+                 "Client Admin" "Client Reviewer"; do
   ROLE_ID=""
 
   ENCODED_FILTER=$(printf 'displayName eq "%s" and audience.value eq "%s"' "$ROLE_NAME" "$APP_ID" \
@@ -595,6 +600,8 @@ for ROLE_NAME in "Super Admin" "Hiring Manager" "Interviewer"; do
     "Super Admin")    SUPER_ADMIN_ROLE_ID="$ROLE_ID" ;;
     "Hiring Manager")  HIRING_MANAGER_ROLE_ID="$ROLE_ID" ;;
     "Interviewer")     INTERVIEWER_ROLE_ID="$ROLE_ID" ;;
+    "Client Admin")    CLIENT_ADMIN_ROLE_ID="$ROLE_ID" ;;
+    "Client Reviewer") CLIENT_REVIEWER_ROLE_ID="$ROLE_ID" ;;
   esac
 done
 
@@ -824,6 +831,8 @@ echo ""
 echo "ASGARDEO_SUPER_ADMIN_ROLE_ID=\"${SUPER_ADMIN_ROLE_ID}\""
 echo "ASGARDEO_HIRING_MANAGER_ROLE_ID=\"${HIRING_MANAGER_ROLE_ID}\""
 echo "ASGARDEO_INTERVIEWER_ROLE_ID=\"${INTERVIEWER_ROLE_ID}\""
+echo "ASGARDEO_CLIENT_ADMIN_ROLE_ID=\"${CLIENT_ADMIN_ROLE_ID}\""
+echo "ASGARDEO_CLIENT_REVIEWER_ROLE_ID=\"${CLIENT_REVIEWER_ROLE_ID}\""
 echo ""
 echo "──────────────────────────────────────────────────────────"
 echo "📄 backend/.env"
