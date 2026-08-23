@@ -41,7 +41,7 @@ pnpm lint     # eslint
 - **Shared code**: `backend/src/shared/auth/verify-token.ts` is the single Asgardeo JWT verification path, used by both `auth.middleware.ts` and the Socket.IO handshake so the two transports cannot drift on who counts as authenticated; `backend/src/shared/services/` holds services used by 2+ modules (`mail`, `socket`, `r2`, `google-calendar`); `backend/src/shared/integrations/` holds external-provider infra (`connection.service`, `registry`, `crypto`, `google-meet.provider`) — distinct from the `modules/integrations/` feature, which is CRUD for a company's configured integrations. Cross-module imports (e.g. `offer` → `../template/template-engine.service`) are fine; only promote to `shared/` when 2+ unrelated modules need it.
 - `backend/src/routes/` keeps only `index.ts` (mounts every module router) and `public.routes.ts` (cross-cutting `/public/*` aggregator that spans several modules). `modules/job/job.routes.ts` also mounts the `pipeline`, `hiring-team`, and `custom-question` modules as sub-routes under `/jobs`.
 - Imports are plain relative paths (no `@/` alias — `module: commonjs` + `moduleResolution: node` would emit unresolvable `require("@/…")` into `dist/`). Depth stays at `../../` at most.
-- **Auth middleware** (`backend/src/middlewares/auth.middleware.ts`): verifies WSO2 Asgardeo JWTs, maps roles (`super_admin`, `hiring_manager`, `interviewer`), auto-provisions users on first login, resolves the organization, and runs the rest of the request inside it. Role still comes from the JWT; `organization_members.role` is populated but not yet read.
+- **Auth middleware** (`backend/src/middlewares/auth.middleware.ts`): verifies WSO2 Asgardeo JWTs, auto-provisions users on first login, resolves the organization, and runs the rest of the request inside it. **The role comes from `organization_members.role`, not the token.** The token's role seeds that column on first attach and is ignored afterwards, so an administrator can change someone's role without an identity-provider round-trip and removing a privilege takes effect on the next request rather than when the token expires. `org_role` and the `AppRole` union hold the same five values on purpose — they were two vocabularies over one concept, and keeping them identical is what stops them drifting.
 - **Public routes** (`/public/*`) use origin-based access control, not auth middleware. Each one also passes through `withPublicOrganization`, which resolves the tenant from the resource being addressed — an unresolvable identifier is a 404, since "no such job" and "a job belonging to nobody" must look the same from outside. Assessment endpoints (`/public/assessment/:token`) use token-based auth.
 - **Rate limiting**: `/public/*` has its own IP-keyed limiters in `public.routes.ts`. The authenticated API is limited by `middlewares/rate-limit.middleware.ts`, keyed by **user id** rather than IP so one office behind a NAT does not share a budget — `apiLimiter` is mounted on all of `/api`, and `expensiveLimiter` on uploads. Both are tunable with `RATE_LIMIT_API` / `RATE_LIMIT_EXPENSIVE`.
 - **Per-job authorization**: `middlewares/job-access.middleware.ts` (`requireJobAccess`, `requireCandidateAccess`) gates HTTP routes on hiring-team membership using the same `shared/auth/job-access.ts` rule as the sockets. Job creation adds the creator to the hiring team, and `job.service.getAll` already filters by it, so membership is the app-wide notion of "your jobs".
@@ -187,7 +187,7 @@ wrong person, and renaming it is what surfaced that.
 
 ## Testing
 
-See `docs/TESTING.md` for the full guide. In short:
+See `docs-draft/TESTING.md` for the full guide. In short:
 
 - **Unit + integration tests** use Vitest and live in `backend/tests/` (`unit/`, `integration/`), excluded from `tsconfig.json` compilation. Config is `backend/vitest.config.mts` (`.mts` because the backend is a CommonJS package).
 - **End-to-end tests** use Playwright and live in `e2e/` at the repo root, because they span both packages. Config is `playwright.config.ts`, and `tsconfig.json` at the root covers them.
@@ -201,7 +201,7 @@ See `docs/TESTING.md` for the full guide. In short:
 
 ## Roadmap
 
-`docs/GA_ROADMAP.md` tracks everything remaining before v1.0, grouped by release, with a status on every item (🔴 Planned, 🟡 In progress, 🟢 Done).
+`docs-draft/GA_ROADMAP.md` tracks everything remaining before v1.0, grouped by release, with a status on every item (🔴 Planned, 🟡 In progress, 🟢 Done).
 
 **When you complete work that appears on that roadmap, update the item's status in the same change.** If you finish something that is not listed, add a row for it. An out-of-date roadmap is worse than none, because it states things that are not true.
 

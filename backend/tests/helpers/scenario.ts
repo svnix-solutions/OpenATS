@@ -236,8 +236,8 @@ async function buildScenario(
 
   // A user row is invisible until a membership places it in this organization.
   await db.insert(organizationMembers).values([
-    { organizationId, userId: admin.id, role: "agency_owner" },
-    { organizationId, userId: manager.id, role: "recruiter" },
+    { organizationId, userId: admin.id, role: "super_admin" },
+    { organizationId, userId: manager.id, role: "hiring_manager" },
     { organizationId, userId: interviewer.id, role: "interviewer" },
   ]);
 

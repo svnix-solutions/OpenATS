@@ -115,7 +115,7 @@ async function seedFixtures() {
   teamJobSlug = `team-job-${SUFFIX}`;
   await db.insert(organizationMembers).values(
     [manager, admin, onTeam, offTeam].map((u) => ({
-      organizationId, userId: u.id, role: "recruiter" as const,
+      organizationId, userId: u.id, role: "hiring_manager" as const,
     })),
   );
 

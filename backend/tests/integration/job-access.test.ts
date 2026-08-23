@@ -93,7 +93,7 @@ async function seedFixtures() {
 
   await db.insert(organizationMembers).values(
     [memberUser, outsiderUser, adminUser, interviewerOnTeamUser, interviewerOffTeamUser]
-      .map((u) => ({ organizationId, userId: u.id, role: "recruiter" as const })),
+      .map((u) => ({ organizationId, userId: u.id, role: "hiring_manager" as const })),
   );
 
   const inserted = await db

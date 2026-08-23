@@ -130,7 +130,7 @@ async function seedFixtures() {
   // token acts for, and without this the first request has none.
   await db
     .insert(organizationMembers)
-    .values({ organizationId, userId: managerId, role: "recruiter" });
+    .values({ organizationId, userId: managerId, role: "hiring_manager" });
 
   const [job] = await db
     .insert(jobs)

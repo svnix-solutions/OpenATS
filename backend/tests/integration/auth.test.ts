@@ -57,7 +57,7 @@ async function seedMember(tag: string) {
       .returning({ id: users.id });
     await db
       .insert(organizationMembers)
-      .values({ organizationId, userId: row!.id, role: "recruiter" });
+      .values({ organizationId, userId: row!.id, role: "hiring_manager" });
   });
 }
 
@@ -169,7 +169,13 @@ describe("verifyAccessToken - claims", () => {
     });
   });
 
-  it("reads the role from the wso2 claim as well", async () => {
+  // Two things at once, because they share a setup. The wso2 claim is the
+  // only role source on this token, so reaching a successful login at all
+  // proves it was parsed — an unparsed one is a 403 for having no role. And
+  // the role that comes back is the membership's, not the token's: once a
+  // membership exists the database is the source of truth, so a token
+  // claiming super_admin cannot promote someone the database calls a manager.
+  it("reads the role from the wso2 claim, and lets the membership win", async () => {
     await seedMember("wso2");
     const token = await sign(
       validClaims("wso2", {
@@ -178,7 +184,38 @@ describe("verifyAccessToken - claims", () => {
       }),
     );
     const user = await verifyAccessToken(token);
+    expect(user.role).toBe("hiring_manager");
+  });
+
+  // The other half of that contract. The database wins only once it has an
+  // answer; the first login is where the answer comes from, so a brand-new
+  // member is seeded with the role the token presented.
+  it("seeds the role from the token when there is no membership yet", async () => {
+    const tag = "seedrole";
+    createdEmails.push(email(tag));
+    const asgardeoOrg = `asg-seedrole-${SUFFIX}`;
+
+    await runInOrganization(organizationId, () =>
+      db.execute(
+        sql`UPDATE organizations SET asgardeo_org_id = ${asgardeoOrg}
+            WHERE id = ${organizationId}`,
+      ),
+    );
+
+    const user = await verifyAccessToken(
+      await sign(
+        validClaims(tag, { org_id: asgardeoOrg, roles: ["super admin"] }),
+      ),
+    );
+
     expect(user.role).toBe("super_admin");
+
+    await runInOrganization(organizationId, () =>
+      db.execute(
+        sql`UPDATE organizations SET asgardeo_org_id = NULL
+            WHERE id = ${organizationId}`,
+      ),
+    );
   });
 });
 

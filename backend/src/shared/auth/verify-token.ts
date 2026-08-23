@@ -21,6 +21,18 @@ export type AppRole =
   | "client_admin"
   | "client_reviewer";
 
+const APP_ROLES = [
+  "super_admin",
+  "hiring_manager",
+  "interviewer",
+  "client_admin",
+  "client_reviewer",
+] as const satisfies readonly AppRole[];
+
+function isAppRole(value: string): value is AppRole {
+  return (APP_ROLES as readonly string[]).includes(value);
+}
+
 export type AuthenticatedUser = User & {
   role: AppRole;
   /** The tenant every query this request makes will be scoped to. */
@@ -125,12 +137,13 @@ export async function verifyAccessToken(
     throw new AuthError(401, "Invalid token: missing sub claim");
   }
 
-  // Role is the single source of truth from the JWT — never stored in DB.
-  const role = mapToAppRole(
+  // The token's role seeds a membership that does not exist yet. Once one
+  // does, the database is authoritative and this is ignored — see below.
+  const tokenRole = mapToAppRole(
     collectRolesFromPayload(payload as Record<string, unknown>),
   );
 
-  if (!role) {
+  if (!tokenRole) {
     throw new AuthError(403, "No role assigned. Contact your administrator.");
   }
 
@@ -186,7 +199,7 @@ export async function verifyAccessToken(
     const attached = await unscopedDb.execute<{
       app_attach_membership_by_asgardeo_org: number | null;
     }>(
-      sql`SELECT app_attach_membership_by_asgardeo_org(${user.id}, ${asgardeoOrg})`,
+      sql`SELECT app_attach_membership_by_asgardeo_org(${user.id}, ${asgardeoOrg}, ${tokenRole}::org_role)`,
     );
 
     if (!attached.rows[0]?.app_attach_membership_by_asgardeo_org) {
@@ -205,7 +218,7 @@ export async function verifyAccessToken(
     // sub-organizations. Attaches only when a single organization exists, and
     // declines to guess otherwise.
     await unscopedDb.execute(
-      sql`SELECT app_attach_default_membership(${user.id})`,
+      sql`SELECT app_attach_default_membership(${user.id}, ${tokenRole}::org_role)`,
     );
   }
 
@@ -221,11 +234,24 @@ export async function verifyAccessToken(
     throw new AuthError(403, "User account is deactivated");
   }
 
-  // Role still comes from the JWT. organization_members.role exists for the
-  // client portal in phase 3 and is deliberately not read yet.
+  // The membership is the source of truth for the role, not the token. An
+  // administrator changing someone's role here takes effect on their next
+  // request rather than after an identity-provider round-trip, and removing
+  // a privilege is immediate rather than lasting until the token expires.
+  //
+  // The column is an enum over exactly these values, so a row can only be
+  // one of them. Re-checking guards the one case the type system cannot:
+  // a value added to the database enum and not to AppRole.
+  if (!isAppRole(membership.role)) {
+    logger.error(
+      `[auth] membership for user ${user.id} has unknown role ${membership.role}`,
+    );
+    throw new AuthError(403, "Your role is not recognised. Contact your administrator.");
+  }
+
   return {
     ...user,
-    role,
+    role: membership.role,
     organizationId: membership.organizationId,
     clientCompanyId: membership.clientCompanyId,
   };
