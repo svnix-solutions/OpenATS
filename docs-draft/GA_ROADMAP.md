@@ -109,6 +109,18 @@ Not part of the road to v1.0, but decided and written down so it is not invisibl
 | Per-client careers pages | [0001 §7](decisions/0001-multi-tenancy.md) | 🟢 Done |
 | Per-agency email branding | [0001 §7](decisions/0001-multi-tenancy.md) | 🟢 Done |
 | Per-agency sending domains in Resend | [0001 §7](decisions/0001-multi-tenancy.md) | 🔴 Planned |
+| `Reply-To` on outgoing email, and `RESEND_FROM_EMAIL` guidance | Parked deliberately until the product is built and tested | 🔴 Planned |
+
+**Email sending is deliberately parked.** Nothing sets `Reply-To`, so a
+candidate who replies writes to `RESEND_FROM_EMAIL` — which defaults to
+`onboarding@resend.dev`, Resend's sandbox sender, and only delivers to the
+account owner's own verified address. On a fresh deploy that means candidate
+replies go nowhere. The fix is small (`company.email` is already
+organization-scoped, so no migration) and is held until the product is built
+and tested, not forgotten. A single shared sending domain is otherwise fine:
+SPF/DKIM/DMARC all align on a domain you control, and per-agency domains are
+worse until each agency completes its DNS setup. The argument for splitting
+them is pooled reputation between tenants, which only bites at volume.
 
 Phase 0 (closing the per-job authorization gaps on read routes) is done, and it overlapped the **Security review** item above — that review is now better spent on the tenancy boundary than on the single-tenant model it replaced.
 
