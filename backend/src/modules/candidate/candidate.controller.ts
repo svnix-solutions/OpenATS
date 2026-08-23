@@ -12,6 +12,7 @@ import {
   canReadCandidate,
   listScopeFor,
 } from "../../shared/auth/job-access";
+import { presentCandidate } from "../../shared/auth/present";
 
 import { requestCvAnalysis } from "../../queues/cv-analysis/queue";
 import { getErrorMessage} from "../../utils/error.utils";
@@ -173,7 +174,7 @@ export const getCandidates = async (req: Request, res: Response) => {
 
     const result = await candidateService.getAll(jobId, filters);
     res.status(200).json({
-      data: result.rows,
+      data: result.rows.map((row) => presentCandidate(row, req.user)),
       pagination: {
         total: result.total,
         page: result.page,
@@ -216,7 +217,7 @@ export const getCandidateById = async (req: Request, res: Response) => {
       return;
     }
 
-    res.status(200).json({ data: result });
+    res.status(200).json({ data: presentCandidate(result, req.user) });
   } catch (error) {
     logger.error(
       `Failed to fetch candidate id=${req.params.id}: ${getErrorMessage(error)}`,
