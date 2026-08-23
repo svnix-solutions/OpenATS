@@ -35,7 +35,7 @@ export function candidateToFormData(candidate: Candidate): CandidateFormData {
   return {
     firstName: candidate.firstName,
     lastName: candidate.lastName,
-    email: candidate.email,
+    email: candidate.email ?? "",
     phone: candidate.phone ?? "",
     resumeFile: null,
   };

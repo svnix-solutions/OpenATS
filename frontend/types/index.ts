@@ -200,7 +200,11 @@ export type Candidate = {
   id: number;
   firstName: string;
   lastName: string;
-  email: string;
+  /**
+   * Null for a client contact. The agency withholds contact details until a
+   * placement is agreed, so this is absent by design rather than missing data.
+   */
+  email: string | null;
   phone: string | null;
   resumeUrl: string | null;
   jobId: number;

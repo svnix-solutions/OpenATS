@@ -117,7 +117,7 @@ export default function CandidateDetailPage({
     if (!candidate) return;
     setEditFirstName(candidate.firstName);
     setEditLastName(candidate.lastName);
-    setEditEmail(candidate.email);
+    setEditEmail(candidate.email ?? "");
     setEditPhone(candidate.phone ?? "");
     setEditResumeFile(null);
     setEditOpen(true);

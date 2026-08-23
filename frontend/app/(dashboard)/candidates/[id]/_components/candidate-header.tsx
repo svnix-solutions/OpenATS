@@ -115,16 +115,27 @@ export function CandidateHeader({
               </div>
 
               <div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-sm text-slate-600 dark:text-neutral-300">
-                <a
-                  href={`mailto:${candidate.email}`}
-                  className="inline-flex min-w-0 items-center gap-2 font-medium hover:text-[var(--theme-color)]"
-                >
-                  <HugeiconsIcon
-                    icon={Mail01Icon}
-                    className="size-4 shrink-0 text-slate-400 dark:text-neutral-500"
-                  />
-                  <span className="truncate">{candidate.email}</span>
-                </a>
+                {candidate.email ? (
+                  <a
+                    href={`mailto:${candidate.email}`}
+                    className="inline-flex min-w-0 items-center gap-2 font-medium hover:text-[var(--theme-color)]"
+                  >
+                    <HugeiconsIcon
+                      icon={Mail01Icon}
+                      className="size-4 shrink-0 text-slate-400 dark:text-neutral-500"
+                    />
+                    <span className="truncate">{candidate.email}</span>
+                  </a>
+                ) : (
+                  // Withheld rather than missing: say so, so nobody reports it
+                  // as a data problem.
+                  <span className="inline-flex min-w-0 items-center gap-2 text-slate-400 dark:text-neutral-500">
+                    <HugeiconsIcon icon={Mail01Icon} className="size-4 shrink-0" />
+                    <span className="truncate">
+                      Shared once the candidate is placed
+                    </span>
+                  </span>
+                )}
                 <div className="inline-flex items-center gap-2 font-medium">
                   <HugeiconsIcon
                     icon={CallIcon}

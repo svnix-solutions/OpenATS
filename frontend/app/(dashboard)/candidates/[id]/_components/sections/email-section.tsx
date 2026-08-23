@@ -54,7 +54,7 @@ export function EmailSection({ candidate }: EmailSectionProps) {
                 To
               </Label>
               <Input
-                value={candidate.email}
+                value={candidate.email ?? ""}
                 readOnly
                 className="h-10 border-slate-200 dark:border-neutral-700 shadow-none bg-slate-50 dark:bg-neutral-950 text-slate-700 dark:text-neutral-300 text-sm focus-visible:ring-0 rounded-md cursor-default"
               />
