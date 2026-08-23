@@ -288,6 +288,13 @@
       "when": 1787442264680,
       "tag": "0040_candidate_person_split",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1787443674757,
+      "tag": "0041_chat_belongs_to_application",
+      "breakpoints": true
     }
   ]
 }

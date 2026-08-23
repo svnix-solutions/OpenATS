@@ -63,7 +63,7 @@ export const getCandidateChatHistory = async (req: Request, res: Response) => {
       .leftJoin(users, eq(candidateChatMessages.senderId, users.id))
       .where(
         and(
-          eq(candidateChatMessages.candidateId, Number(candidateId)),
+          eq(candidateChatMessages.applicationId, Number(candidateId)),
           eq(candidateChatMessages.isDeleted, false)
         )
       )

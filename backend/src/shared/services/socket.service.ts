@@ -293,7 +293,9 @@ export class SocketService {
             const [newMessage] = await db
               .insert(candidateChatMessages)
               .values({
-                candidateId,
+                // The room is a submission, so the thread is too: "should we
+                // hire Ada for Dev" is not the same conversation as "for Ops".
+                applicationId: candidateId,
                 senderId: user.id,
                 message: data.message,
                 replyToId: data.replyToId,

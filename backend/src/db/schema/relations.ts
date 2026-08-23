@@ -432,9 +432,9 @@ export const jobChatMessagesRelations = relations(
 export const candidateChatMessagesRelations = relations(
   candidateChatMessages,
   ({ one }) => ({
-    candidate: one(candidates, {
-      fields: [candidateChatMessages.candidateId],
-      references: [candidates.id],
+    application: one(applications, {
+      fields: [candidateChatMessages.applicationId],
+      references: [applications.id],
     }),
     sender: one(users, {
       fields: [candidateChatMessages.senderId],
