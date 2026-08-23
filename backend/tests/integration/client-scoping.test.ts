@@ -17,6 +17,8 @@ import {
 import { jobService } from "../../src/modules/job/job.service";
 import { candidateService } from "../../src/modules/candidate/candidate.service";
 import { presentCandidate } from "../../src/shared/auth/present";
+import { interviewFeedback } from "../../src/db/schema/interview-feedback";
+import { interviewService } from "../../src/modules/interview/interview.service";
 import { candidateChatMessages } from "../../src/db/schema/communications";
 import { getCandidateChatHistory } from "../../src/modules/chat/chat.controller";
 import type { Request, Response } from "express";
@@ -202,5 +204,30 @@ describe("a client contact", () => {
     const staff = await seen(s.manager);
     expect(staff).toContain("internal note about this candidate");
     expect(staff).toContain("shared with the client");
+  });
+
+  itInOrg("reads only interview feedback they wrote themselves", async () => {
+    await db.insert(interviewFeedback).values([
+      {
+        interviewId: s.interviewA1,
+        authorId: s.admin.id,
+        content: "agency's candid view",
+      },
+      {
+        interviewId: s.interviewA1,
+        authorId: client.id,
+        content: "the client's own note",
+      },
+    ]);
+
+    const forClient = await interviewService.getFeedback(
+      s.interviewA1,
+      client.id,
+    );
+    expect(forClient.map((f) => f.content)).toEqual(["the client's own note"]);
+
+    // Agency staff still see everything on the interview.
+    const forStaff = await interviewService.getFeedback(s.interviewA1);
+    expect(forStaff).toHaveLength(2);
   });
 });

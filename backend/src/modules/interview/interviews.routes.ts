@@ -5,7 +5,10 @@ import {
   requireCandidateRead,
   requireInterviewRead,
 } from "../../middlewares/job-access.middleware";
-import { listScopeFor } from "../../shared/auth/job-access";
+import {
+  isClientScoped,
+  listScopeFor,
+} from "../../shared/auth/job-access";
 import { interviewService } from "./interview.service";
 import { mailService } from "../../shared/services/mail.service";
 import { socketService } from "../../shared/services/socket.service";
@@ -444,7 +447,11 @@ router.get("/interviews/:id/feedback", requireInterviewRead(), async (req, res) 
       res.status(400).json({ error: "Invalid interview ID" });
       return;
     }
-    const feedback = await interviewService.getFeedback(interviewId);
+    // A client contact sees only feedback they wrote themselves.
+    const feedback = await interviewService.getFeedback(
+      interviewId,
+      isClientScoped(req.user) ? req.user.id : undefined,
+    );
     res.status(200).json({ data: feedback });
   } catch (error) {
     logger.error(`Failed to fetch feedback: ${getErrorMessage(error)}`);
