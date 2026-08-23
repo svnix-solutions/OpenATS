@@ -23,7 +23,9 @@ describe("offerService.getAllDetails", () => {
   itInOrg("nests the candidate's current stage and the job's department", async () => {
     const keys = shape(await offerService.getAllDetails());
     for (const key of [
-      "[].candidate.currentStage.name",
+      // No longer "[].candidate.currentStage.name": a person has no single
+      // stage now, and the offer's own job says which submission it is for.
+      // The offers UI never read it.
       "[].candidate.email",
       "[].job.department.name",
       "[].job.title",

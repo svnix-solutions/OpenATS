@@ -26,9 +26,11 @@ afterAll(async () => {
 
 describe("applications", () => {
   itInOrg("takes its organization from the connection, like every other table", async () => {
+    // personA2 has not applied to jobB, so this pair is free — the scenario
+    // already holds personA1/jobA.
     const [row] = await db
       .insert(applications)
-      .values({ candidateId: s.candidateA1, jobId: s.jobA.id })
+      .values({ candidateId: s.personA2, jobId: s.jobB.id })
       .returning();
 
     expect(row!.organizationId).toBe(s.organizationId);
@@ -42,7 +44,7 @@ describe("applications", () => {
     await expect(
       db
         .insert(applications)
-        .values({ candidateId: s.candidateA1, jobId: s.jobA.id }),
+        .values({ candidateId: s.personA1, jobId: s.jobA.id }),
     ).rejects.toThrow();
   });
 
@@ -51,12 +53,12 @@ describe("applications", () => {
     // with the same email; here it is one person with two applications.
     await db
       .insert(applications)
-      .values({ candidateId: s.candidateA1, jobId: s.jobB.id });
+      .values({ candidateId: s.personA1, jobId: s.jobB.id });
 
     const rows = await db
       .select({ jobId: applications.jobId })
       .from(applications)
-      .where(eq(applications.candidateId, s.candidateA1));
+      .where(eq(applications.candidateId, s.personA1));
 
     expect(rows.map((r) => r.jobId).sort()).toEqual(
       [s.jobA.id, s.jobB.id].sort(),
@@ -69,7 +71,7 @@ describe("applications", () => {
       .set({ status: "rejected" })
       .where(
         and(
-          eq(applications.candidateId, s.candidateA1),
+          eq(applications.candidateId, s.personA1),
           eq(applications.jobId, s.jobB.id),
         ),
       );
@@ -77,7 +79,7 @@ describe("applications", () => {
     const rows = await db
       .select({ jobId: applications.jobId, status: applications.status })
       .from(applications)
-      .where(eq(applications.candidateId, s.candidateA1));
+      .where(eq(applications.candidateId, s.personA1));
 
     const byJob = new Map(rows.map((r) => [r.jobId, r.status]));
     expect(byJob.get(s.jobA.id)).toBe("active");

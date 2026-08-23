@@ -24,8 +24,12 @@ afterAll(async () => {
   await destroyScenario(s);
 });
 
+// A row is one submission. `id` is the application; `candidateId` is the
+// person behind it, who may appear again under another job. Before the split
+// there was no way to say that, which is what this list gained.
 const ROW_SHAPE = [
   "rows[].appliedAt",
+  "rows[].candidateId",
   "rows[].currentStageId",
   "rows[].email",
   "rows[].firstName",

@@ -8,6 +8,7 @@ import {
   assessments,
   assessmentQuestions,
   assessmentQuestionOptions,
+  applications,
   candidates,
 } from "../../db/schema";
 
@@ -174,9 +175,10 @@ export const assessmentExecutionService = {
         eq(candidateAssessmentAttempts.assessmentId, assessments.id),
       )
       .innerJoin(
-        candidates,
-        eq(candidateAssessmentAttempts.applicationId, candidates.id),
+        applications,
+        eq(candidateAssessmentAttempts.applicationId, applications.id),
       )
+      .innerJoin(candidates, eq(applications.candidateId, candidates.id))
       .where(eq(candidateAssessmentAttempts.token, token));
 
     if (!attempt) return null;
@@ -226,9 +228,10 @@ export const assessmentExecutionService = {
       })
       .from(candidateAssessmentAttempts)
       .innerJoin(
-        candidates,
-        eq(candidateAssessmentAttempts.applicationId, candidates.id),
+        applications,
+        eq(candidateAssessmentAttempts.applicationId, applications.id),
       )
+      .innerJoin(candidates, eq(applications.candidateId, candidates.id))
       .innerJoin(
         assessments,
         eq(candidateAssessmentAttempts.assessmentId, assessments.id),
@@ -432,7 +435,11 @@ export const assessmentExecutionService = {
       })
       .from(candidateAssessmentAttempts)
       .innerJoin(assessments, eq(candidateAssessmentAttempts.assessmentId, assessments.id))
-      .innerJoin(candidates, eq(candidateAssessmentAttempts.applicationId, candidates.id))
+      .innerJoin(
+        applications,
+        eq(candidateAssessmentAttempts.applicationId, applications.id),
+      )
+      .innerJoin(candidates, eq(applications.candidateId, candidates.id))
       .where(eq(candidateAssessmentAttempts.id, attemptId));
 
     if (!attempt) return null;

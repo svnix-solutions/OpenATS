@@ -1,4 +1,5 @@
 import {
+  getTableColumns,
   eq,
   and,
   desc,
@@ -60,6 +61,7 @@ export const interviewService = {
     // Look up candidate info — also get current stage as fallback
     const [row] = await db
       .select({
+        candidateId: candidates.id,
         jobId: applications.jobId,
         firstName: candidates.firstName,
         lastName: candidates.lastName,
@@ -85,7 +87,9 @@ export const interviewService = {
     const [interview] = await db
       .insert(candidateInterviews)
       .values({
-        candidateId: input.candidateId,
+        // The interview row stores the person; row.jobId says which of their
+        // submissions it belongs to.
+        candidateId: row.candidateId,
         stageId: resolvedStageId,
         jobId: row.jobId,
         scheduledAt: input.scheduledAt ? new Date(input.scheduledAt) : null,
@@ -173,11 +177,19 @@ export const interviewService = {
       .orderBy(desc(candidateInterviews.createdAt));
   },
 
+  /** Interviews for one submission. `candidateId` is an application id. */
   async getByCandidate(candidateId: number) {
     return db
-      .select()
+      .select({ ...getTableColumns(candidateInterviews) })
       .from(candidateInterviews)
-      .where(eq(candidateInterviews.candidateId, candidateId))
+      .innerJoin(
+        applications,
+        and(
+          eq(applications.candidateId, candidateInterviews.candidateId),
+          eq(applications.jobId, candidateInterviews.jobId),
+        ),
+      )
+      .where(eq(applications.id, candidateId))
       .orderBy(desc(candidateInterviews.createdAt));
   },
 

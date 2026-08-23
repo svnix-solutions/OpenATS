@@ -256,7 +256,9 @@ export const candidateService = {
           }
         }
 
-        return candidate;
+        // `id` is the submission, matching what every other candidate route
+        // means by an id. The person is still there as candidateId.
+        return { ...candidate, id: application.id, candidateId: candidate.id, jobId };
       }).then((candidate) => {
         socketService.notifyCandidateApplied(jobId);
         void sendApplicationConfirmationEmail(candidate, jobId);
@@ -419,7 +421,10 @@ export const candidateService = {
       .select()
       .from(offers)
       .where(
-        and(eq(offers.candidateId, id), eq(offers.jobId, candidate.jobId)),
+        and(
+          eq(offers.candidateId, candidate.candidateId),
+          eq(offers.jobId, candidate.jobId),
+        ),
       );
 
     const [cvRow] = await db
@@ -475,7 +480,12 @@ export const candidateService = {
         jobPipelineStages,
         eq(candidateInterviews.stageId, jobPipelineStages.id),
       )
-      .where(eq(candidateInterviews.candidateId, id))
+      .where(
+        and(
+          eq(candidateInterviews.candidateId, candidate.candidateId),
+          eq(candidateInterviews.jobId, candidate.jobId),
+        ),
+      )
       .orderBy(desc(candidateInterviews.createdAt));
 
     const activities = await candidateActivityService.getByCandidate(id);

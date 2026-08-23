@@ -90,7 +90,8 @@ export const applyForJob = async (req: Request, res: Response) => {
 
     if (result.resumeUrl) {
       requestCvAnalysis({
-        candidateId: result.id,
+        // CV analysis is stored against the person, scored against the job.
+        candidateId: result.candidateId,
         jobId,
         resumeUrl: result.resumeUrl,
       }).catch((err) =>

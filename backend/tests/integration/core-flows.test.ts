@@ -28,6 +28,7 @@ vi.mock("../../src/shared/services/mail.service", () => ({
 }));
 
 import app from "../../src/app";
+import { interviewService } from "../../src/modules/interview/interview.service";
 import { db, runInOrganization, unscopedDb } from "../../src/db";
 import { company, departments } from "../../src/db/schema/company";
 import { jobs } from "../../src/db/schema/jobs";
@@ -175,7 +176,9 @@ async function teardownFixtures() {
     .delete(candidateInterviews)
     .where(eq(candidateInterviews.jobId, jobId));
   await db.delete(offers).where(eq(offers.jobId, jobId));
-  await db.delete(candidates).where(eq(applications.jobId, jobId));
+  // Submissions first, then the people behind them.
+  await db.delete(applications).where(eq(applications.jobId, jobId));
+  await db.delete(candidates).where(eq(candidates.organizationId, organizationId));
   await db.delete(jobHiringTeam).where(eq(jobHiringTeam.jobId, jobId));
   await db
     .delete(jobPipelineStages)
@@ -263,10 +266,8 @@ describe("core hiring flow", () => {
 
     expect([200, 201]).toContain(res.status);
 
-    const rows = await db
-      .select()
-      .from(candidateInterviews)
-      .where(eq(candidateInterviews.candidateId, candidateId));
+    // The interview row stores the person; candidateId here is the submission.
+    const rows = await interviewService.getByCandidate(candidateId);
 
     expect(rows).toHaveLength(1);
     expect(rows[0]!.durationMinutes).toBe(45);

@@ -300,19 +300,29 @@ export const offerService = {
   },
 
   async create(input: CreateOfferInput) {
+    // `candidateId` here is a submission, matching every other candidate
+    // route. The offer row stores the person and the job it is for.
     const [candidate] = await db
-      .select()
-      .from(candidates)
-      .where(eq(candidates.id, input.candidateId));
+      .select({
+        id: candidates.id,
+        applicationId: applications.id,
+        jobId: applications.jobId,
+        firstName: candidates.firstName,
+        lastName: candidates.lastName,
+        email: candidates.email,
+      })
+      .from(applications)
+      .innerJoin(candidates, eq(applications.candidateId, candidates.id))
+      .where(eq(applications.id, input.candidateId));
 
-    if (!candidate) throw new Error("Candidate not found");
+    if (!candidate) throw new Error("Application not found");
 
     const [job] = await db.select().from(jobs).where(eq(jobs.id, input.jobId));
 
     if (!job) throw new Error("Job not found");
 
     const existing = await offerRepository.findByCandidateAndJob(
-      input.candidateId,
+      candidate.id,
       input.jobId,
     );
 
@@ -323,7 +333,7 @@ export const offerService = {
     let offerLetterHtml = input.offerLetterHtml ?? null;
     if (!offerLetterHtml && input.templateId) {
       offerLetterHtml = await renderTemplateHtml(
-        input.candidateId,
+        candidate.applicationId,
         input.templateId,
         {
           ...input,
@@ -335,7 +345,7 @@ export const offerService = {
       .insert(offers)
       .values(
         clean({
-          candidateId: input.candidateId,
+          candidateId: candidate.id,
           jobId: input.jobId,
           templateId: input.templateId ?? null,
           status: input.status ?? "draft",

@@ -164,6 +164,10 @@ async function teardownFixtures() {
   await db
     .delete(candidates)
     .where(inArray(candidates.id, [teamCandidateId, otherCandidateId]));
+  // Submissions hold a restrict reference to jobs, so they go first.
+  await db
+    .delete(applications)
+    .where(inArray(applications.jobId, [teamJobId, otherJobId]));
   await db.delete(jobs).where(inArray(jobs.id, [teamJobId, otherJobId]));
   const userIds = [
     memberUser.id,

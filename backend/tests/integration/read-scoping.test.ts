@@ -179,14 +179,18 @@ async function seedFixtures() {
     ])
     .returning({ id: applications.id });
 
+  // Offers and interviews reference the person, not the submission.
+  const teamPersonId = insertedCandidates[0]!.id;
+  const otherPersonId = insertedCandidates[1]!.id;
+
   teamCandidateId = submissions[0]!.id;
   otherCandidateId = submissions[1]!.id;
 
   const insertedOffers = await db
     .insert(offers)
     .values([
-      { candidateId: teamCandidateId, jobId: teamJobId, createdBy: admin.id },
-      { candidateId: otherCandidateId, jobId: otherJobId, createdBy: admin.id },
+      { candidateId: teamPersonId, jobId: teamJobId, createdBy: admin.id },
+      { candidateId: otherPersonId, jobId: otherJobId, createdBy: admin.id },
     ])
     .returning({ id: offers.id });
   teamOfferId = insertedOffers[0]!.id;
@@ -196,12 +200,12 @@ async function seedFixtures() {
     .insert(candidateInterviews)
     .values([
       {
-        candidateId: teamCandidateId,
+        candidateId: teamPersonId,
         jobId: teamJobId,
         stageId: stages[0]!.id,
       },
       {
-        candidateId: otherCandidateId,
+        candidateId: otherPersonId,
         jobId: otherJobId,
         stageId: stages[1]!.id,
       },
@@ -264,6 +268,10 @@ async function teardownFixtures() {
   await db
     .delete(jobPipelineStages)
     .where(inArray(jobPipelineStages.jobId, [teamJobId, otherJobId]));
+  // Submissions hold a restrict reference to jobs, so they go first.
+  await db
+    .delete(applications)
+    .where(inArray(applications.jobId, [teamJobId, otherJobId]));
   await db.delete(jobs).where(inArray(jobs.id, [teamJobId, otherJobId]));
   const userIds = [manager.id, admin.id, onTeam.id, offTeam.id];
   await db
