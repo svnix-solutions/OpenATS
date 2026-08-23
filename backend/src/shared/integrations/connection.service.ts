@@ -1,5 +1,5 @@
 import { and, eq } from "drizzle-orm";
-import { db } from "../../db";
+import { currentOrganizationId, runInOrganization, db } from "../../db";
 import { integrationConnections } from "../../db";
 import { decrypt, encrypt, signState, verifyState } from "./crypto";
 import { getProviderClient } from "./registry";
@@ -15,15 +15,29 @@ export type ConnectionStatus = {
 
 export const integrationConnectionService = {
   getAuthUrl(userId: number): string {
-    const state = signState({ userId }, STATE_TTL_SECONDS);
+    // Established by the authenticated route this is reached from. Failing
+    // here is deliberate: the alternative is a state token that cannot say
+    // which tenant to write the connection back into.
+    const organizationId = currentOrganizationId();
+    if (organizationId === null) {
+      throw new Error("Cannot start an OAuth flow outside an organization");
+    }
+
+    const state = signState({ userId, organizationId }, STATE_TTL_SECONDS);
     return getProviderClient("google_meet").getAuthUrl(state);
   },
 
   async handleCallback(code: string, state: string): Promise<void> {
-    const { userId } = verifyState(state);
+    const { userId, organizationId } = verifyState(state);
     const result = await getProviderClient("google_meet").exchangeCode(code);
 
-    await db
+    // The provider redirects to a route with no session, so nothing has
+    // established a tenancy context by this point. Without one the insert
+    // below is refused — organization_id defaults to app_current_org(), which
+    // is null out here — and the user is redirected to an error having just
+    // been told the connection succeeded.
+    await runInOrganization(organizationId, () =>
+      db
       .insert(integrationConnections)
       .values({
         userId,
@@ -35,17 +49,21 @@ export const integrationConnectionService = {
         providerAccountEmail: result.accountEmail,
         updatedAt: new Date(),
       })
-      .onConflictDoUpdate({
-        target: [integrationConnections.userId, integrationConnections.provider],
-        set: {
-          accessTokenEncrypted: encrypt(result.accessToken),
-          refreshTokenEncrypted: encrypt(result.refreshToken),
-          expiresAt: result.expiresAt,
-          scopes: result.scopes,
-          providerAccountEmail: result.accountEmail,
-          updatedAt: new Date(),
-        },
-      });
+        .onConflictDoUpdate({
+          target: [
+            integrationConnections.userId,
+            integrationConnections.provider,
+          ],
+          set: {
+            accessTokenEncrypted: encrypt(result.accessToken),
+            refreshTokenEncrypted: encrypt(result.refreshToken),
+            expiresAt: result.expiresAt,
+            scopes: result.scopes,
+            providerAccountEmail: result.accountEmail,
+            updatedAt: new Date(),
+          },
+        }),
+    );
   },
 
   async getStatus(userId: number): Promise<ConnectionStatus[]> {

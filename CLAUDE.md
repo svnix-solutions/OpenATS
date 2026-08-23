@@ -81,8 +81,9 @@ writes its response from inside the callback, so a wrapping transaction would
 commit only after the response had been flushed, and the client would see a 200
 for uncommitted work. Use `db.transaction` where you actually want atomicity.
 
-Four entry points establish the context, and they are the four places a new one
-could be forgotten:
+Five entry points establish the context, and they are the five places a new one
+could be forgotten — the OAuth callback is on this list because it *was*
+forgotten, and the connection it writes was silently refused for it:
 
 | Path | Establishes it via |
 | --- | --- |
@@ -90,13 +91,21 @@ could be forgotten:
 | Public HTTP | `withPublicOrganization(kind, param)`, from the resource in the URL |
 | Socket.IO | the `inOrg` wrapper in `socket.service.ts` |
 | CV analysis worker | `organizationId` carried on the BullMQ job |
+| Google OAuth callback | `organizationId` carried in the signed `state` |
 
-**The deliberate holes.** Four `SECURITY DEFINER` functions run outside the
+**The deliberate holes.** Six `SECURITY DEFINER` functions run outside the
 boundary because they answer "which tenant is this" before one is known:
 `app_provision_user`, `app_resolve_membership`,
-`app_attach_membership_by_asgardeo_org`, and `app_resolve_public_org`. Each
-takes an identifier and returns ids — never a row of tenant data. Do not add a
-fifth without a good reason.
+`app_attach_membership_by_asgardeo_org`, `app_attach_default_membership`,
+`app_resolve_org_by_client_slug`, and `app_resolve_public_org`. Each takes an
+identifier and returns ids — never a row of tenant data, which is the rule that
+keeps them from becoming a way around the boundary. `EXECUTE` is revoked from
+`PUBLIC` on all six; only the owner and `openats_app` may call them. Do not add
+a seventh without a good reason.
+
+The count was wrong here until an audit checked the catalog rather than this
+file: two were added without updating it. `psql -c "\df app_*"` is the
+authority, not this list.
 
 **Two database roles.** Migrations run as the owner via
 `MIGRATION_DATABASE_URL`; everything else runs as `openats_app` via
