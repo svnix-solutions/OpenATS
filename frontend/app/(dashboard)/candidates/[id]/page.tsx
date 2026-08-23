@@ -50,6 +50,10 @@ export default function CandidateDetailPage({
 }) {
   const router = useRouter();
   const isManager = useIsManager();
+  const { data: meData } = useCurrentUser();
+  const clientRole = meData?.data?.role;
+  const isClient =
+    clientRole === "client_admin" || clientRole === "client_reviewer";
   const queryClient = useQueryClient();
   const searchParams = useSearchParams();
   const fromParam = searchParams.get("from");
@@ -207,9 +211,6 @@ export default function CandidateDetailPage({
   }
 
   const offer = candidate.offer;
-  const { data: meData } = useCurrentUser();
-  const role = meData?.data?.role;
-  const isClient = role === "client_admin" || role === "client_reviewer";
   const cvAnalysis = candidate.cvAnalysis;
 
   return (
