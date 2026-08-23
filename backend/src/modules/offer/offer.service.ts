@@ -3,6 +3,7 @@ import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "../../db";
 import {
   candidateStageHistory,
+  applications,
   candidates,
   jobPipelineStages,
   jobs,
@@ -183,9 +184,7 @@ export const offerService = {
     return await db.query.offers.findMany({
       where: teamJobFilter(teamUserId),
       with: {
-        candidate: {
-          with: { currentStage: true },
-        },
+        candidate: true,
         job: {
           with: { department: true },
         },
@@ -216,7 +215,7 @@ export const offerService = {
     const rows = await db.query.offers.findMany({
       where,
       with: {
-        candidate: { with: { currentStage: true } },
+        candidate: true,
         job: { with: { department: true } },
         template: true,
       },
@@ -301,19 +300,29 @@ export const offerService = {
   },
 
   async create(input: CreateOfferInput) {
+    // `candidateId` here is a submission, matching every other candidate
+    // route. The offer row stores the person and the job it is for.
     const [candidate] = await db
-      .select()
-      .from(candidates)
-      .where(eq(candidates.id, input.candidateId));
+      .select({
+        id: candidates.id,
+        applicationId: applications.id,
+        jobId: applications.jobId,
+        firstName: candidates.firstName,
+        lastName: candidates.lastName,
+        email: candidates.email,
+      })
+      .from(applications)
+      .innerJoin(candidates, eq(applications.candidateId, candidates.id))
+      .where(eq(applications.id, input.candidateId));
 
-    if (!candidate) throw new Error("Candidate not found");
+    if (!candidate) throw new Error("Application not found");
 
     const [job] = await db.select().from(jobs).where(eq(jobs.id, input.jobId));
 
     if (!job) throw new Error("Job not found");
 
     const existing = await offerRepository.findByCandidateAndJob(
-      input.candidateId,
+      candidate.id,
       input.jobId,
     );
 
@@ -324,7 +333,7 @@ export const offerService = {
     let offerLetterHtml = input.offerLetterHtml ?? null;
     if (!offerLetterHtml && input.templateId) {
       offerLetterHtml = await renderTemplateHtml(
-        input.candidateId,
+        candidate.applicationId,
         input.templateId,
         {
           ...input,
@@ -336,7 +345,7 @@ export const offerService = {
       .insert(offers)
       .values(
         clean({
-          candidateId: input.candidateId,
+          candidateId: candidate.id,
           jobId: input.jobId,
           templateId: input.templateId ?? null,
           status: input.status ?? "draft",
@@ -663,14 +672,33 @@ export const offerService = {
       allOfferStages[allOfferStages.length - 1] ??
       hiredStage;
 
+    // Hiring resolves one submission. The offer names the job, so this is the
+    // application it belongs to — the person's other applications are
+    // untouched, which is right: being hired here does not withdraw them
+    // from someone else's pipeline.
+    const [application] = await db
+      .select({ id: applications.id })
+      .from(applications)
+      .where(
+        and(
+          eq(applications.candidateId, candidate.id),
+          eq(applications.jobId, offer.jobId),
+        ),
+      )
+      .limit(1);
+
+    if (!application) {
+      throw new Error("No application for this offer");
+    }
+
     const [updatedCandidate] = await db
-      .update(candidates)
+      .update(applications)
       .set({
         currentStageId: targetStage.id,
         status: "hired",
         updatedAt: new Date(),
       })
-      .where(eq(candidates.id, candidate.id))
+      .where(eq(applications.id, application.id))
       .returning();
 
     if (!updatedCandidate) {
@@ -678,14 +706,14 @@ export const offerService = {
     }
 
     await db.insert(candidateStageHistory).values({
-      candidateId: candidate.id,
+      applicationId: application.id,
       stageId: targetStage.id,
       movedBy: actorId,
     });
 
     await candidateActivityService.create({
       candidateId: candidate.id,
-      jobId: candidate.jobId,
+      jobId: offer.jobId,
       offerId: offer.id,
       stageId: targetStage.id,
       actorId,

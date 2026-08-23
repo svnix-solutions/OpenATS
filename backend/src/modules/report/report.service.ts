@@ -158,7 +158,7 @@ export const reportService = {
       count: string;
     }>(sql`
       SELECT COUNT(*)::text AS count
-      FROM candidates c
+      FROM applications c
       INNER JOIN jobs j ON j.id = c.job_id
       WHERE 1=1 ${deptFilter}
     `);
@@ -170,7 +170,7 @@ export const reportService = {
       SELECT
         SUM(CASE WHEN c.applied_at >= ${currentStart} AND c.applied_at < ${now} THEN 1 ELSE 0 END)::text AS current_count,
         SUM(CASE WHEN c.applied_at >= ${previousStart} AND c.applied_at < ${currentStart} THEN 1 ELSE 0 END)::text AS previous_count
-      FROM candidates c
+      FROM applications c
       INNER JOIN jobs j ON j.id = c.job_id
       WHERE 1=1 ${deptFilter}
     `);
@@ -251,7 +251,7 @@ export const reportService = {
       SELECT
         TO_CHAR(c.applied_at::date, 'YYYY-MM-DD') AS day_key,
         COUNT(*)::text AS count
-      FROM candidates c
+      FROM applications c
       INNER JOIN jobs j ON j.id = c.job_id
       WHERE c.applied_at >= ${currentStart} AND c.applied_at < ${now}
       ${deptFilter}
@@ -283,7 +283,7 @@ export const reportService = {
       SELECT
         s.name AS source_name,
         COUNT(*)::text AS count
-      FROM candidates c
+      FROM applications c
       INNER JOIN job_pipeline_stages s ON s.id = c.current_stage_id
       INNER JOIN jobs j ON j.id = c.job_id
       WHERE 1=1

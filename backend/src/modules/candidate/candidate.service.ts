@@ -1,6 +1,9 @@
 import { eq, and, desc, asc, inArray, ilike, or, sql } from "drizzle-orm";
 import { db } from "../../db";
 import {
+  applications,
+  type Application,
+  type Candidate,
   candidates,
   candidateCvAnalysis,
   candidateStageHistory,
@@ -17,7 +20,6 @@ import {
   candidateInterviews,
   company,
 } from "../../db/schema";
-import type { Candidate } from "../../db/schema/candidates";
 import { assessmentExecutionService } from "../assessment-execution/assessment-execution.service";
 import { candidateActivityService } from "./candidate-activity.service";
 import { socketService } from "../../shared/services/socket.service";
@@ -94,10 +96,13 @@ function buildCandidateWhere(
   filters: Omit<CandidateFilters, "page" | "limit">,
 ) {
   const conditions = [];
-  if (jobId) conditions.push(eq(candidates.jobId, jobId));
+  // The dashboard's "candidates" list is really a list of submissions: a
+  // person appears once per job they are up for, with that job's stage and
+  // status. Those columns live on `applications` now.
+  if (jobId) conditions.push(eq(applications.jobId, jobId));
   if (filters.stageId)
-    conditions.push(eq(candidates.currentStageId, filters.stageId));
-  if (filters.status) conditions.push(eq(candidates.status, filters.status));
+    conditions.push(eq(applications.currentStageId, filters.stageId));
+  if (filters.status) conditions.push(eq(applications.status, filters.status));
   if (filters.search) {
     conditions.push(
       or(
@@ -110,7 +115,7 @@ function buildCandidateWhere(
   if (filters.teamUserId) {
     conditions.push(
       inArray(
-        candidates.jobId,
+        applications.jobId,
         db.select({ id: jobHiringTeam.jobId }).from(jobHiringTeam).where(eq(jobHiringTeam.userId, filters.teamUserId)),
       ),
     );
@@ -125,7 +130,8 @@ export type StageAutomationFlags = {
 };
 
 export type MoveStageResult = {
-  candidate: Candidate;
+  /** The submission that moved, not the person. */
+  candidate: Application;
   stageAutomation: StageAutomationFlags;
 };
 
@@ -182,23 +188,37 @@ export const candidateService = {
           throw new Error("No pipeline stages defined for this job");
         }
 
+        // The person may already be known to this agency from another role.
+        // Applying again updates their details and adds a submission rather
+        // than creating a second person.
         const [candidate] = await tx
           .insert(candidates)
-          .values(
-            clean({
-              ...candidateData,
-              jobId,
-              currentStageId: firstStage.id,
-            }),
-          )
+          .values(clean(candidateData))
+          .onConflictDoUpdate({
+            target: [candidates.organizationId, candidates.email],
+            set: clean({ ...candidateData, updatedAt: new Date() }),
+          })
           .returning();
 
         if (!candidate) {
           throw new Error("Failed to create candidate");
         }
 
+        const [application] = await tx
+          .insert(applications)
+          .values({
+            candidateId: candidate.id,
+            jobId,
+            currentStageId: firstStage.id,
+          })
+          .returning();
+
+        if (!application) {
+          throw new Error("Failed to create application");
+        }
+
         await tx.insert(candidateStageHistory).values({
-          candidateId: candidate.id,
+          applicationId: application.id,
           stageId: firstStage.id,
         });
 
@@ -218,7 +238,7 @@ export const candidateService = {
 
             if (answer.answerText !== undefined) {
               await tx.insert(candidateCustomAnswers).values({
-                candidateId: candidate.id,
+                applicationId: application.id,
                 questionId: answer.questionId,
                 answerText: answer.answerText,
               });
@@ -227,7 +247,7 @@ export const candidateService = {
             if (answer.optionIds && answer.optionIds.length > 0) {
               await tx.insert(candidateCustomAnswerSelections).values(
                 answer.optionIds.map((optionId) => ({
-                  candidateId: candidate.id,
+                  applicationId: application.id,
                   questionId: answer.questionId,
                   optionId,
                 })),
@@ -236,7 +256,9 @@ export const candidateService = {
           }
         }
 
-        return candidate;
+        // `id` is the submission, matching what every other candidate route
+        // means by an id. The person is still there as candidateId.
+        return { ...candidate, id: application.id, candidateId: candidate.id, jobId };
       }).then((candidate) => {
         socketService.notifyCandidateApplied(jobId);
         void sendApplicationConfirmationEmail(candidate, jobId);
@@ -259,34 +281,40 @@ export const candidateService = {
     const [rows, [countRow]] = await Promise.all([
       db
         .select({
-          id: candidates.id,
+          // The application id, not the person's. A row here is one
+          // submission, and the same person can appear twice under different
+          // jobs. Ids are opaque to the dashboard, so this keeps working.
+          id: applications.id,
+          candidateId: candidates.id,
           firstName: candidates.firstName,
           lastName: candidates.lastName,
           email: candidates.email,
           phone: candidates.phone,
           resumeUrl: candidates.resumeUrl,
-          jobId: candidates.jobId,
-          currentStageId: candidates.currentStageId,
-          status: candidates.status,
-          appliedAt: candidates.appliedAt,
-          updatedAt: candidates.updatedAt,
+          jobId: applications.jobId,
+          currentStageId: applications.currentStageId,
+          status: applications.status,
+          appliedAt: applications.appliedAt,
+          updatedAt: applications.updatedAt,
           stageName: jobPipelineStages.name,
           jobTitle: jobs.title,
         })
-        .from(candidates)
+        .from(applications)
+        .innerJoin(candidates, eq(applications.candidateId, candidates.id))
         .leftJoin(
           jobPipelineStages,
-          eq(candidates.currentStageId, jobPipelineStages.id),
+          eq(applications.currentStageId, jobPipelineStages.id),
         )
-        .leftJoin(jobs, eq(candidates.jobId, jobs.id))
+        .leftJoin(jobs, eq(applications.jobId, jobs.id))
         .where(where)
-        .orderBy(desc(candidates.appliedAt))
+        .orderBy(desc(applications.appliedAt))
         .limit(limit)
         .offset(offset),
 
       db
         .select({ count: sql<number>`count(*)::int` })
-        .from(candidates)
+        .from(applications)
+        .innerJoin(candidates, eq(applications.candidateId, candidates.id))
         .where(where),
     ]);
 
@@ -299,37 +327,54 @@ export const candidateService = {
     };
   },
 
+  /**
+   * One submission, with the person attached.
+   *
+   * `id` is an application id — the detail page shows a person in the context
+   * of the job they are up for, which is what it always showed. The person's
+   * other applications hang off `candidateId`.
+   */
+  /** Every job this person is currently up for. */
+  async applicationsFor(candidateId: number) {
+    return db
+      .select({ id: applications.id, jobId: applications.jobId })
+      .from(applications)
+      .where(eq(applications.candidateId, candidateId));
+  },
+
   async getById(id: number) {
     const [candidate] = await db
       .select({
-        id: candidates.id,
+        id: applications.id,
+        candidateId: candidates.id,
         firstName: candidates.firstName,
         lastName: candidates.lastName,
         email: candidates.email,
         phone: candidates.phone,
         resumeUrl: candidates.resumeUrl,
-        jobId: candidates.jobId,
-        currentStageId: candidates.currentStageId,
-        status: candidates.status,
-        appliedAt: candidates.appliedAt,
-        updatedAt: candidates.updatedAt,
+        jobId: applications.jobId,
+        currentStageId: applications.currentStageId,
+        status: applications.status,
+        appliedAt: applications.appliedAt,
+        updatedAt: applications.updatedAt,
         stageName: jobPipelineStages.name,
         jobTitle: jobs.title,
       })
-      .from(candidates)
+      .from(applications)
+      .innerJoin(candidates, eq(applications.candidateId, candidates.id))
       .leftJoin(
         jobPipelineStages,
-        eq(candidates.currentStageId, jobPipelineStages.id),
+        eq(applications.currentStageId, jobPipelineStages.id),
       )
-      .leftJoin(jobs, eq(candidates.jobId, jobs.id))
-      .where(eq(candidates.id, id));
+      .leftJoin(jobs, eq(applications.jobId, jobs.id))
+      .where(eq(applications.id, id));
 
     if (!candidate) return null;
 
     const answers = await db
       .select({
         id: candidateCustomAnswers.id,
-        candidateId: candidateCustomAnswers.candidateId,
+        applicationId: candidateCustomAnswers.applicationId,
         questionId: candidateCustomAnswers.questionId,
         answerText: candidateCustomAnswers.answerText,
         createdAt: candidateCustomAnswers.createdAt,
@@ -340,12 +385,12 @@ export const candidateService = {
         jobCustomQuestions,
         eq(candidateCustomAnswers.questionId, jobCustomQuestions.id),
       )
-      .where(eq(candidateCustomAnswers.candidateId, id));
+      .where(eq(candidateCustomAnswers.applicationId, id));
 
     const selections = await db
       .select({
         id: candidateCustomAnswerSelections.id,
-        candidateId: candidateCustomAnswerSelections.candidateId,
+        candidateId: candidateCustomAnswerSelections.applicationId,
         questionId: candidateCustomAnswerSelections.questionId,
         optionId: candidateCustomAnswerSelections.optionId,
         createdAt: candidateCustomAnswerSelections.createdAt,
@@ -364,19 +409,22 @@ export const candidateService = {
           jobCustomQuestionOptions.id,
         ),
       )
-      .where(eq(candidateCustomAnswerSelections.candidateId, id));
+      .where(eq(candidateCustomAnswerSelections.applicationId, id));
 
     const history = await db
       .select()
       .from(candidateStageHistory)
-      .where(eq(candidateStageHistory.candidateId, id))
+      .where(eq(candidateStageHistory.applicationId, id))
       .orderBy(asc(candidateStageHistory.movedAt));
 
     const [offer] = await db
       .select()
       .from(offers)
       .where(
-        and(eq(offers.candidateId, id), eq(offers.jobId, candidate.jobId)),
+        and(
+          eq(offers.candidateId, candidate.candidateId),
+          eq(offers.jobId, candidate.jobId),
+        ),
       );
 
     const [cvRow] = await db
@@ -432,7 +480,12 @@ export const candidateService = {
         jobPipelineStages,
         eq(candidateInterviews.stageId, jobPipelineStages.id),
       )
-      .where(eq(candidateInterviews.candidateId, id))
+      .where(
+        and(
+          eq(candidateInterviews.candidateId, candidate.candidateId),
+          eq(candidateInterviews.jobId, candidate.jobId),
+        ),
+      )
       .orderBy(desc(candidateInterviews.createdAt));
 
     const activities = await candidateActivityService.getByCandidate(id);
@@ -460,10 +513,12 @@ export const candidateService = {
 
       const [candidate] = await tx
         .select()
-        .from(candidates)
-        .where(eq(candidates.id, candidateId));
+        .from(applications)
+        .where(eq(applications.id, candidateId));
 
-      if (!candidate) throw new Error("Candidate not found");
+      // `candidateId` here is an application id — moving a stage moves one
+      // submission, not the person, who may be at a different stage elsewhere.
+      if (!candidate) throw new Error("Application not found");
 
       const [stage] = await tx
         .select()
@@ -490,19 +545,19 @@ export const candidateService = {
             : "active";
 
       const [updated] = await tx
-        .update(candidates)
+        .update(applications)
         .set({
           currentStageId: newStageId,
           status: nextStatus,
           updatedAt: new Date(),
         })
-        .where(eq(candidates.id, candidateId))
+        .where(eq(applications.id, candidateId))
         .returning();
 
-      if (!updated) throw new Error("Failed to update candidate");
+      if (!updated) throw new Error("Failed to update application");
 
       await tx.insert(candidateStageHistory).values({
-        candidateId,
+        applicationId: candidateId,
         stageId: newStageId,
         movedBy,
       });
@@ -513,7 +568,7 @@ export const candidateService = {
           .from(offers)
           .where(
             and(
-              eq(offers.candidateId, candidateId),
+              eq(offers.candidateId, candidate.candidateId),
               eq(offers.jobId, candidate.jobId),
             ),
           )
@@ -586,14 +641,14 @@ export const candidateService = {
   ) {
     const [candidate] = await db
       .select()
-      .from(candidates)
-      .where(eq(candidates.id, candidateId));
+      .from(applications)
+      .where(eq(applications.id, candidateId));
 
-    if (!candidate) throw new Error("Candidate not found");
+    if (!candidate) throw new Error("Application not found");
 
     return rejectionService.reject(
       {
-        candidateId,
+        candidateId: candidate.candidateId,
         jobId: candidate.jobId,
         fromStageId: candidate.currentStageId,
         reason: input.reason ?? null,
@@ -643,12 +698,24 @@ export const candidateService = {
     jobId: number | undefined,
     filters: Omit<CandidateFilters, "page" | "limit"> = {},
   ) {
-    const where = buildCandidateWhere(jobId, filters);
-    const deleted = await db.delete(candidates).where(where).returning({
-      id: candidates.id,
-      email: candidates.email,
-      jobId: candidates.jobId,
-    });
+    // Deleting from a job list removes those submissions. The people stay:
+    // they belong to the agency and may be up for other roles.
+    const ids = await db
+      .select({ id: applications.id })
+      .from(applications)
+      .innerJoin(candidates, eq(applications.candidateId, candidates.id))
+      .where(buildCandidateWhere(jobId, filters));
+
+    if (ids.length === 0) return [];
+
+    const deleted = await db
+      .delete(applications)
+      .where(inArray(applications.id, ids.map((r) => r.id)))
+      .returning({
+        id: applications.id,
+        candidateId: applications.candidateId,
+        jobId: applications.jobId,
+      });
 
     return deleted;
   },

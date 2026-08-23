@@ -5,6 +5,7 @@ import { db, runInOrganization } from "../../src/db";
 import { company, departments } from "../../src/db/schema/company";
 import { jobs, jobSkills } from "../../src/db/schema/jobs";
 import { clientCompanies } from "../../src/db/schema/organizations";
+import { applications } from "../../src/db/schema/candidates";
 import { jobHiringTeam, jobPipelineStages } from "../../src/db/schema/pipeline";
 import {
   candidateAssessmentAttempts,
@@ -47,6 +48,10 @@ export interface Scenario {
   candidateA1: number;
   candidateA2: number;
   candidateB1: number;
+  /** The people behind those submissions. */
+  personA1: number;
+  personA2: number;
+  personB1: number;
   offerA1: number;
   offerB1: number;
   interviewA1: number;
@@ -252,45 +257,58 @@ async function buildScenario(
     { jobId: jobB.id, userId: manager.id },
   ]);
 
-  const insertedCandidates = await db
+  const insertedPeople = await db
     .insert(candidates)
     .values([
+      { firstName: "Ada", lastName: "Alpha", email: `ada.${suffix}@example.test` },
+      { firstName: "Alan", lastName: "Alpha", email: `alan.${suffix}@example.test` },
+      { firstName: "Grace", lastName: "Bravo", email: `grace.${suffix}@example.test` },
+    ])
+    .returning({ id: candidates.id });
+
+  // The scenario's "candidates" are submissions — that is what the dashboard
+  // lists and what every test here means by a candidate.
+  const insertedCandidates = await db
+    .insert(applications)
+    .values([
       {
-        firstName: "Ada",
-        lastName: "Alpha",
-        email: `ada.${suffix}@example.test`,
+        candidateId: insertedPeople[0]!.id,
         jobId: jobA.id,
         currentStageId: jobA.stageIds[0]!,
         status: "active",
       },
       {
-        firstName: "Alan",
-        lastName: "Alpha",
-        email: `alan.${suffix}@example.test`,
+        candidateId: insertedPeople[1]!.id,
         jobId: jobA.id,
         currentStageId: jobA.stageIds[1]!,
         status: "rejected",
       },
       {
-        firstName: "Grace",
-        lastName: "Bravo",
-        email: `grace.${suffix}@example.test`,
+        candidateId: insertedPeople[2]!.id,
         jobId: jobB.id,
         currentStageId: jobB.stageIds[0]!,
         status: "active",
       },
     ])
-    .returning({ id: candidates.id });
+    .returning({ id: applications.id });
 
   const [candidateA1, candidateA2, candidateB1] = insertedCandidates.map(
     (c) => c.id,
   ) as [number, number, number];
 
+  // Offers, interviews and CV analysis reference the person; everything the
+  // dashboard calls a candidate is the submission above.
+  const [personA1, personA2, personB1] = insertedPeople.map((p) => p.id) as [
+    number,
+    number,
+    number,
+  ];
+
   const insertedOffers = await db
     .insert(offers)
     .values([
       {
-        candidateId: candidateA1,
+        candidateId: personA1,
         jobId: jobA.id,
         createdBy: admin.id,
         status: "draft",
@@ -298,7 +316,7 @@ async function buildScenario(
         currency: "USD",
       },
       {
-        candidateId: candidateB1,
+        candidateId: personB1,
         jobId: jobB.id,
         createdBy: admin.id,
         status: "sent",
@@ -312,14 +330,14 @@ async function buildScenario(
     .insert(candidateInterviews)
     .values([
       {
-        candidateId: candidateA1,
+        candidateId: personA1,
         jobId: jobA.id,
         stageId: jobA.stageIds[1]!,
         eventName: "Alpha screen",
         interviewerId: interviewer.id,
       },
       {
-        candidateId: candidateB1,
+        candidateId: personB1,
         jobId: jobB.id,
         stageId: jobB.stageIds[1]!,
         eventName: "Bravo screen",
@@ -342,13 +360,13 @@ async function buildScenario(
     .insert(candidateAssessmentAttempts)
     .values([
       {
-        candidateId: candidateA1,
+        applicationId: candidateA1,
         assessmentId: assessment!.id,
         token: `token-a1-${suffix}`,
         expiresAt,
       },
       {
-        candidateId: candidateB1,
+        applicationId: candidateB1,
         assessmentId: assessment!.id,
         token: `token-b1-${suffix}`,
         expiresAt,
@@ -370,6 +388,9 @@ async function buildScenario(
     candidateA1,
     candidateA2,
     candidateB1,
+    personA1,
+    personA2,
+    personB1,
     offerA1: insertedOffers[0]!.id,
     offerB1: insertedOffers[1]!.id,
     interviewA1: insertedInterviews[0]!.id,
@@ -389,19 +410,25 @@ export async function destroyScenario(s: Scenario): Promise<void> {
 async function teardown(s: Scenario): Promise<void> {
   const jobIds = [s.jobA.id, s.jobB.id];
   const candidateIds = [s.candidateA1, s.candidateA2, s.candidateB1];
+  const personIds = [s.personA1, s.personA2, s.personB1];
   const userIds = [s.admin.id, s.manager.id, s.interviewer.id];
 
   // Ordered by foreign key, not by convenience: candidates and offers hold
   // onDelete: "restrict" references to jobs.
   await db
     .delete(candidateAssessmentAttempts)
-    .where(inArray(candidateAssessmentAttempts.candidateId, candidateIds));
+    .where(inArray(candidateAssessmentAttempts.applicationId, candidateIds));
   await db.delete(assessments).where(eq(assessments.id, s.assessmentId));
   await db
     .delete(candidateInterviews)
-    .where(inArray(candidateInterviews.candidateId, candidateIds));
-  await db.delete(offers).where(inArray(offers.candidateId, candidateIds));
-  await db.delete(candidates).where(inArray(candidates.id, candidateIds));
+    .where(inArray(candidateInterviews.candidateId, personIds));
+  await db.delete(offers).where(inArray(offers.candidateId, personIds));
+  await db
+    .delete(applications)
+    .where(inArray(applications.id, candidateIds));
+  await db
+    .delete(candidates)
+    .where(eq(candidates.organizationId, s.organizationId));
   await db.delete(jobSkills).where(inArray(jobSkills.jobId, jobIds));
   await db.delete(jobHiringTeam).where(inArray(jobHiringTeam.jobId, jobIds));
   await db

@@ -18,6 +18,7 @@ import {
   jobAssessmentAttachments,
 } from "./assessments";
 import {
+  applications,
   candidates,
   candidateStageHistory,
   candidateCustomAnswers,
@@ -223,15 +224,8 @@ export const jobAssessmentAttachmentsRelations = relations(
 );
 
 // candidates
-export const candidatesRelations = relations(candidates, ({ one, many }) => ({
-  job: one(jobs, {
-    fields: [candidates.jobId],
-    references: [jobs.id],
-  }),
-  currentStage: one(jobPipelineStages, {
-    fields: [candidates.currentStageId],
-    references: [jobPipelineStages.id],
-  }),
+export const candidatesRelations = relations(candidates, ({ many }) => ({
+  applications: many(applications),
   stageHistory: many(candidateStageHistory),
   customAnswers: many(candidateCustomAnswers),
   customSelections: many(candidateCustomAnswerSelections),
@@ -248,9 +242,9 @@ export const candidatesRelations = relations(candidates, ({ one, many }) => ({
 export const candidateStageHistoryRelations = relations(
   candidateStageHistory,
   ({ one }) => ({
-    candidate: one(candidates, {
-      fields: [candidateStageHistory.candidateId],
-      references: [candidates.id],
+    application: one(applications, {
+      fields: [candidateStageHistory.applicationId],
+      references: [applications.id],
     }),
     stage: one(jobPipelineStages, {
       fields: [candidateStageHistory.stageId],
@@ -266,9 +260,9 @@ export const candidateStageHistoryRelations = relations(
 export const candidateCustomAnswersRelations = relations(
   candidateCustomAnswers,
   ({ one }) => ({
-    candidate: one(candidates, {
-      fields: [candidateCustomAnswers.candidateId],
-      references: [candidates.id],
+    application: one(applications, {
+      fields: [candidateCustomAnswers.applicationId],
+      references: [applications.id],
     }),
     question: one(jobCustomQuestions, {
       fields: [candidateCustomAnswers.questionId],
@@ -280,9 +274,9 @@ export const candidateCustomAnswersRelations = relations(
 export const candidateCustomAnswerSelectionsRelations = relations(
   candidateCustomAnswerSelections,
   ({ one }) => ({
-    candidate: one(candidates, {
-      fields: [candidateCustomAnswerSelections.candidateId],
-      references: [candidates.id],
+    application: one(applications, {
+      fields: [candidateCustomAnswerSelections.applicationId],
+      references: [applications.id],
     }),
     question: one(jobCustomQuestions, {
       fields: [candidateCustomAnswerSelections.questionId],
@@ -298,9 +292,9 @@ export const candidateCustomAnswerSelectionsRelations = relations(
 export const candidateAssessmentAttemptsRelations = relations(
   candidateAssessmentAttempts,
   ({ one, many }) => ({
-    candidate: one(candidates, {
-      fields: [candidateAssessmentAttempts.candidateId],
-      references: [candidates.id],
+    application: one(applications, {
+      fields: [candidateAssessmentAttempts.applicationId],
+      references: [applications.id],
     }),
     assessment: one(assessments, {
       fields: [candidateAssessmentAttempts.assessmentId],
@@ -532,5 +526,26 @@ export const interviewFeedbackRelations = relations(
       fields: [interviewFeedback.authorId],
       references: [users.id],
     }),
+  }),
+);
+
+export const applicationsRelations = relations(
+  applications,
+  ({ one, many }) => ({
+    candidate: one(candidates, {
+      fields: [applications.candidateId],
+      references: [candidates.id],
+    }),
+    job: one(jobs, {
+      fields: [applications.jobId],
+      references: [jobs.id],
+    }),
+    currentStage: one(jobPipelineStages, {
+      fields: [applications.currentStageId],
+      references: [jobPipelineStages.id],
+    }),
+    stageHistory: many(candidateStageHistory),
+    customAnswers: many(candidateCustomAnswers),
+    assessmentAttempts: many(candidateAssessmentAttempts),
   }),
 );

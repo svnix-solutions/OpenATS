@@ -42,24 +42,13 @@ export const candidates = pgTable(
     // Cloudflare R2 URL
     resumeUrl: varchar("resume_url", { length: 1000 }),
 
-    jobId: integer("job_id")
-      .notNull()
-      .references(() => jobs.id, { onDelete: "restrict" }),
-
-    currentStageId: integer("current_stage_id").references(
-      () => jobPipelineStages.id,
-      { onDelete: "set null" },
-    ),
-
-    status: candidateStatus("status").notNull().default("active"),
-
     appliedAt: timestamp("applied_at").notNull().defaultNow(),
     updatedAt: timestamp("updated_at").notNull().defaultNow(),
   },
   (t) => [
-    unique().on(t.jobId, t.email),
-    index("idx_candidates_job_id").on(t.jobId),
-    index("idx_candidates_current_stage_id").on(t.currentStageId),
+    // One person per agency. Which jobs they are up for lives in
+    // `applications`, so the same person can be submitted to many.
+    unique().on(t.organizationId, t.email),
   ],
 );
 
@@ -127,9 +116,9 @@ export const candidateStageHistory = pgTable(
       .notNull()
       .default(sql`app_current_org()`)
       .references(() => organizations.id, { onDelete: "cascade" }),
-    candidateId: integer("candidate_id")
+    applicationId: integer("application_id")
       .notNull()
-      .references(() => candidates.id, { onDelete: "cascade" }),
+      .references(() => applications.id, { onDelete: "cascade" }),
     stageId: integer("stage_id")
       .notNull()
       .references(() => jobPipelineStages.id, { onDelete: "restrict" }),
@@ -139,7 +128,7 @@ export const candidateStageHistory = pgTable(
     movedAt: timestamp("moved_at").notNull().defaultNow(),
   },
   (t) => [
-    index("idx_candidate_stage_history_candidate_id").on(t.candidateId),
+    index("idx_candidate_stage_history_application_id").on(t.applicationId),
     index("idx_candidate_stage_history_stage_id").on(t.stageId),
   ],
 );
@@ -152,9 +141,9 @@ export const candidateCustomAnswers = pgTable(
       .notNull()
       .default(sql`app_current_org()`)
       .references(() => organizations.id, { onDelete: "cascade" }),
-    candidateId: integer("candidate_id")
+    applicationId: integer("application_id")
       .notNull()
-      .references(() => candidates.id, { onDelete: "cascade" }),
+      .references(() => applications.id, { onDelete: "cascade" }),
     questionId: integer("question_id")
       .notNull()
       .references(() => jobCustomQuestions.id, { onDelete: "cascade" }),
@@ -162,7 +151,7 @@ export const candidateCustomAnswers = pgTable(
     answerText: text("answer_text"),
     createdAt: timestamp("created_at").notNull().defaultNow(),
   },
-  (t) => [unique().on(t.candidateId, t.questionId)],
+  (t) => [unique().on(t.applicationId, t.questionId)],
 );
 
 export const candidateCustomAnswerSelections = pgTable(
@@ -173,9 +162,9 @@ export const candidateCustomAnswerSelections = pgTable(
       .notNull()
       .default(sql`app_current_org()`)
       .references(() => organizations.id, { onDelete: "cascade" }),
-    candidateId: integer("candidate_id")
+    applicationId: integer("application_id")
       .notNull()
-      .references(() => candidates.id, { onDelete: "cascade" }),
+      .references(() => applications.id, { onDelete: "cascade" }),
     questionId: integer("question_id")
       .notNull()
       .references(() => jobCustomQuestions.id, { onDelete: "cascade" }),
@@ -184,7 +173,7 @@ export const candidateCustomAnswerSelections = pgTable(
       .references(() => jobCustomQuestionOptions.id, { onDelete: "cascade" }),
     createdAt: timestamp("created_at").notNull().defaultNow(),
   },
-  (t) => [unique().on(t.candidateId, t.questionId, t.optionId)],
+  (t) => [unique().on(t.applicationId, t.questionId, t.optionId)],
 );
 
 export const candidateAssessmentAttempts = pgTable(
@@ -195,9 +184,9 @@ export const candidateAssessmentAttempts = pgTable(
       .notNull()
       .default(sql`app_current_org()`)
       .references(() => organizations.id, { onDelete: "cascade" }),
-    candidateId: integer("candidate_id")
+    applicationId: integer("application_id")
       .notNull()
-      .references(() => candidates.id, { onDelete: "cascade" }),
+      .references(() => applications.id, { onDelete: "cascade" }),
     assessmentId: integer("assessment_id")
       .notNull()
       .references(() => assessments.id, { onDelete: "cascade" }),
@@ -229,7 +218,7 @@ export const candidateAssessmentAttempts = pgTable(
     createdAt: timestamp("created_at").notNull().defaultNow(),
     updatedAt: timestamp("updated_at").notNull().defaultNow(),
   },
-  (t) => [index("idx_assessment_attempts_candidate_id").on(t.candidateId)],
+  (t) => [index("idx_assessment_attempts_application_id").on(t.applicationId)],
 );
 
 export const candidateAssessmentAnswers = pgTable(
@@ -325,7 +314,7 @@ export const candidateCvAnalysis = pgTable(
     createdAt: timestamp("created_at").notNull().defaultNow(),
     updatedAt: timestamp("updated_at").notNull().defaultNow(),
   },
-  (t) => [unique().on(t.candidateId)],
+  (t) => [unique().on(t.candidateId, t.jobId)],
 );
 
 export type Candidate = typeof candidates.$inferSelect;

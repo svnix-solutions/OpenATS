@@ -11,6 +11,7 @@ import { mailService } from "../../shared/services/mail.service";
 import { socketService } from "../../shared/services/socket.service";
 import { db } from "../../db";
 import {
+  applications,
   candidates,
   jobs,
   candidateInterviews,
@@ -239,17 +240,19 @@ router.post("/candidates/:id/schedule", requireManager, async (req, res) => {
 
     const [candidate] = await db
       .select({
-        id: candidates.id,
+        id: applications.id,
+        candidateId: candidates.id,
         firstName: candidates.firstName,
         lastName: candidates.lastName,
         email: candidates.email,
-        jobId: candidates.jobId,
-        currentStageId: candidates.currentStageId,
+        jobId: applications.jobId,
+        currentStageId: applications.currentStageId,
         jobTitle: jobs.title,
       })
-      .from(candidates)
-      .leftJoin(jobs, eq(candidates.jobId, jobs.id))
-      .where(eq(candidates.id, candidateId));
+      .from(applications)
+      .innerJoin(candidates, eq(applications.candidateId, candidates.id))
+      .leftJoin(jobs, eq(applications.jobId, jobs.id))
+      .where(eq(applications.id, candidateId));
 
     if (!candidate) {
       res.status(404).json({ error: "Candidate not found" });
@@ -274,7 +277,7 @@ router.post("/candidates/:id/schedule", requireManager, async (req, res) => {
     const [interview] = await db
       .insert(candidateInterviews)
       .values({
-        candidateId: candidate.id,
+        candidateId: candidate.candidateId,
         stageId,
         jobId: candidate.jobId,
         eventName: parsed.data.eventName,
