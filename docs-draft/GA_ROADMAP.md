@@ -107,7 +107,8 @@ Not part of the road to v1.0, but decided and written down so it is not invisibl
 | Client portal: redaction of the agency's working view | [0001 §6](decisions/0001-multi-tenancy.md) | 🟢 Done |
 | Client portal: the client-facing UI | [0001 §6](decisions/0001-multi-tenancy.md) | 🔴 Planned |
 | Per-client careers pages | [0001 §7](decisions/0001-multi-tenancy.md) | 🟢 Done |
-| Per-agency email branding and sending domains | [0001 §7](decisions/0001-multi-tenancy.md) | 🔴 Planned |
+| Per-agency email branding | [0001 §7](decisions/0001-multi-tenancy.md) | 🟢 Done |
+| Per-agency sending domains in Resend | [0001 §7](decisions/0001-multi-tenancy.md) | 🔴 Planned |
 
 Phase 0 (closing the per-job authorization gaps on read routes) is done, and it overlapped the **Security review** item above — that review is now better spent on the tenancy boundary than on the single-tenant model it replaced.
 

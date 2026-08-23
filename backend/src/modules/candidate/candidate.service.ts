@@ -1,5 +1,5 @@
 import { eq, and, desc, asc, inArray, ilike, or, sql } from "drizzle-orm";
-import { db } from "../../db";
+import { currentOrganizationId, db, runInOrganization } from "../../db";
 import {
   applications,
   type Application,
@@ -18,13 +18,13 @@ import {
   offers,
   candidateRejections,
   candidateInterviews,
-  company,
+  clientCompanies,
 } from "../../db/schema";
 import { assessmentExecutionService } from "../assessment-execution/assessment-execution.service";
 import { candidateActivityService } from "./candidate-activity.service";
 import { socketService } from "../../shared/services/socket.service";
 import { rejectionService } from "../rejection/rejection.service";
-import { mailService } from "../../shared/services/mail.service";
+import { escapeHtml, mailService } from "../../shared/services/mail.service";
 import { cleanObject as clean } from "../../utils/object.utils";
 import logger from "../../utils/logger";
 
@@ -161,10 +161,23 @@ async function sendApplicationConfirmationEmail(
 
     if (!job) return;
 
-    const [comp] = await db.select().from(company).limit(1);
-    const companyName = comp?.name ?? "Talent Acquisition Team";
+    // The job names its client company, so this is the company the applicant
+    // actually applied to. The previous `company` singleton returned whichever
+    // row came first, which on an agency recruiting for several clients meant
+    // signing the email with the wrong company's name.
+    const [client] = await db
+      .select({ name: clientCompanies.name })
+      .from(clientCompanies)
+      .where(eq(clientCompanies.id, job.clientCompanyId))
+      .limit(1);
 
-    const candidateName = `${candidate.firstName} ${candidate.lastName}`;
+    const companyName = client?.name ?? "{{brand}}";
+
+    // Names arrive from the public application form, so they are escaped
+    // rather than interpolated — this HTML is sent to a third party.
+    const candidateName = escapeHtml(
+      `${candidate.firstName} ${candidate.lastName}`,
+    );
     const subject = `${job.title} - Thank you for your application`;
     const html = `
       <div style="font-family:sans-serif;line-height:1.8;color:#333;max-width:600px">
@@ -274,7 +287,19 @@ export const candidateService = {
         return { ...candidate, id: application.id, candidateId: candidate.id, jobId };
       }).then((candidate) => {
         socketService.notifyCandidateApplied(jobId);
-        void sendApplicationConfirmationEmail(candidate, jobId);
+        // Deliberately not awaited, so the applicant is not kept waiting on
+        // an SMTP call — but that means it outlives the request's tenancy
+        // context: runInOrganization releases the connection and clears
+        // app.org_id once the response is written. Anything this function
+        // reads after that point sees no organization and comes back empty,
+        // which is why the confirmation email had no company name in it.
+        // Carrying the id and re-entering is what the CV worker already does.
+        const organizationId = currentOrganizationId();
+        if (organizationId !== null) {
+          void runInOrganization(organizationId, () =>
+            sendApplicationConfirmationEmail(candidate, jobId),
+          );
+        }
         return candidate;
       });
     } catch (err) {
