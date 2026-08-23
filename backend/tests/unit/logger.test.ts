@@ -10,6 +10,7 @@ async function capture(
     info: (m: string, ...a: unknown[]) => void;
     error: (m: string, ...a: unknown[]) => void;
   }) => void,
+  organizationId?: number,
 ): Promise<string[]> {
   const previous = process.env.NODE_ENV;
   if (env === undefined) delete process.env.NODE_ENV;
@@ -17,6 +18,9 @@ async function capture(
 
   vi.resetModules();
   const logger = (await import("../../src/utils/logger")).default;
+  // Must come from the registry the reset above created, or it is a different
+  // AsyncLocalStorage than the logger just imported and nothing is shared.
+  const { orgContext } = await import("../../src/db/org-context");
 
   // A winston logger is a stream, and each `data` event carries the info
   // object with the fully formatted line on Symbol.for("message") — which is
@@ -28,7 +32,13 @@ async function capture(
   logger.on("data", onData);
 
   try {
-    run(logger as never);
+    if (organizationId === undefined) {
+      run(logger as never);
+    } else {
+      orgContext.run({ scoped: null, organizationId }, () =>
+        run(logger as never),
+      );
+    }
     await new Promise((resolve) => setImmediate(resolve));
   } finally {
     logger.off("data", onData);
@@ -38,6 +48,29 @@ async function capture(
 
   return lines;
 }
+
+describe("logger organization stamping", () => {
+  it("stamps the organization a line came from, and omits it outside one", async () => {
+    const inside = await capture(
+      "production",
+      (logger) => logger.info("inside a request"),
+      42,
+    );
+    expect(JSON.parse(inside[0]!).organizationId).toBe(42);
+
+    // Startup, the pool and shutdown all log outside any request. Inventing
+    // an organization for those would be worse than leaving the field off.
+    const outside = await capture("production", (logger) =>
+      logger.info("outside a request"),
+    );
+    expect(JSON.parse(outside[0]!).organizationId).toBeUndefined();
+  });
+
+  it("shows the organization in the readable format too", async () => {
+    const lines = await capture("development", (l) => l.info("hello"), 7);
+    expect(lines[0]).toContain("[org 7]");
+  });
+});
 
 describe("logger", () => {
   it("emits one parseable JSON object per line in production", async () => {
