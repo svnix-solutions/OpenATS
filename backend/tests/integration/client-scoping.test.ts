@@ -233,6 +233,33 @@ describe("a client contact", () => {
     expect(forStaff).toHaveLength(2);
   });
 
+  itInOrg("is refused every agency-wide surface, not just analytics", async () => {
+    // These have no client dimension to narrow by: assessment definitions and
+    // email templates belong to the agency, and allocated-slots is every
+    // booked interview across every client. A client reading any of them sees
+    // the shape of the agency's whole operation.
+    const denied = (viewer: AuthenticatedUser) =>
+      new Promise<number | null>((resolve) => {
+        let status: number | null = null;
+        const res = {
+          status(code: number) {
+            status = code;
+            return this;
+          },
+          json() {
+            resolve(status);
+            return this;
+          },
+        } as unknown as Response;
+        const next: NextFunction = () => resolve(null);
+        denyClients({ user: viewer } as unknown as Request, res, next);
+      });
+
+    expect(await denied(client)).toBe(403);
+    expect(await denied(s.manager)).toBeNull();
+    expect(await denied(s.interviewer)).toBeNull();
+  });
+
   itInOrg("is refused agency-wide analytics outright", async () => {
     // Analytics counts every submission in the organization and has no client
     // dimension to narrow by, so a client reading it would see the agency's

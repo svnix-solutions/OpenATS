@@ -10,13 +10,16 @@ import {
   deleteQuestion,
 } from "./assessment.controller";
 
-import { requireManager } from "../../middlewares/role.middleware";
+import {
+  denyClients,
+  requireManager,
+} from "../../middlewares/role.middleware";
 
 const router: Router = Router();
 
-router.get("/", getAllAssessments);
+router.get("/", denyClients, getAllAssessments);
 router.post("/", requireManager, createAssessment);
-router.get("/:id", getAssessmentById);
+router.get("/:id", denyClients, getAssessmentById);
 router.put("/:id", requireManager, updateAssessment);
 router.delete("/:id", requireManager, deleteAssessment);
 

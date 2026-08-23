@@ -1,6 +1,9 @@
 import { Router } from "express";
 import { z } from "zod";
-import { requireManager } from "../../middlewares/role.middleware";
+import {
+  denyClients,
+  requireManager,
+} from "../../middlewares/role.middleware";
 import {
   requireCandidateRead,
   requireInterviewRead,
@@ -132,7 +135,7 @@ router.get("/interviews", async (req, res) => {
 });
 
 // Confirmed upcoming interview times, used to flag already-allocated slots
-router.get("/interviews/allocated-slots", async (req, res) => {
+router.get("/interviews/allocated-slots", denyClients, async (req, res) => {
   try {
     const rows = await db
       .select({
