@@ -38,13 +38,26 @@ export function decrypt(payload: string): string {
 
 interface StatePayload {
   userId: number;
+  /**
+   * The tenant the OAuth flow was started in.
+   *
+   * The provider redirects back to a route with no session and no token, so
+   * this is the only thing that can say which organization the resulting
+   * connection belongs to. It is safe to trust for exactly the reason userId
+   * is: the payload is HMAC-signed and rejected if altered.
+   */
+  organizationId: number;
   nonce: string;
 }
 
-export function signState(payload: { userId: number }, ttlSeconds: number): string {
+export function signState(
+  payload: { userId: number; organizationId: number },
+  ttlSeconds: number,
+): string {
   const key = getEncryptionKey();
   const body: StatePayload & { exp: number } = {
     userId: payload.userId,
+    organizationId: payload.organizationId,
     nonce: randomBytes(8).toString("hex"),
     exp: Date.now() + ttlSeconds * 1000,
   };
@@ -53,7 +66,10 @@ export function signState(payload: { userId: number }, ttlSeconds: number): stri
   return `${bodyB64}.${signature}`;
 }
 
-export function verifyState(token: string): { userId: number } {
+export function verifyState(token: string): {
+  userId: number;
+  organizationId: number;
+} {
   const key = getEncryptionKey();
   const [bodyB64, signature] = token.split(".");
   if (!bodyB64 || !signature) {
@@ -69,5 +85,5 @@ export function verifyState(token: string): { userId: number } {
   if (Date.now() > body.exp) {
     throw new Error("State token expired");
   }
-  return { userId: body.userId };
+  return { userId: body.userId, organizationId: body.organizationId };
 }
