@@ -157,6 +157,8 @@ interface JobHeaderProps {
   salaryStr: string | null;
   isNotesOpen: boolean;
   setIsNotesOpen: (open: boolean) => void;
+  /** Discussions are an agency room; a client contact cannot join it. */
+  showDiscussions?: boolean;
   jobId: number;
 }
 
@@ -206,6 +208,7 @@ export function JobHeader({
   jobCandidatesPending,
   salaryStr,
   isNotesOpen,
+  showDiscussions = true,
   setIsNotesOpen,
   jobId,
 }: JobHeaderProps) {
@@ -342,6 +345,7 @@ export function JobHeader({
                 </DropdownMenuContent>
               </DropdownMenu>
             )}
+            {showDiscussions && (
             <Button
               size="sm"
               onClick={() => setIsNotesOpen(!isNotesOpen)}
@@ -354,6 +358,7 @@ export function JobHeader({
               />
               Discussions
             </Button>
+            )}
             {isManager ? (
               <Link href={`/jobs/${jobId}/pipeline`}>
                 <Button

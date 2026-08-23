@@ -144,6 +144,14 @@ export default function JobDetailsPage() {
     });
   const jobCandidateCount = jobCandidatesData?.data?.length ?? 0;
   const { data: meData } = useCurrentUser();
+  // A client contact is here to follow a role they are hiring for. The other
+  // tabs are how the agency runs it, and the notes panel is an agency chat
+  // room the socket refuses to let them join.
+  const role = meData?.data?.role;
+  const isClient = role === "client_admin" || role === "client_reviewer";
+  const jobTabs = isClient
+    ? JOB_TABS.filter((t) => t.value === "overview")
+    : JOB_TABS;
   const { data: chatHistoryData } = useChatHistory(jobId, isNotesOpen);
   const { liveMessages, sendMessage, editMessage, deleteMessage } = useJobChat(
     jobId,
@@ -402,6 +410,7 @@ export default function JobDetailsPage() {
         salaryStr={salaryStr}
         isNotesOpen={isNotesOpen}
         setIsNotesOpen={setIsNotesOpen}
+        showDiscussions={!isClient}
         jobId={jobId}
       />
 
@@ -415,7 +424,7 @@ export default function JobDetailsPage() {
             >
               <div className="mb-5">
                 <div className="flex w-fit max-w-full gap-1.5 overflow-x-auto rounded-lg border border-slate-300 bg-white p-1.5 shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
-                  {JOB_TABS.map(({ value, label }) => (
+                  {jobTabs.map(({ value, label }) => (
                     <button
                       key={value}
                       onClick={() => setActiveJobTab(value)}
