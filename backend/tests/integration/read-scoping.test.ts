@@ -432,4 +432,21 @@ describe("read middleware", () => {
       })).passed,
     ).toBe(true);
   });
+
+  itInOrg("stops an off-team interviewer adding a candidate to a job", async () => {
+    // The write side of the same rule. Reads were scoped in #2; this route
+    // had no job guard at all, so anyone signed in could put a candidate
+    // into any job in the organization.
+    expect(
+      (await runMiddleware(requireJobRead("jobId"), offTeam, {
+        jobId: String(teamJobId),
+      })).status,
+    ).toBe(403);
+
+    expect(
+      (await runMiddleware(requireJobRead("jobId"), onTeam, {
+        jobId: String(teamJobId),
+      })).passed,
+    ).toBe(true);
+  });
 });

@@ -13,7 +13,10 @@ import {
   updateOffer,
 } from "./offer.controller";
 
-import { requireManager } from "../../middlewares/role.middleware";
+import {
+  denyClients,
+  requireManager,
+} from "../../middlewares/role.middleware";
 import {
   requireJobRead,
   requireOfferRead,
@@ -29,8 +32,8 @@ router.post("/", requireManager, createOffer);
 router.patch("/:id", requireManager, updateOffer);
 router.delete("/:id", requireManager, deleteOffer);
 router.post("/:id/send", requireManager, sendOffer);
-router.post("/:id/accept", requireOfferRead(), acceptOffer);
-router.post("/:id/decline", requireOfferRead(), declineOffer);
+router.post("/:id/accept", denyClients, requireOfferRead(), acceptOffer);
+router.post("/:id/decline", denyClients, requireOfferRead(), declineOffer);
 router.post("/:id/mark-hired", requireManager, markCandidateHired);
 
 export default router;
