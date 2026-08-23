@@ -267,37 +267,6 @@ export const offerService = {
     return offerRepository.findByCandidateAndJob(candidateId, jobId);
   },
 
-  async ensureDraftForCandidateInOfferStage(
-    candidateId: number,
-    jobId: number,
-    createdBy: number,
-  ) {
-    const existing = await offerRepository.findByCandidateAndJob(
-      candidateId,
-      jobId,
-    );
-
-    if (existing) return existing;
-
-    const created = await offerRepository.create({
-      candidateId,
-      jobId,
-      status: "draft",
-      createdBy,
-    });
-
-    if (!created) throw new Error("Failed to auto-create draft offer");
-
-    await candidateActivityService.create({
-      candidateId,
-      jobId,
-      offerId: created.id,
-      actorId: createdBy,
-      eventType: "offer_created",
-    });
-
-    return created;
-  },
 
   async create(input: CreateOfferInput) {
     // `candidateId` here is a submission, matching every other candidate

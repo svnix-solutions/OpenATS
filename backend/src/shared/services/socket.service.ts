@@ -15,7 +15,9 @@ import { getErrorMessage } from "../../utils/error.utils";
 
 const STAFF_ROOM = "staff";
 const jobRoom = (jobId: number) => `job_${jobId}`;
-const candidateRoom = (candidateId: number) => `candidate_${candidateId}`;
+// The room is one submission, not a person. Its number is an application id
+// — the same id the dashboard links to and canAccessCandidate authorises.
+const candidateRoom = (applicationId: number) => `candidate_${applicationId}`;
 
 interface SocketData {
   user: AuthenticatedUser;
@@ -138,8 +140,8 @@ export class SocketService {
 
       // Writes require the room, which the join already checked.
       const inJobRoom = (jobId: number) => socket.rooms.has(jobRoom(jobId));
-      const inCandidateRoom = (candidateId: number) =>
-        socket.rooms.has(candidateRoom(candidateId));
+      const inCandidateRoom = (applicationId: number) =>
+        socket.rooms.has(candidateRoom(applicationId));
 
       const denyWrite = (event: string, id: number | null) => {
         logger.warn(

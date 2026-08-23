@@ -46,7 +46,8 @@ export const getJobChatHistory = async (req: Request, res: Response) => {
 
 export const getCandidateChatHistory = async (req: Request, res: Response) => {
   try {
-    const { candidateId } = req.params;
+    // A submission id: chat threads belong to one, not to a person.
+    const { candidateId: applicationId } = req.params;
 
     const messages = await db
       .select({
@@ -63,7 +64,7 @@ export const getCandidateChatHistory = async (req: Request, res: Response) => {
       .leftJoin(users, eq(candidateChatMessages.senderId, users.id))
       .where(
         and(
-          eq(candidateChatMessages.applicationId, Number(candidateId)),
+          eq(candidateChatMessages.applicationId, Number(applicationId)),
           eq(candidateChatMessages.isDeleted, false)
         )
       )
