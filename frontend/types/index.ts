@@ -47,7 +47,11 @@ export type CurrentUser = {
   lastName: string;
   email: string;
   avatarUrl: string | null;
-  role: "super_admin" | "hiring_manager" | "interviewer";
+  role: "super_admin"
+    | "hiring_manager"
+    | "interviewer"
+    | "client_admin"
+    | "client_reviewer";
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
@@ -274,7 +278,11 @@ export type User = {
   firstName: string;
   lastName: string;
   email: string;
-  role: "super_admin" | "hiring_manager" | "interviewer";
+  role: "super_admin"
+    | "hiring_manager"
+    | "interviewer"
+    | "client_admin"
+    | "client_reviewer";
   avatarUrl: string | null;
   isActive: boolean;
   createdAt: string;

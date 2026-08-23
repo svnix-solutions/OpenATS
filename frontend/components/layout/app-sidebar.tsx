@@ -90,9 +90,15 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const role = currentUserRes?.data?.role;
   const isSuperAdmin = role === "super_admin";
   const isManager = role === "super_admin" || role === "hiring_manager";
+  // A client contact is here to review candidates for their own roles. The
+  // rest of the sidebar is agency tooling, and the endpoints behind it either
+  // refuse them or return nothing.
+  const isClient = role === "client_admin" || role === "client_reviewer";
+  const clientNav = ["/jobs", "/candidates", "/interviews"];
 
   const items = navMainData
     .filter((item) => {
+      if (isClient) return clientNav.includes(item.url);
       if (item.url === "/offers") return isManager;
       return true;
     })
