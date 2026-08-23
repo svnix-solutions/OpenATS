@@ -7,6 +7,7 @@ import { verifyAccessToken } from "../auth/verify-token";
 import type { AuthenticatedUser } from "../auth/verify-token";
 import {
   canAccessCandidate,
+  isClientScoped,
   canAccessJob,
   parseRoomId,
 } from "../auth/job-access";
@@ -103,9 +104,20 @@ export class SocketService {
       logger.info(`Socket connected: ${socket.id} (user ${user.id})`);
 
       // job room — hiring team members only
+      // Chat rooms are agency workspace. A client contact has no chat surface
+      // in the portal yet, and the live feed carries internal messages that
+      // the REST history now filters out — so they do not join at all rather
+      // than joining and being filtered per message. Revisit when the portal
+      // grows a client-visible thread.
+      const chatRoomsAreForStaff = !isClientScoped(user);
+
       socket.on("join_job", inOrg(async (rawJobId: unknown) => {
         const jobId = parseRoomId(rawJobId);
         if (jobId === null) return;
+        if (!chatRoomsAreForStaff) {
+          socket.emit("room_denied", { room: "job", id: jobId });
+          return;
+        }
 
         if (!(await canAccessJob(user, jobId))) {
           logger.warn(
@@ -123,6 +135,10 @@ export class SocketService {
       socket.on("join_candidate", inOrg(async (rawCandidateId: unknown) => {
         const candidateId = parseRoomId(rawCandidateId);
         if (candidateId === null) return;
+        if (!chatRoomsAreForStaff) {
+          socket.emit("room_denied", { room: "candidate", id: candidateId });
+          return;
+        }
 
         if (!(await canAccessCandidate(user, candidateId))) {
           logger.warn(

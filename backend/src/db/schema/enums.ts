@@ -109,3 +109,11 @@ export const orgRole = pgEnum("org_role", [
   "client_admin",
   "client_reviewer",
 ]);
+
+// Who a chat message is for. Agency staff discuss candidates candidly on the
+// assumption the client is not reading; a client contact sees only what was
+// deliberately shared with them.
+export const messageVisibility = pgEnum("message_visibility", [
+  "internal",
+  "shared",
+]);

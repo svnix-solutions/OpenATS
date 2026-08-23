@@ -17,6 +17,9 @@ import {
 import { jobService } from "../../src/modules/job/job.service";
 import { candidateService } from "../../src/modules/candidate/candidate.service";
 import { presentCandidate } from "../../src/shared/auth/present";
+import { candidateChatMessages } from "../../src/db/schema/communications";
+import { getCandidateChatHistory } from "../../src/modules/chat/chat.controller";
+import type { Request, Response } from "express";
 import type { AuthenticatedUser } from "../../src/shared/auth/verify-token";
 
 // A client contact is inside the agency's organization, so row-level security
@@ -150,5 +153,54 @@ describe("a client contact", () => {
   itInOrg("changes nothing for agency staff", async () => {
     const detail = await candidateService.getById(s.candidateA1);
     expect(presentCandidate(detail!, s.manager)).toEqual(detail);
+  });
+
+  itInOrg("reads only chat that was shared with them", async () => {
+    await db.insert(candidateChatMessages).values([
+      {
+        applicationId: s.candidateA1,
+        senderId: s.admin.id,
+        message: "internal note about this candidate",
+      },
+      {
+        applicationId: s.candidateA1,
+        senderId: s.admin.id,
+        message: "shared with the client",
+        visibility: "shared",
+      },
+    ]);
+
+    const seen = async (viewer: AuthenticatedUser) => {
+      let body: unknown;
+      const res = {
+        status() {
+          return this;
+        },
+        json(payload: unknown) {
+          body = payload;
+          return this;
+        },
+      } as unknown as Response;
+
+      await getCandidateChatHistory(
+        {
+          user: viewer,
+          params: { candidateId: String(s.candidateA1) },
+        } as unknown as Request,
+        res,
+      );
+
+      return ((body as { data?: { message: string }[] }).data ?? []).map(
+        (m) => m.message,
+      );
+    };
+
+    // Default is internal, so a message written without a thought about the
+    // client stays away from them.
+    expect(await seen(client)).toEqual(["shared with the client"]);
+
+    const staff = await seen(s.manager);
+    expect(staff).toContain("internal note about this candidate");
+    expect(staff).toContain("shared with the client");
   });
 });
