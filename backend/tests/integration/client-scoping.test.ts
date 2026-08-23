@@ -16,6 +16,7 @@ import {
 } from "../../src/shared/auth/job-access";
 import { jobService } from "../../src/modules/job/job.service";
 import { candidateService } from "../../src/modules/candidate/candidate.service";
+import { presentCandidate } from "../../src/shared/auth/present";
 import type { AuthenticatedUser } from "../../src/shared/auth/verify-token";
 
 // A client contact is inside the agency's organization, so row-level security
@@ -119,5 +120,35 @@ describe("a client contact", () => {
     // The manager is not client-scoped, so nothing changes for them.
     expect(listScopeFor(s.manager)).toEqual({});
     expect(await canReadJob(s.manager, s.jobB.id)).toBe(true);
+  });
+
+  itInOrg("is not shown the agency's working view of a candidate", async () => {
+    const detail = await candidateService.getById(s.candidateA1);
+    const shown = presentCandidate(detail!, client);
+
+    // Contact details are the agency's leverage: handing them over is handing
+    // over the ability to hire around the agency.
+    expect(shown.email).toBeNull();
+    expect(shown.phone).toBeNull();
+
+    // The agency's own assessment of someone it is putting forward.
+    expect(shown.cvAnalysis).toBeNull();
+    expect(shown.rejections).toEqual([]);
+  });
+
+  itInOrg("is still shown what it needs to review the candidate", async () => {
+    // Redaction that removes the CV would make the portal pointless.
+    const detail = await candidateService.getById(s.candidateA1);
+    const shown = presentCandidate(detail!, client);
+
+    expect(shown.firstName).toBe(detail!.firstName);
+    expect(shown.jobTitle).toBe(detail!.jobTitle);
+    expect(shown).toHaveProperty("resumeUrl", detail!.resumeUrl);
+    expect(shown.interviews).toEqual(detail!.interviews);
+  });
+
+  itInOrg("changes nothing for agency staff", async () => {
+    const detail = await candidateService.getById(s.candidateA1);
+    expect(presentCandidate(detail!, s.manager)).toEqual(detail);
   });
 });
