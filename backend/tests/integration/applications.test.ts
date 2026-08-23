@@ -8,6 +8,7 @@ import {
   type Scenario,
 } from "../helpers/scenario";
 import { applications } from "../../src/db/schema/candidates";
+import { candidateChatMessages } from "../../src/db/schema/communications";
 
 // `applications` is populated and constrained but not yet read — the service
 // rewrite that moves status and current_stage_id off `candidates` is a
@@ -84,5 +85,35 @@ describe("applications", () => {
     const byJob = new Map(rows.map((r) => [r.jobId, r.status]));
     expect(byJob.get(s.jobA.id)).toBe("active");
     expect(byJob.get(s.jobB.id)).toBe("rejected");
+  });
+
+  itInOrg("keeps a chat thread on its own submission", async () => {
+    // Regression: chat rooms are keyed by submission, but the column
+    // underneath used to reference the person — so a message landed on
+    // whichever person shared that id, with a valid foreign key and no error.
+    const [second] = await db
+      .insert(applications)
+      .values({ candidateId: s.personB1, jobId: s.jobA.id })
+      .returning({ id: applications.id });
+
+    await db.insert(candidateChatMessages).values({
+      applicationId: s.candidateA1,
+      senderId: s.admin.id,
+      message: "about this submission",
+    });
+
+    const onOther = await db
+      .select()
+      .from(candidateChatMessages)
+      .where(eq(candidateChatMessages.applicationId, second!.id));
+
+    expect(onOther).toEqual([]);
+
+    const onOwn = await db
+      .select()
+      .from(candidateChatMessages)
+      .where(eq(candidateChatMessages.applicationId, s.candidateA1));
+
+    expect(onOwn.map((m) => m.message)).toEqual(["about this submission"]);
   });
 });

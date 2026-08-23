@@ -100,11 +100,12 @@ Not part of the road to v1.0, but decided and written down so it is not invisibl
 | Generated isolation sweep over the catalog | [0002 §2](decisions/0002-testing-multi-tenancy.md) | 🟢 Done |
 | Organization resolved from the Asgardeo `org_id` claim | [0001 §5](decisions/0001-multi-tenancy.md) | 🟢 Done |
 | Sub-organization provisioning in `setup-asgardeo.sh` | [0001 §5](decisions/0001-multi-tenancy.md) | 🟢 Done |
-| Jobs belong to a client company | [0001 §7](decisions/0001-multi-tenancy.md) | 🔴 Planned |
-| Split candidates into a person and an application | [0003](decisions/0003-application-split-is-separable.md) | 🔴 Planned |
+| Jobs belong to a client company | [0001 §7](decisions/0001-multi-tenancy.md) | 🟢 Done |
+| Split candidates into a person and an application | [0003](decisions/0003-application-split-is-separable.md) | 🟢 Done |
 | Role read from `organization_members`, not the JWT | [0001 §6](decisions/0001-multi-tenancy.md) | 🔴 Planned |
 | Client portal: roles, scoping, redaction | [0001 §6](decisions/0001-multi-tenancy.md) | 🔴 Planned |
-| Per-client careers pages and email branding | [0001 §7](decisions/0001-multi-tenancy.md) | 🔴 Planned |
+| Per-client careers pages | [0001 §7](decisions/0001-multi-tenancy.md) | 🟢 Done |
+| Per-agency email branding and sending domains | [0001 §7](decisions/0001-multi-tenancy.md) | 🔴 Planned |
 
 Phase 0 (closing the per-job authorization gaps on read routes) is done, and it overlapped the **Security review** item above — that review is now better spent on the tenancy boundary than on the single-tenant model it replaced.
 

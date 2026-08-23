@@ -11,7 +11,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 
-import { candidates } from "./candidates";
+import { applications, candidates } from "./candidates";
 import { jobs } from "./jobs";
 import { templates } from "./templates";
 import { users } from "./users";
@@ -92,9 +92,9 @@ export const candidateChatMessages = pgTable(
       .default(sql`app_current_org()`)
       .references(() => organizations.id, { onDelete: "cascade" }),
 
-    candidateId: integer("candidate_id")
+    applicationId: integer("application_id")
       .notNull()
-      .references(() => candidates.id, { onDelete: "cascade" }),
+      .references(() => applications.id, { onDelete: "cascade" }),
 
     senderId: integer("sender_id")
       .notNull()
@@ -114,7 +114,7 @@ export const candidateChatMessages = pgTable(
     isSystemMessage: boolean("is_system_message").notNull().default(false),
     isDeleted: boolean("is_deleted").notNull().default(false),
   },
-  (t) => [index("idx_candidate_chat_messages_candidate_id").on(t.candidateId)],
+  (t) => [index("idx_candidate_chat_messages_application_id").on(t.applicationId)],
 );
 
 export type EmailMessage = typeof emailMessages.$inferSelect;
