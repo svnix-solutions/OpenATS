@@ -7,6 +7,7 @@ import type { CandidateCvAnalysisPayload } from "@/types";
 interface SectionTabsProps {
   activeSection: SectionId;
   onSectionChange: (id: SectionId) => void;
+  isClient?: boolean;
   cvAnalysis?: CandidateCvAnalysisPayload | null;
   hasOffer: boolean;
   offerDotColor?: string;
@@ -18,10 +19,19 @@ export function SectionTabs({
   cvAnalysis,
   hasOffer,
   offerDotColor,
+  isClient = false,
 }: SectionTabsProps) {
+  // Job Fit is the agency's CV scoring and Rejection carries its internal
+  // note — both are redacted to nothing for a client, so the tab would open
+  // on an empty panel. Send Email composes as the agency to an address the
+  // client is not shown.
+  const sections = isClient
+    ? SECTIONS.filter((s) => !["job-fit", "rejection", "email"].includes(s.id))
+    : SECTIONS;
+
   return (
     <div className="mb-5 flex w-fit max-w-full gap-1.5 overflow-x-auto rounded-[6px] border border-slate-300 bg-white p-1.5 shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
-      {SECTIONS.map((s) => {
+      {sections.map((s) => {
         const isActive = activeSection === s.id;
         const hasPendingCv =
           s.id === "job-fit" && cvAnalysis?.status === "pending";

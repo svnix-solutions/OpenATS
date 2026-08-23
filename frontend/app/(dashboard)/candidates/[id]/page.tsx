@@ -27,6 +27,7 @@ import { InterviewSchedulerDialog } from "@/app/(dashboard)/interviews/_componen
 import { type SectionId, OFFER_STATUS_STYLES } from "./_components/constants";
 import { CandidateHeader } from "./_components/candidate-header";
 import { SectionTabs } from "./_components/section-tabs";
+import { useCurrentUser } from "@/hooks/queries/use-user";
 import { CvSheet } from "./_components/cv-sheet";
 import { AssessmentSheet } from "./_components/assessment-sheet";
 import { JobFitSection } from "./_components/sections/job-fit-section";
@@ -206,6 +207,9 @@ export default function CandidateDetailPage({
   }
 
   const offer = candidate.offer;
+  const { data: meData } = useCurrentUser();
+  const role = meData?.data?.role;
+  const isClient = role === "client_admin" || role === "client_reviewer";
   const cvAnalysis = candidate.cvAnalysis;
 
   return (
@@ -231,6 +235,7 @@ export default function CandidateDetailPage({
         <div className="px-4 py-5 sm:px-6">
           <main className="min-w-0">
             <SectionTabs
+              isClient={isClient}
               activeSection={activeSection}
               onSectionChange={setActiveSection}
               cvAnalysis={cvAnalysis}
