@@ -19,6 +19,11 @@ vi.mock("jose", async (importOriginal) => {
 const sendOfferEmail = vi.fn().mockResolvedValue(undefined);
 const sendEmail = vi.fn().mockResolvedValue(undefined);
 vi.mock("../../src/shared/services/mail.service", () => ({
+  // Not just the service: candidate.service imports escapeHtml from here to
+  // build the confirmation email. Leaving it out makes that call throw into a
+  // catch that only logs, so the email silently stops being sent and every
+  // test still passes.
+  escapeHtml: (v: string) => v,
   mailService: {
     sendOfferEmail: (...args: unknown[]) => sendOfferEmail(...args),
     sendEmail: (...args: unknown[]) => sendEmail(...args),
@@ -222,6 +227,19 @@ describe("core hiring flow", () => {
     expect(row!.jobId).toBe(jobId);
     expect(row!.currentStageId).toBe(appliedStageId);
     expect(row!.status).toBe("active");
+
+    // The confirmation email is fire-and-forget inside a catch that only
+    // logs, so waitFor rather than an immediate assertion — and asserting it
+    // at all is the point: a silent failure here looks exactly like success.
+    //
+    // It must name the company whose job this is. It used to take whichever
+    // `company` row came back first, which on an agency recruiting for
+    // several clients meant signing with the wrong company's name.
+    await vi.waitFor(() => {
+      expect(sendEmail).toHaveBeenCalled();
+      const { html } = sendEmail.mock.calls.at(-1)![0] as { html: string };
+      expect(html).toContain(`Client ${SUFFIX}`);
+    });
   });
 
   itInOrg("rejects a duplicate application to the same job", async () => {

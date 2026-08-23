@@ -1,5 +1,8 @@
 import { Resend } from "resend";
 import dotenv from "dotenv";
+import { eq } from "drizzle-orm";
+import { db, currentOrganizationId } from "../../db";
+import { organizations } from "../../db/schema/organizations";
 import logger from "../../utils/logger";
 
 dotenv.config();
@@ -11,6 +14,60 @@ export interface SendEmailOptions {
   to: string;
   subject: string;
   html: string;
+}
+
+/**
+ * The name every outgoing email is sent under.
+ *
+ * Templates write `{{brand}}` and `sendEmail` fills it in, which is why the
+ * sync HTML builders below do not need the organization threaded through
+ * them. Unknown `{{...}}` variables survive the template engine untouched, so
+ * a token in a user-authored offer template arrives here intact too.
+ *
+ * "OpenATS" is the fallback for the paths that legitimately have no tenant —
+ * anything running outside `runInOrganization`.
+ */
+const DEFAULT_BRAND = "OpenATS";
+
+async function currentBrand(): Promise<string> {
+  const organizationId = currentOrganizationId();
+  if (organizationId === null) return DEFAULT_BRAND;
+
+  try {
+    // Policy-filtered to this organization already; the id is belt and braces.
+    const [org] = await db
+      .select({ name: organizations.name })
+      .from(organizations)
+      .where(eq(organizations.id, organizationId))
+      .limit(1);
+
+    return org?.name?.trim() || DEFAULT_BRAND;
+  } catch (err) {
+    // Branding is not worth failing an offer email over.
+    logger.warn("[mail] could not resolve organization brand:", err);
+    return DEFAULT_BRAND;
+  }
+}
+
+export function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+/**
+ * A display name safe to put in a From header.
+ *
+ * The organization name is attacker-influenced in the sense that whoever
+ * names the tenant chooses it, and a CR or LF here would let them append
+ * their own headers. Angle brackets and quotes would break out of the display
+ * name into the address.
+ */
+function headerSafe(value: string): string {
+  return value.replace(/[\r\n<>"]/g, " ").replace(/\s+/g, " ").trim();
 }
 
 // Shared interview email layout (inline styles only — email clients strip <style>)
@@ -56,7 +113,7 @@ function emailCard(opts: {
     opts.bodyHtml,
     "</div>",
     "</div>",
-    '<p style="text-align:center;font-size:12px;color:#94a3b8;margin:16px 0 0">Powered by OpenATS</p>',
+    '<p style="text-align:center;font-size:12px;color:#94a3b8;margin:16px 0 0">Powered by {{brand}}</p>',
     "</div>",
   ].join("");
 }
@@ -82,11 +139,13 @@ function formatEmailTime(d: Date): string {
 export const mailService = {
   async sendEmail({ to, subject, html }: SendEmailOptions) {
     try {
+      const brand = await currentBrand();
+
       const { data, error } = await resend.emails.send({
-        from: `OpenATS <${FROM_EMAIL}>`,
+        from: `${headerSafe(brand) || DEFAULT_BRAND} <${FROM_EMAIL}>`,
         to: [to],
-        subject,
-        html,
+        subject: subject.replaceAll("{{brand}}", headerSafe(brand)),
+        html: html.replaceAll("{{brand}}", escapeHtml(brand)),
       });
 
       if (error) {
@@ -134,7 +193,7 @@ export const mailService = {
           </p>
           <p>If you believe this is a mistake, please contact the hiring team.</p>
           <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;">
-          <p style="font-size: 14px; color: #666;">This is an automated message from OpenATS.</p>
+          <p style="font-size: 14px; color: #666;">This is an automated message from {{brand}}.</p>
         </div>
       `
       : `
@@ -143,7 +202,7 @@ export const mailService = {
           <p>Your assessment responses for <strong>${assessmentTitle}</strong> are saved successfully.</p>
           <p>You have completed the quiz successfully. Thank you for your submission.</p>
           <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;">
-          <p style="font-size: 14px; color: #666;">This is an automated message from OpenATS.</p>
+          <p style="font-size: 14px; color: #666;">This is an automated message from {{brand}}.</p>
         </div>
       `;
 
