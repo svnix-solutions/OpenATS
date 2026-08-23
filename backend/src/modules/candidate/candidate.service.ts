@@ -81,6 +81,8 @@ export interface CandidateFilters {
   page?: number;
   limit?: number;
   teamUserId?: number;
+  /** Set for a client contact: submissions to their own company's jobs only. */
+  clientCompanyId?: number;
 }
 
 export interface CandidateBasicUpdateInput {
@@ -109,6 +111,17 @@ function buildCandidateWhere(
         ilike(candidates.firstName, `%${filters.search}%`),
         ilike(candidates.lastName, `%${filters.search}%`),
         ilike(candidates.email, `%${filters.search}%`),
+      ),
+    );
+  }
+  if (filters.clientCompanyId) {
+    conditions.push(
+      inArray(
+        applications.jobId,
+        db
+          .select({ id: jobs.id })
+          .from(jobs)
+          .where(eq(jobs.clientCompanyId, filters.clientCompanyId)),
       ),
     );
   }

@@ -8,7 +8,10 @@ import { jobService } from "../job/job.service";
 import { r2Service } from "../../shared/services/r2.service";
 import { socketService } from "../../shared/services/socket.service";
 import logger from "../../utils/logger";
-import { canReadCandidate } from "../../shared/auth/job-access";
+import {
+  canReadCandidate,
+  listScopeFor,
+} from "../../shared/auth/job-access";
 
 import { requestCvAnalysis } from "../../queues/cv-analysis/queue";
 import { getErrorMessage} from "../../utils/error.utils";
@@ -165,7 +168,7 @@ export const getCandidates = async (req: Request, res: Response) => {
         | undefined,
       page,
       limit,
-      teamUserId: req.user.role === "interviewer" ? req.user.id : undefined,
+      ...listScopeFor(req.user),
     };
 
     const result = await candidateService.getAll(jobId, filters);

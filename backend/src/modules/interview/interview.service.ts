@@ -201,11 +201,23 @@ export const interviewService = {
     fromDate?: string;
     toDate?: string;
     teamUserId?: number;
+    clientCompanyId?: number;
   }) {
     const conditions = [];
 
     // Set for team-scoped roles only, matching how the job and candidate
     // lists narrow their results.
+    if (filters?.clientCompanyId) {
+      conditions.push(
+        inArray(
+          candidateInterviews.jobId,
+          db
+            .select({ id: jobs.id })
+            .from(jobs)
+            .where(eq(jobs.clientCompanyId, filters.clientCompanyId)),
+        ),
+      );
+    }
     if (filters?.teamUserId) {
       conditions.push(
         inArray(

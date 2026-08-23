@@ -75,6 +75,50 @@ export function isTeamScoped(user: AuthenticatedUser): boolean {
   return user.role === "interviewer";
 }
 
+/**
+ * Whether this user is a contact at a client company rather than agency staff.
+ *
+ * Their organization already isolates them from other agencies. This is the
+ * second boundary: within one agency, a client sees only their own company's
+ * work, never the agency's other clients.
+ *
+ * Keyed on the membership rather than the role, because a role claim alone
+ * cannot say *which* company — and a client user without one would otherwise
+ * read as agency staff.
+ */
+export function isClientScoped(user: AuthenticatedUser): boolean {
+  return user.clientCompanyId !== null;
+}
+
+/**
+ * How a list should be narrowed for this user.
+ *
+ * Every list endpoint asks the same question and used to answer it inline,
+ * which is how a new kind of user gets missed: a client contact with neither
+ * filter set sees the agency's whole book of business.
+ */
+export function listScopeFor(user: AuthenticatedUser): {
+  teamUserId?: number;
+  clientCompanyId?: number;
+} {
+  if (isClientScoped(user)) {
+    return { clientCompanyId: user.clientCompanyId! };
+  }
+  if (isTeamScoped(user)) return { teamUserId: user.id };
+  return {};
+}
+
+/** The client company a job is being filled for. */
+async function clientCompanyForJob(jobId: number): Promise<number | null> {
+  const [row] = await db
+    .select({ clientCompanyId: jobs.clientCompanyId })
+    .from(jobs)
+    .where(eq(jobs.id, jobId))
+    .limit(1);
+
+  return row?.clientCompanyId ?? null;
+}
+
 // ── Resolvers: map a record id to the job that owns it ──────────────────────
 //
 // Each returns null when the record does not exist, which the callers below
@@ -151,6 +195,9 @@ export async function canReadJob(
   user: AuthenticatedUser,
   jobId: number,
 ): Promise<boolean> {
+  if (isClientScoped(user)) {
+    return (await clientCompanyForJob(jobId)) === user.clientCompanyId;
+  }
   if (!isTeamScoped(user)) return true;
   return isOnHiringTeam(user.id, jobId);
 }
@@ -161,12 +208,12 @@ async function canReadVia(
 ): Promise<boolean> {
   // Resolve nothing for unrestricted roles — saves a query on every request
   // made by the users who make most of them.
-  if (!isTeamScoped(user)) return true;
+  if (!isClientScoped(user) && !isTeamScoped(user)) return true;
 
   const jobId = await resolve();
   if (jobId === null) return false;
 
-  return isOnHiringTeam(user.id, jobId);
+  return canReadJob(user, jobId);
 }
 
 export function canReadCandidate(

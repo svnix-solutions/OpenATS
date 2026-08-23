@@ -164,11 +164,21 @@ export type OfferListFilters = {
   status?: (typeof offers.status.enumValues)[number];
   jobId?: number;
   teamUserId?: number;
+  clientCompanyId?: number;
 };
 
 // Restricts a list to the jobs a team-scoped user is on. Returns undefined for
 // unrestricted roles so the caller can drop the condition entirely.
-function teamJobFilter(teamUserId?: number) {
+function teamJobFilter(teamUserId?: number, clientCompanyId?: number) {
+  if (clientCompanyId) {
+    return inArray(
+      offers.jobId,
+      db
+        .select({ id: jobs.id })
+        .from(jobs)
+        .where(eq(jobs.clientCompanyId, clientCompanyId)),
+    );
+  }
   if (!teamUserId) return undefined;
   return inArray(
     offers.jobId,
@@ -180,9 +190,9 @@ function teamJobFilter(teamUserId?: number) {
 }
 
 export const offerService = {
-  async getAllDetails(teamUserId?: number) {
+  async getAllDetails(teamUserId?: number, clientCompanyId?: number) {
     return await db.query.offers.findMany({
-      where: teamJobFilter(teamUserId),
+      where: teamJobFilter(teamUserId, clientCompanyId),
       with: {
         candidate: true,
         job: {
@@ -195,11 +205,11 @@ export const offerService = {
   },
 
   async getPaginated(filters: OfferListFilters = {}) {
-    const { page = 1, limit = 15, search, status, jobId, teamUserId } = filters;
+    const { page = 1, limit = 15, search, status, jobId, teamUserId, clientCompanyId } = filters;
     const offset = (page - 1) * limit;
 
     const conditions = [];
-    const teamFilter = teamJobFilter(teamUserId);
+    const teamFilter = teamJobFilter(teamUserId, clientCompanyId);
     if (teamFilter) conditions.push(teamFilter);
     if (jobId) conditions.push(eq(offers.jobId, jobId));
     if (status) conditions.push(eq(offers.status, status));

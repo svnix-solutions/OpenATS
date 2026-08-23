@@ -5,7 +5,7 @@ import {
   requireCandidateRead,
   requireInterviewRead,
 } from "../../middlewares/job-access.middleware";
-import { isTeamScoped } from "../../shared/auth/job-access";
+import { listScopeFor } from "../../shared/auth/job-access";
 import { interviewService } from "./interview.service";
 import { mailService } from "../../shared/services/mail.service";
 import { socketService } from "../../shared/services/socket.service";
@@ -118,7 +118,7 @@ router.get("/interviews", async (req, res) => {
       search: req.query.search as string | undefined,
       fromDate: req.query.from as string | undefined,
       toDate: req.query.to as string | undefined,
-      teamUserId: isTeamScoped(req.user) ? req.user.id : undefined,
+      ...listScopeFor(req.user),
     };
     const interviews = await interviewService.getAll(filters);
     res.status(200).json({ data: interviews });
