@@ -25,6 +25,7 @@ import { InlineCalendar } from "./inline-calendar";
 import { InterviewList } from "./interview-list";
 import FeedbackDialog from "./feedback-dialog";
 import { EditDialog } from "./edit-dialog";
+import { useIsManager } from "@/hooks/use-role";
 
 export default function InterviewsClient() {
   const [view, setView] = useState<"list" | "calendar">("calendar");
@@ -35,6 +36,8 @@ export default function InterviewsClient() {
   const [feedbackDialogOpen, setFeedbackDialogOpen] = useState(false);
   const [feedbackTarget, setFeedbackTarget] =
     useState<InterviewListItem | null>(null);
+
+  const isManager = useIsManager();
 
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<InterviewListItem | null>(null);
@@ -201,6 +204,7 @@ export default function InterviewsClient() {
             interviews={interviews}
             onFeedback={handleFeedback}
             onEdit={handleEdit}
+            canEdit={isManager}
           />
         )}
       </div>

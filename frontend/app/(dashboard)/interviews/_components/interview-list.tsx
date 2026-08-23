@@ -20,12 +20,20 @@ interface InterviewListProps {
   interviews: InterviewListItem[];
   onFeedback: (iv: InterviewListItem) => void;
   onEdit: (iv: InterviewListItem) => void;
+  /**
+   * Editing an interview is PATCH /interviews/:id, which requires a manager.
+   * Interviewers and client contacts both saw this button and both got a 403
+   * from it — the request failed, the row did not change, and nothing said
+   * why.
+   */
+  canEdit: boolean;
 }
 
 export function InterviewList({
   interviews,
   onFeedback,
   onEdit,
+  canEdit,
 }: InterviewListProps) {
   const grouped = useMemo(() => {
     const m: Record<string, InterviewListItem[]> = {};
@@ -204,6 +212,7 @@ export function InterviewList({
                           />
                           Feedback
                         </button>
+                        {canEdit && (
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
@@ -217,6 +226,7 @@ export function InterviewList({
                           />
                           Edit
                         </button>
+                        )}
                       </div>
                     </div>
                   </div>
