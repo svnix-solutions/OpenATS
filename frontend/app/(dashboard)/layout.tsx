@@ -8,6 +8,7 @@ import { CandidateSocketProvider } from "@/components/providers/candidate-socket
 import { SocketAuthProvider } from "@/components/providers/socket-auth-provider";
 import { asgardeo } from "@asgardeo/nextjs/server";
 import { SetupCompanyGate } from "@/components/guards/setup-company-gate";
+import { ClientRouteGate } from "@/components/guards/client-route-gate";
 import { QueryProvider } from "@/components/providers/query-provider";
 import { Toaster } from "@/components/ui/sonner";
 import { DashboardMainLoading } from "@/components/dashboard-main-loading";
@@ -43,9 +44,11 @@ export default async function DashboardLayout({
               <SidebarInset>
                 <DragDropProvider>
                   <SetupCompanyGate>
-                    <Suspense fallback={<DashboardMainLoading />}>
-                      {children}
-                    </Suspense>
+                    <ClientRouteGate>
+                      <Suspense fallback={<DashboardMainLoading />}>
+                        {children}
+                      </Suspense>
+                    </ClientRouteGate>
                   </SetupCompanyGate>
                 </DragDropProvider>
               </SidebarInset>

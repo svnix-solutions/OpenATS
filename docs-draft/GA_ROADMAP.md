@@ -105,7 +105,7 @@ Not part of the road to v1.0, but decided and written down so it is not invisibl
 | Role read from `organization_members`, not the JWT | [0001 §6](decisions/0001-multi-tenancy.md) | 🟢 Done |
 | Client portal: roles and company scoping | [0001 §6](decisions/0001-multi-tenancy.md) | 🟢 Done |
 | Client portal: redaction of the agency's working view | [0001 §6](decisions/0001-multi-tenancy.md) | 🟢 Done |
-| Client portal: the client-facing UI | [0001 §6](decisions/0001-multi-tenancy.md) | 🔴 Planned |
+| Client portal: the client-facing UI | [0001 §6](decisions/0001-multi-tenancy.md) | 🟢 Done |
 | Per-client careers pages | [0001 §7](decisions/0001-multi-tenancy.md) | 🟢 Done |
 | Per-agency email branding | [0001 §7](decisions/0001-multi-tenancy.md) | 🟢 Done |
 | Per-agency sending domains in Resend | [0001 §7](decisions/0001-multi-tenancy.md) | 🔴 Planned |

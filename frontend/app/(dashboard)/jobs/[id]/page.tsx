@@ -50,6 +50,8 @@ import {
   useDetachAssessment,
 } from "@/hooks/queries/use-assessments";
 
+import { isClientRole } from "@/lib/roles";
+
 import type {
   PipelineStage,
   JobDetail,
@@ -148,7 +150,7 @@ export default function JobDetailsPage() {
   // tabs are how the agency runs it, and the notes panel is an agency chat
   // room the socket refuses to let them join.
   const role = meData?.data?.role;
-  const isClient = role === "client_admin" || role === "client_reviewer";
+  const isClient = isClientRole(role);
   const jobTabs = isClient
     ? JOB_TABS.filter((t) => t.value === "overview")
     : JOB_TABS;

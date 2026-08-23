@@ -1,6 +1,6 @@
 import { serverFetch } from "./auth-action";
 
-type AppRole =
+export type AppRole =
   | "super_admin"
   | "hiring_manager"
   | "interviewer"
