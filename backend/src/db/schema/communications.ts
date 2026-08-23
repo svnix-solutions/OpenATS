@@ -11,6 +11,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 
+import { messageVisibility } from "./enums";
 import { applications, candidates } from "./candidates";
 import { jobs } from "./jobs";
 import { templates } from "./templates";
@@ -75,6 +76,13 @@ export const jobChatMessages = pgTable(
       },
     ),
 
+    /**
+     * Internal by default. A message written without saying otherwise was
+     * written on the assumption no client would read it, so the safe reading
+     * of silence is "not for them".
+     */
+    visibility: messageVisibility("visibility").notNull().default("internal"),
+
     sentAt: timestamp("sent_at").notNull().defaultNow(),
 
     isSystemMessage: boolean("is_system_message").notNull().default(false),
@@ -108,6 +116,13 @@ export const candidateChatMessages = pgTable(
         onDelete: "set null",
       },
     ),
+
+    /**
+     * Internal by default. A message written without saying otherwise was
+     * written on the assumption no client would read it, so the safe reading
+     * of silence is "not for them".
+     */
+    visibility: messageVisibility("visibility").notNull().default("internal"),
 
     sentAt: timestamp("sent_at").notNull().defaultNow(),
 

@@ -4,6 +4,7 @@ import { jobChatMessages, candidateChatMessages, users } from "../../db/schema";
 import { eq, desc, and } from "drizzle-orm";
 import logger from "../../utils/logger";
 import { getErrorMessage } from "../../utils/error.utils";
+import { isClientScoped } from "../../shared/auth/job-access";
 
 export const getJobChatHistory = async (req: Request, res: Response) => {
   try {
@@ -25,7 +26,11 @@ export const getJobChatHistory = async (req: Request, res: Response) => {
       .where(
         and(
           eq(jobChatMessages.jobId, Number(jobId)),
-          eq(jobChatMessages.isDeleted, false)
+          eq(jobChatMessages.isDeleted, false),
+          // A client contact sees only what was deliberately shared.
+          ...(isClientScoped(req.user)
+            ? [eq(jobChatMessages.visibility, "shared")]
+            : []),
         )
       )
       .orderBy(desc(jobChatMessages.sentAt));
@@ -65,7 +70,10 @@ export const getCandidateChatHistory = async (req: Request, res: Response) => {
       .where(
         and(
           eq(candidateChatMessages.applicationId, Number(applicationId)),
-          eq(candidateChatMessages.isDeleted, false)
+          eq(candidateChatMessages.isDeleted, false),
+          ...(isClientScoped(req.user)
+            ? [eq(candidateChatMessages.visibility, "shared")]
+            : []),
         )
       )
       .orderBy(desc(candidateChatMessages.sentAt));
