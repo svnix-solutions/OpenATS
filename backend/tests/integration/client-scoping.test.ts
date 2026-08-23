@@ -19,6 +19,8 @@ import { candidateService } from "../../src/modules/candidate/candidate.service"
 import { presentCandidate } from "../../src/shared/auth/present";
 import { interviewFeedback } from "../../src/db/schema/interview-feedback";
 import { interviewService } from "../../src/modules/interview/interview.service";
+import { denyClients } from "../../src/middlewares/role.middleware";
+import type { NextFunction } from "express";
 import { candidateChatMessages } from "../../src/db/schema/communications";
 import { getCandidateChatHistory } from "../../src/modules/chat/chat.controller";
 import type { Request, Response } from "express";
@@ -229,5 +231,32 @@ describe("a client contact", () => {
     // Agency staff still see everything on the interview.
     const forStaff = await interviewService.getFeedback(s.interviewA1);
     expect(forStaff).toHaveLength(2);
+  });
+
+  itInOrg("is refused agency-wide analytics outright", async () => {
+    // Analytics counts every submission in the organization and has no client
+    // dimension to narrow by, so a client reading it would see the agency's
+    // whole book of business as a number. Refused rather than narrowed.
+    const run = (viewer: AuthenticatedUser) =>
+      new Promise<number | null>((resolve) => {
+        let status: number | null = null;
+        const res = {
+          status(code: number) {
+            status = code;
+            return this;
+          },
+          json() {
+            resolve(status);
+            return this;
+          },
+        } as unknown as Response;
+        const next: NextFunction = () => resolve(null);
+        denyClients({ user: viewer } as unknown as Request, res, next);
+      });
+
+    expect(await run(client)).toBe(403);
+    // Agency staff are unaffected, including interviewers.
+    expect(await run(s.interviewer)).toBeNull();
+    expect(await run(s.manager)).toBeNull();
   });
 });

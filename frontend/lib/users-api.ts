@@ -7,15 +7,27 @@ export interface CreateUserPayload {
   email: string;
   password?: string;
   askPassword?: boolean;
-  role?: "super_admin" | "hiring_manager" | "interviewer";
+  role?: "super_admin"
+    | "hiring_manager"
+    | "interviewer"
+    | "client_admin"
+    | "client_reviewer";
 }
 
 export interface UpdateUserPayload {
   firstName?: string;
   lastName?: string;
   email?: string;
-  role?: "super_admin" | "hiring_manager" | "interviewer";
-  oldRole?: "super_admin" | "hiring_manager" | "interviewer";
+  role?: "super_admin"
+    | "hiring_manager"
+    | "interviewer"
+    | "client_admin"
+    | "client_reviewer";
+  oldRole?: "super_admin"
+    | "hiring_manager"
+    | "interviewer"
+    | "client_admin"
+    | "client_reviewer";
 }
 
 export async function fetchUsers(): Promise<User[]> {

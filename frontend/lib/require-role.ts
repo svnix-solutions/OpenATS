@@ -1,6 +1,11 @@
 import { asgardeo } from "@asgardeo/nextjs/server";
 
-type AppRole = "super_admin" | "hiring_manager" | "interviewer";
+type AppRole =
+  | "super_admin"
+  | "hiring_manager"
+  | "interviewer"
+  | "client_admin"
+  | "client_reviewer";
 
 function decodeJwtPayload(token: string): Record<string, unknown> {
   const parts = token.split(".");
@@ -35,12 +40,20 @@ function mapToAppRole(names: string[]): AppRole | null {
   const n = names.map((s) => s.trim().toLowerCase().replace(/_/g, " ").replace(/\s+/g, " "));
   const has = (f: (x: string) => boolean) => n.some(f);
 
-  if (has((x) => x === "super admin" || x.endsWith("/super admin") || x.includes("super admin")))
+  // Exact name or group path only. The substring match this used to have gave
+  // full privileges to any role merely containing the words — "super admin
+  // readonly", "ex super admin". The backend removed it and documented why;
+  // this copy kept it, which is what duplicated auth logic does.
+  if (has((x) => x === "super admin" || x.endsWith("/super admin")))
     return "super_admin";
   if (has((x) => x === "hiring manager" || x.endsWith("/hiring manager")))
     return "hiring_manager";
   if (has((x) => x === "interviewer" || x.endsWith("/interviewer")))
     return "interviewer";
+  if (has((x) => x === "client admin" || x.endsWith("/client admin")))
+    return "client_admin";
+  if (has((x) => x === "client reviewer" || x.endsWith("/client reviewer")))
+    return "client_reviewer";
 
   return null;
 }
