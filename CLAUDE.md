@@ -111,6 +111,38 @@ Asgardeo token (a B2B sub-organization). A token naming an organization with no
 
 The reasoning behind all of this is in `docs-draft/decisions/`.
 
+### Two hazards when changing the schema
+
+**Never let the snapshot learn about row-level security.** The Drizzle schema
+deliberately does not declare policies — every one of them lives in a
+hand-written migration, and `drizzle/meta/*_snapshot.json` records
+`isRLSEnabled: false` for all 37 tables. That mismatch is load-bearing, because
+it is what stops drizzle-kit having an opinion.
+
+If the snapshot ever records RLS as *enabled* — most easily by running
+`drizzle-kit pull` into `drizzle/`, but also by declaring policies in TypeScript
+— the next `generate` emits `ALTER TABLE ... DISABLE ROW LEVEL SECURITY` for
+every table. Applying that silently removes the entire tenancy boundary and
+every isolation test still passes, because the tests set an organization and the
+queries keep working; they just stop being filtered.
+
+Verified, not theorised: a pulled snapshot produced exactly that migration, 30-plus
+statements long. **Read any generated migration for `DISABLE ROW LEVEL SECURITY`
+before applying it.**
+
+**Some migrations must be hand-written.** `candidate_stage_history`,
+`candidate_custom_answers`, `candidate_custom_answer_selections`,
+`candidate_assessment_attempts`, `candidate_chat_messages` and `candidates`
+were changed by hand-written SQL, so the snapshot does not match them.
+`drizzle-kit generate` asks an interactive question about the
+`candidate_id → application_id` moves and cannot run unattended.
+
+Use `drizzle-kit generate --custom` and write the SQL, or answer the prompt in a
+real terminal with **"create column"**. Repairing the snapshot to end this is
+harder than it looks — splicing a pulled one in produces migrations that drop
+live constraints, because the names it reads from the database differ from the
+ones drizzle derives from TypeScript.
+
 ### Candidates are people; applications are submissions
 
 `candidates` is a person, once per organization. `applications` is one person's
