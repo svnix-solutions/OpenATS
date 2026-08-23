@@ -1,5 +1,8 @@
 import { Router } from "express";
-import { requireManager } from "../../middlewares/role.middleware";
+import {
+  denyClients,
+  requireManager,
+} from "../../middlewares/role.middleware";
 import { requireCandidateRead } from "../../middlewares/job-access.middleware";
 import { z } from "zod";
 import { rejectionService } from "./rejection.service";
@@ -139,7 +142,7 @@ router.get("/candidates/:id/rejections", requireCandidateRead("id"), async (req,
 });
 
 // POST /templates/:id/preview — preview a rendered template for a candidate
-router.post("/templates/:id/preview", async (req, res) => {
+router.post("/templates/:id/preview", denyClients, async (req, res) => {
   try {
     const templateId = parseInt((req.params.id ?? "").toString());
     const candidateId = req.body?.candidateId

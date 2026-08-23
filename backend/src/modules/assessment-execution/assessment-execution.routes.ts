@@ -13,9 +13,11 @@ import {
   requireCandidateRead,
 } from "../../middlewares/job-access.middleware";
 
+import { denyClients } from "../../middlewares/role.middleware";
+
 const router: Router = Router();
 
-router.post("/invite", inviteCandidateToAssessment);
+router.post("/invite", denyClients, inviteCandidateToAssessment);
 router.get(
   "/candidate/:candidateId",
   requireCandidateRead(),

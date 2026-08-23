@@ -10,8 +10,14 @@ import {
   updateCandidateBasicDetails,
 } from "./candidate.controller";
 
-import { requireManager } from "../../middlewares/role.middleware";
-import { requireCandidateRead } from "../../middlewares/job-access.middleware";
+import {
+  denyClients,
+  requireManager,
+} from "../../middlewares/role.middleware";
+import {
+  requireCandidateRead,
+  requireJobRead,
+} from "../../middlewares/job-access.middleware";
 
 const router: Router = Router();
 
@@ -23,7 +29,12 @@ const upload = multer({
   },
 });
 
-router.post("/jobs/:jobId/apply", applyForJob);
+router.post(
+  "/jobs/:jobId/apply",
+  denyClients,
+  requireJobRead("jobId"),
+  applyForJob,
+);
 
 router.get("/", getCandidates);
 router.get("/jobs/:jobId", getCandidates);
