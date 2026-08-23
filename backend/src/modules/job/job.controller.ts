@@ -4,6 +4,7 @@ import { jobService } from "./job.service";
 import { db } from "../../db";
 import { clientCompanies } from "../../db/schema/organizations";
 import { eq } from "drizzle-orm";
+import { listScopeFor } from "../../shared/auth/job-access";
 import { cleanObject as clean, asEnum } from "../../utils/object.utils";
 import logger from "../../utils/logger";
 import { getErrorCode, getErrorMessage} from "../../utils/error.utils";
@@ -172,7 +173,7 @@ export const listPublicClientCompanies = async (
 export const getAllJobs = async (req: Request, res: Response) => {
   try {
     const { page, limit, search, status, departmentId } = req.query;
-    const teamUserId = req.user.role === "interviewer" ? req.user.id : undefined;
+    const scope = listScopeFor(req.user);
 
     if (page !== undefined) {
       const result = await jobService.getPaginated({
@@ -181,7 +182,8 @@ export const getAllJobs = async (req: Request, res: Response) => {
         search: (search as string) || undefined,
         status: asEnum(status, jobs.status.enumValues),
         departmentId: departmentId ? parseInt(departmentId as string) : undefined,
-        userId: teamUserId,
+        userId: scope.teamUserId,
+        clientCompanyId: scope.clientCompanyId,
       });
       res.status(200).json({
         data: result.rows,
@@ -190,7 +192,7 @@ export const getAllJobs = async (req: Request, res: Response) => {
       return;
     }
 
-    const result = await jobService.getAll(teamUserId);
+    const result = await jobService.getAll(scope.teamUserId, scope.clientCompanyId);
     res.status(200).json({ data: result });
   } catch (error) {
     logger.error(`Failed to fetch all jobs: ${getErrorMessage(error)}`);

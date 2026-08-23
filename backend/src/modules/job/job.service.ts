@@ -20,6 +20,8 @@ export type JobListFilters = {
   status?: (typeof jobs.status.enumValues)[number];
   departmentId?: number;
   userId?: number;
+  /** Set for a client contact: their company's jobs only. */
+  clientCompanyId?: number;
 };
 
 export type CreateJobInput = {
@@ -112,9 +114,11 @@ export const jobService = {
     return rows;
   },
 
-  async getAll(userId?: number) {
+  async getAll(userId?: number, clientCompanyId?: number) {
     const teamFilter = userId
       ? inArray(jobs.id, db.select({ id: jobHiringTeam.jobId }).from(jobHiringTeam).where(eq(jobHiringTeam.userId, userId)))
+      : clientCompanyId
+        ? eq(jobs.clientCompanyId, clientCompanyId)
       : undefined;
     const allJobs = await db.select().from(jobs).where(teamFilter).orderBy(desc(jobs.createdAt));
 
@@ -137,13 +141,15 @@ export const jobService = {
   },
 
   async getPaginated(filters: JobListFilters = {}) {
-    const { page = 1, limit = 15, search, status, departmentId, userId } = filters;
+    const { page = 1, limit = 15, search, status, departmentId, userId, clientCompanyId } = filters;
     const offset = (page - 1) * limit;
 
     const conditions = [];
     if (search) conditions.push(ilike(jobs.title, `%${search}%`));
     if (status) conditions.push(eq(jobs.status, status));
     if (departmentId) conditions.push(eq(jobs.departmentId, departmentId));
+    if (clientCompanyId)
+      conditions.push(eq(jobs.clientCompanyId, clientCompanyId));
     if (userId) conditions.push(
       inArray(jobs.id, db.select({ id: jobHiringTeam.jobId }).from(jobHiringTeam).where(eq(jobHiringTeam.userId, userId)))
     );

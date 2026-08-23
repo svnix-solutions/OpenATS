@@ -12,7 +12,14 @@ import logger from "../../utils/logger";
 
 const JWKS = createRemoteJWKSet(new URL(process.env.ASGARDEO_JWKS_URL!));
 
-export type AppRole = "super_admin" | "hiring_manager" | "interviewer";
+export type AppRole =
+  | "super_admin"
+  | "hiring_manager"
+  | "interviewer"
+  // Client contacts. They belong to one client company and see only its
+  // work — see isClientScoped in shared/auth/job-access.ts.
+  | "client_admin"
+  | "client_reviewer";
 
 export type AuthenticatedUser = User & {
   role: AppRole;
@@ -91,6 +98,10 @@ export function mapToAppRole(names: string[]): AppRole | null {
     return "hiring_manager";
   if (has((n) => n === "interviewer" || n.endsWith("/interviewer")))
     return "interviewer";
+  if (has((n) => n === "client admin" || n.endsWith("/client admin")))
+    return "client_admin";
+  if (has((n) => n === "client reviewer" || n.endsWith("/client reviewer")))
+    return "client_reviewer";
 
   return null;
 }
