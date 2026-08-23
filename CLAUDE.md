@@ -111,6 +111,29 @@ Asgardeo token (a B2B sub-organization). A token naming an organization with no
 
 The reasoning behind all of this is in `docs-draft/decisions/`.
 
+### Candidates are people; applications are submissions
+
+`candidates` is a person, once per organization. `applications` is one person's
+submission to one job, and carries `status` and `current_stage_id`.
+
+**`:id` on every candidate route is an application id.** That is what the
+dashboard lists and links to, and what `canReadCandidate` and the socket rooms
+authorise. Ids are opaque to the frontend, so nothing in the UI says so.
+
+The two share a number space, which has produced five bugs — an id from one
+side is a valid, silently wrong id on the other. Which side a column takes:
+
+| Holds an application id | Holds a person id |
+| --- | --- |
+| `candidate_stage_history`, `candidate_custom_answers`, `candidate_custom_answer_selections`, `candidate_assessment_attempts`, `candidate_chat_messages` | `offers`, `candidate_interviews`, `candidate_cv_analysis`, `candidate_rejections`, `candidate_activities`, `email_messages` |
+
+The right-hand tables all carry `job_id` too, which is what identifies the
+submission — that is why they did not need repointing.
+
+When a parameter carries an application id, call it `applicationId`. The one
+place that still said `candidateId` was an offer being written against the
+wrong person, and renaming it is what surfaced that.
+
 ### Database
 
 - PostgreSQL via **Drizzle ORM**. Schema files live in `backend/src/db/schema/` (one file per domain + `relations.ts`).
