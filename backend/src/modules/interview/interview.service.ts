@@ -412,7 +412,20 @@ export const interviewService = {
     return feedback ?? null;
   },
 
-  async getFeedback(interviewId: number) {
+  /**
+   * Interview feedback on one interview.
+   *
+   * `authorId` narrows it to a single author, which is how a client contact
+   * sees only their own. Agency interviewers write candidly about someone the
+   * agency is putting forward, the same way they do in chat, and a client
+   * reaching this through their own company's interview would read all of it.
+   *
+   * 0001 §6 imagines a per-organization setting for whether clients see agency
+   * feedback. There is nothing to configure yet — no client can write feedback
+   * without a portal to write it in — so this is the fail-closed default
+   * rather than a setting nobody has asked for.
+   */
+  async getFeedback(interviewId: number, authorId?: number) {
     const rows = await db
       .select({
         id: interviewFeedback.id,
@@ -428,7 +441,14 @@ export const interviewService = {
       })
       .from(interviewFeedback)
       .leftJoin(users, eq(interviewFeedback.authorId, users.id))
-      .where(eq(interviewFeedback.interviewId, interviewId))
+      .where(
+        authorId
+          ? and(
+              eq(interviewFeedback.interviewId, interviewId),
+              eq(interviewFeedback.authorId, authorId),
+            )
+          : eq(interviewFeedback.interviewId, interviewId),
+      )
       .orderBy(desc(interviewFeedback.createdAt));
 
     return rows.map((r) => ({

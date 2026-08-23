@@ -103,7 +103,9 @@ Not part of the road to v1.0, but decided and written down so it is not invisibl
 | Jobs belong to a client company | [0001 §7](decisions/0001-multi-tenancy.md) | 🟢 Done |
 | Split candidates into a person and an application | [0003](decisions/0003-application-split-is-separable.md) | 🟢 Done |
 | Role read from `organization_members`, not the JWT | [0001 §6](decisions/0001-multi-tenancy.md) | 🔴 Planned |
-| Client portal: roles, scoping, redaction | [0001 §6](decisions/0001-multi-tenancy.md) | 🔴 Planned |
+| Client portal: roles and company scoping | [0001 §6](decisions/0001-multi-tenancy.md) | 🟢 Done |
+| Client portal: redaction of the agency's working view | [0001 §6](decisions/0001-multi-tenancy.md) | 🟢 Done |
+| Client portal: the client-facing UI | [0001 §6](decisions/0001-multi-tenancy.md) | 🔴 Planned |
 | Per-client careers pages | [0001 §7](decisions/0001-multi-tenancy.md) | 🟢 Done |
 | Per-agency email branding and sending domains | [0001 §7](decisions/0001-multi-tenancy.md) | 🔴 Planned |
 
