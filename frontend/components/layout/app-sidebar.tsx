@@ -18,6 +18,7 @@ import { usePathname } from "next/navigation";
 import { NavMain } from "@/components/layout/nav-main";
 import { Sidebar, SidebarContent } from "@/components/ui/sidebar";
 import { useCurrentUser } from "@/hooks/queries/use-user";
+import { isClientRole, isClientRoute } from "@/lib/roles";
 
 const navMainData = [
   {
@@ -93,12 +94,11 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   // A client contact is here to review candidates for their own roles. The
   // rest of the sidebar is agency tooling, and the endpoints behind it either
   // refuse them or return nothing.
-  const isClient = role === "client_admin" || role === "client_reviewer";
-  const clientNav = ["/jobs", "/candidates", "/interviews"];
+  const isClient = isClientRole(role);
 
   const items = navMainData
     .filter((item) => {
-      if (isClient) return clientNav.includes(item.url);
+      if (isClient) return isClientRoute(item.url);
       if (item.url === "/offers") return isManager;
       return true;
     })

@@ -42,6 +42,7 @@ import { EditCandidateDialog } from "./_components/dialogs/edit-candidate-dialog
 import { CandidateDeleteDialog } from "../_components/candidate-delete-dialog";
 import { RejectCandidateDialog } from "./_components/dialogs/reject-candidate-dialog";
 import { useIsManager } from "@/hooks/use-role";
+import { isClientRole } from "@/lib/roles";
 
 export default function CandidateDetailPage({
   params,
@@ -52,8 +53,7 @@ export default function CandidateDetailPage({
   const isManager = useIsManager();
   const { data: meData } = useCurrentUser();
   const clientRole = meData?.data?.role;
-  const isClient =
-    clientRole === "client_admin" || clientRole === "client_reviewer";
+  const isClient = isClientRole(clientRole);
   const queryClient = useQueryClient();
   const searchParams = useSearchParams();
   const fromParam = searchParams.get("from");
