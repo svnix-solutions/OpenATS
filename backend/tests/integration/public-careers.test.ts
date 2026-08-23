@@ -56,7 +56,7 @@ async function seedTenant(label: string) {
       .returning({ id: users.id });
     await db
       .insert(organizationMembers)
-      .values({ organizationId, userId: user!.id, role: "recruiter" });
+      .values({ organizationId, userId: user!.id, role: "hiring_manager" });
 
     await db.insert(jobs).values({
       slug: `role-${SUFFIX}`,

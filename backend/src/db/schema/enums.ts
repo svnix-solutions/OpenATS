@@ -102,9 +102,8 @@ export const meetingProvider = pgEnum("meeting_provider", ["google_meet"]);
 // are client contacts, confined to their own client company. `platform_admin`
 // is deliberately absent: it is not a membership, it is the absence of one.
 export const orgRole = pgEnum("org_role", [
-  "agency_owner",
-  "agency_admin",
-  "recruiter",
+  "super_admin",
+  "hiring_manager",
   "interviewer",
   "client_admin",
   "client_reviewer",
