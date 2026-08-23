@@ -57,11 +57,11 @@ export async function canAccessJob(
 // A candidate belongs to one job, so access follows that job.
 export async function canAccessCandidate(
   user: AuthenticatedUser,
-  candidateId: number,
+  applicationId: number,
 ): Promise<boolean> {
   if (user.role === "super_admin") return true;
 
-  const jobId = await jobIdForCandidate(candidateId);
+  const jobId = await jobIdForCandidate(applicationId);
   if (jobId === null) return false;
 
   return canAccessJob(user, jobId);
@@ -169,15 +169,11 @@ async function canReadVia(
   return isOnHiringTeam(user.id, jobId);
 }
 
-export async function canReadCandidate(
+export function canReadCandidate(
   user: AuthenticatedUser,
-  candidateId: number,
+  applicationId: number,
 ): Promise<boolean> {
-  if (!isTeamScoped(user)) return true;
-  const jobId = await jobIdForCandidate(candidateId);
-  if (jobId === null) return false;
-
-  return canAccessJob(user, jobId);
+  return canReadVia(user, () => jobIdForCandidate(applicationId));
 }
 
 export function canReadOffer(

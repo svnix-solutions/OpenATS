@@ -257,6 +257,21 @@ async function buildScenario(
     { jobId: jobB.id, userId: manager.id },
   ]);
 
+  // Advance the candidates sequence so person ids and application ids cannot
+  // line up. On a fresh database they do, and then a test that passes one
+  // where the other belongs succeeds by coincidence — which is how a real bug
+  // reached main. Cheap here, and it makes every id assertion in these suites
+  // mean something.
+  const [nudge] = await db
+    .insert(candidates)
+    .values({
+      firstName: "Sequence",
+      lastName: "Nudge",
+      email: `nudge.${suffix}@example.test`,
+    })
+    .returning({ id: candidates.id });
+  await db.delete(candidates).where(eq(candidates.id, nudge!.id));
+
   const insertedPeople = await db
     .insert(candidates)
     .values([

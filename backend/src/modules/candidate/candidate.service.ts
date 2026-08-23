@@ -504,7 +504,7 @@ export const candidateService = {
   },
 
   async moveStage(
-    candidateId: number,
+    applicationId: number,
     newStageId: number,
     movedBy: number | null = null,
   ): Promise<MoveStageResult> {
@@ -514,7 +514,7 @@ export const candidateService = {
       const [candidate] = await tx
         .select()
         .from(applications)
-        .where(eq(applications.id, candidateId));
+        .where(eq(applications.id, applicationId));
 
       // `candidateId` here is an application id — moving a stage moves one
       // submission, not the person, who may be at a different stage elsewhere.
@@ -551,13 +551,13 @@ export const candidateService = {
           status: nextStatus,
           updatedAt: new Date(),
         })
-        .where(eq(applications.id, candidateId))
+        .where(eq(applications.id, applicationId))
         .returning();
 
       if (!updated) throw new Error("Failed to update application");
 
       await tx.insert(candidateStageHistory).values({
-        applicationId: candidateId,
+        applicationId,
         stageId: newStageId,
         movedBy,
       });
@@ -582,7 +582,10 @@ export const candidateService = {
           const [createdOffer] = await tx
             .insert(offers)
             .values({
-              candidateId,
+              // Offers store the person; jobId says which submission. Passing
+              // the application id here attaches the offer to whichever
+              // person shares that number.
+              candidateId: candidate.candidateId,
               jobId: candidate.jobId,
               status: "draft",
               createdBy: movedBy,
@@ -592,7 +595,7 @@ export const candidateService = {
           if (createdOffer) {
             await candidateActivityService.create(
               {
-                candidateId,
+                candidateId: candidate.candidateId,
                 jobId: candidate.jobId,
                 offerId: createdOffer.id,
                 actorId: movedBy,
@@ -618,7 +621,7 @@ export const candidateService = {
       if (attachment) {
         const { didSendInvite } =
           await assessmentExecutionService.inviteCandidate(
-            candidateId,
+            applicationId,
             attachment.assessmentId,
           );
         stageAutomation.assessmentInvite = didSendInvite
@@ -631,7 +634,7 @@ export const candidateService = {
   },
 
   async rejectCandidate(
-    candidateId: number,
+    applicationId: number,
     input: {
       reason?: string | null;
       templateId?: number | null;
@@ -642,7 +645,7 @@ export const candidateService = {
     const [candidate] = await db
       .select()
       .from(applications)
-      .where(eq(applications.id, candidateId));
+      .where(eq(applications.id, applicationId));
 
     if (!candidate) throw new Error("Application not found");
 

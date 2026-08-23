@@ -9,6 +9,8 @@ import {
 } from "../helpers/scenario";
 import { applications } from "../../src/db/schema/candidates";
 import { candidateChatMessages } from "../../src/db/schema/communications";
+import { offers } from "../../src/db/schema/offers";
+import { candidateService } from "../../src/modules/candidate/candidate.service";
 
 // `applications` is populated and constrained but not yet read — the service
 // rewrite that moves status and current_stage_id off `candidates` is a
@@ -115,5 +117,30 @@ describe("applications", () => {
       .where(eq(candidateChatMessages.applicationId, s.candidateA1));
 
     expect(onOwn.map((m) => m.message)).toEqual(["about this submission"]);
+  });
+
+  itInOrg("auto-creates an offer against the person, not the submission", async () => {
+    // Moving into an offer stage creates a draft offer. `offers.candidate_id`
+    // references a person, and application ids share a number space with
+    // them — so passing the wrong one attaches the offer to an unrelated
+    // candidate with a valid foreign key and no error.
+    //
+    // core-flows cannot cover this: it creates an offer by hand before
+    // reaching the offer stage, so the auto-create branch never runs there.
+    // candidateA2 has no offer yet — the fixture's offer is for personA1, and
+    // the existing-offer check is per person and job, so this one auto-creates.
+    const offerStageId = s.jobA.stageIds[2]!;
+    await candidateService.moveStage(s.candidateA2, offerStageId, s.admin.id);
+
+    const [created] = await db
+      .select()
+      .from(offers)
+      .where(
+        and(eq(offers.jobId, s.jobA.id), eq(offers.candidateId, s.personA2)),
+      );
+
+    expect(created).toBeDefined();
+    // Guard: a coincidence between the two id spaces would make this vacuous.
+    expect(s.personA2).not.toBe(s.candidateA2);
   });
 });
