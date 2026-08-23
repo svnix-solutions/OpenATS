@@ -10,6 +10,10 @@ function getRoleId(role: string): string | null {
       return process.env.ASGARDEO_HIRING_MANAGER_ROLE_ID!;
     case "interviewer":
       return process.env.ASGARDEO_INTERVIEWER_ROLE_ID!;
+    case "client_admin":
+      return process.env.ASGARDEO_CLIENT_ADMIN_ROLE_ID!;
+    case "client_reviewer":
+      return process.env.ASGARDEO_CLIENT_REVIEWER_ROLE_ID!;
     default:
       console.warn(
         `${ROLES_LOG} unknown role "${role}" — skipping role operation`,

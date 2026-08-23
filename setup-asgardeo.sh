@@ -23,9 +23,19 @@
 #   Or non-interactively:
 #   ASGARDEO_ORG=myorg SETUP_CLIENT_ID=xxx SETUP_CLIENT_SECRET=yyy ./setup-asgardeo.sh
 #
+#   Provision a tenant (one recruiting agency) as a B2B sub-organization:
+#   CREATE_SUB_ORG="Acme Recruiting" ./setup-asgardeo.sh
+#
+#   That step is opt-in. Without it the script behaves exactly as before and
+#   configures the root organization only, which is what a single-tenant
+#   install wants. It needs the Organization Management API authorized on the
+#   M2M application in addition to the APIs listed above.
+#
 # Note on API paths: this configures the ROOT organization, so all paths are
-# /api/server/v1/... and /scim2/... The /o/ prefixed variants are only for B2B
-# sub-organizations, which does not use in this script.
+# /api/server/v1/... and /scim2/... The /o/ prefixed variants address a
+# specific sub-organization and are still not used here — creating one is a
+# root-level call, and everything inside it is managed by the application
+# rather than by this script.
 
 set -uo pipefail
 
@@ -552,7 +562,12 @@ SUPER_ADMIN_ROLE_ID=""
 HIRING_MANAGER_ROLE_ID=""
 INTERVIEWER_ROLE_ID=""
 
-for ROLE_NAME in "Super Admin" "Hiring Manager" "Interviewer"; do
+# The last two are client contacts — people at a company the agency recruits
+# for. They are only useful on an install that has client companies, but
+# creating them costs nothing and a role that does not exist cannot be
+# assigned, which is a confusing way to discover the gap.
+for ROLE_NAME in "Super Admin" "Hiring Manager" "Interviewer" \
+                 "Client Admin" "Client Reviewer"; do
   ROLE_ID=""
 
   ENCODED_FILTER=$(printf 'displayName eq "%s" and audience.value eq "%s"' "$ROLE_NAME" "$APP_ID" \
@@ -585,6 +600,8 @@ for ROLE_NAME in "Super Admin" "Hiring Manager" "Interviewer"; do
     "Super Admin")    SUPER_ADMIN_ROLE_ID="$ROLE_ID" ;;
     "Hiring Manager")  HIRING_MANAGER_ROLE_ID="$ROLE_ID" ;;
     "Interviewer")     INTERVIEWER_ROLE_ID="$ROLE_ID" ;;
+    "Client Admin")    CLIENT_ADMIN_ROLE_ID="$ROLE_ID" ;;
+    "Client Reviewer") CLIENT_REVIEWER_ROLE_ID="$ROLE_ID" ;;
   esac
 done
 
@@ -735,6 +752,62 @@ if [ -z "$CLIENT_SECRET" ]; then
   warn "manually in the console under Protocol > Client secret, then paste it in below."
 fi
 
+# ─── Optional: provision a tenant as a B2B sub-organization ────────────────
+#
+# OpenATS resolves which tenant a person belongs to from the org_id claim on
+# their token, and refuses a token naming a sub-organization it has no row for.
+# So the two halves have to be created together: the sub-organization here, and
+# the matching `organizations` row in the database. This step prints the exact
+# SQL for the second half rather than leaving you to find the id in the console.
+
+SUB_ORG_ID=""
+
+if [ -n "${CREATE_SUB_ORG:-}" ]; then
+  step "Creating sub-organization '${CREATE_SUB_ORG}'"
+
+  # Reuse it if a previous run already made one by this name, so re-running the
+  # script is not destructive.
+  if api_call GET "${BASE_URL}/api/server/v1/organizations?filter=name+eq+${CREATE_SUB_ORG// /%20}"; then
+    SUB_ORG_ID=$(echo "$HTTP_BODY" | jq -r '.organizations[0].id // empty')
+  fi
+
+  if [ -n "$SUB_ORG_ID" ]; then
+    ok "Sub-organization already exists (${SUB_ORG_ID})"
+  else
+    CREATE_ORG_PAYLOAD=$(jq -n --arg name "$CREATE_SUB_ORG" '{
+      name: $name,
+      description: "OpenATS tenant",
+      type: "TENANT"
+    }')
+
+    if api_call POST "${BASE_URL}/api/server/v1/organizations" "$CREATE_ORG_PAYLOAD"; then
+      SUB_ORG_ID=$(echo "$HTTP_BODY" | jq -r '.id // empty')
+      [ -n "$SUB_ORG_ID" ] && ok "Created (${SUB_ORG_ID})"
+    fi
+
+    if [ -z "$SUB_ORG_ID" ]; then
+      show_error "Creating sub-organization"
+      warn "Most often this means the Organization Management API is not"
+      warn "authorized on your M2M app. Add it under API Authorization, then"
+      warn "re-run with the same CREATE_SUB_ORG value."
+    fi
+  fi
+
+  # Users in a sub-organization can only sign in to an application that has
+  # been shared with it. Without this the tenant exists and nobody can reach it.
+  if [ -n "$SUB_ORG_ID" ]; then
+    step "Sharing '${APP_NAME}' with sub-organizations"
+    SHARE_PAYLOAD='{"shareWithAllChildren": true}'
+    if api_call POST "${BASE_URL}/api/server/v1/applications/${APP_ID}/share" "$SHARE_PAYLOAD"; then
+      ok "Application shared"
+    else
+      warn "Could not share the application automatically."
+      warn "Do it in the console: Applications > ${APP_NAME} > Shared access."
+      warn "Until then, users in '${CREATE_SUB_ORG}' cannot sign in."
+    fi
+  fi
+fi
+
 echo ""
 echo "──────────────────────────────────────────────────────────"
 echo "📄 frontend/.env"
@@ -758,6 +831,8 @@ echo ""
 echo "ASGARDEO_SUPER_ADMIN_ROLE_ID=\"${SUPER_ADMIN_ROLE_ID}\""
 echo "ASGARDEO_HIRING_MANAGER_ROLE_ID=\"${HIRING_MANAGER_ROLE_ID}\""
 echo "ASGARDEO_INTERVIEWER_ROLE_ID=\"${INTERVIEWER_ROLE_ID}\""
+echo "ASGARDEO_CLIENT_ADMIN_ROLE_ID=\"${CLIENT_ADMIN_ROLE_ID}\""
+echo "ASGARDEO_CLIENT_REVIEWER_ROLE_ID=\"${CLIENT_REVIEWER_ROLE_ID}\""
 echo ""
 echo "──────────────────────────────────────────────────────────"
 echo "📄 backend/.env"
@@ -766,8 +841,22 @@ echo "ASGARDEO_JWKS_URL=${JWKS_URI}"
 echo "ASGARDEO_ISSUER=${ISSUER}"
 echo "──────────────────────────────────────────────────────────"
 
+if [ -n "$SUB_ORG_ID" ]; then
+  echo ""
+  echo "──────────────────────────────────────────────────────────"
+  echo "🗄️  Database — create the matching tenant"
+  echo "──────────────────────────────────────────────────────────"
+  echo "# Run against your OpenATS database. Without this row, tokens from"
+  echo "# '${CREATE_SUB_ORG}' are refused: OpenATS will not invent a tenant"
+  echo "# on the strength of a claim."
+  echo "INSERT INTO organizations (name, slug, asgardeo_org_id)"
+  echo "VALUES ('${CREATE_SUB_ORG}', '<slug>', '${SUB_ORG_ID}');"
+  echo "──────────────────────────────────────────────────────────"
+fi
+
 echo ""
 echo "🎉 DONE"
 echo "   App id:   ${APP_ID}"
 echo "   Console:  https://console.asgardeo.io/t/${ASGARDEO_ORG}/develop/applications/${APP_ID}"
 [ -n "$TEST_EMAIL" ] && echo "   Login as: ${CREATED_USERNAME:-$TEST_EMAIL} (Super Admin)"
+[ -n "$SUB_ORG_ID" ] && echo "   Tenant:   ${CREATE_SUB_ORG} (${SUB_ORG_ID})"

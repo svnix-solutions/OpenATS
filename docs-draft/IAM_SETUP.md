@@ -71,11 +71,20 @@ Add these to `NEXT_PUBLIC_ASGARDEO_SCOPES` in your `frontend/.env`, alongside `o
 
 ## 7. Create application roles
 
-Open the **Roles** tab. With **Role Audience** set to `Application`, click **New Role** and create these three roles, with the exact names:
+Open the **Roles** tab. With **Role Audience** set to `Application`, click **New Role** and create these roles, with the exact names:
 
 - `Super Admin`
 - `Hiring Manager`
 - `Interviewer`
+
+Multi-tenant installs need two more, for contacts at the client companies an
+agency recruits for:
+
+- `Client Admin`
+- `Client Reviewer`
+
+They cost nothing on a single-company install, where nothing will assign them.
+`setup-asgardeo.sh` creates all five.
 
 ## 8. Enable App-Native Authentication
 
@@ -97,3 +106,46 @@ To develop and debug the app locally, you need at least one user assigned the `S
 3. Go to its **Users** tab and assign the user you just created.
 
 That's it 🎉 Authentication should now work - go ahead and try out the application locally.
+
+## 11. Multi-tenant only: provision an agency as a sub-organization
+
+Skip this if you are running OpenATS for a single company. Everything above is
+all a single-tenant install needs, and nothing here changes it.
+
+OpenATS decides which tenant a person belongs to from the `org_id` claim on
+their access token, which Asgardeo sets for tokens issued by a **B2B
+sub-organization**. One sub-organization corresponds to one recruiting agency.
+
+`setup-asgardeo.sh` can create one for you:
+
+```bash
+CREATE_SUB_ORG="Acme Recruiting" ./setup-asgardeo.sh
+```
+
+This needs the **Organization Management API** authorized on your M2M
+application, in addition to the APIs listed in the prerequisites. The script
+creates the sub-organization and shares the OpenATS application with it —
+without that share, the tenant exists and nobody in it can sign in.
+
+It then prints the SQL for the other half:
+
+```sql
+INSERT INTO organizations (name, slug, asgardeo_org_id)
+VALUES ('Acme Recruiting', 'acme', '<the id the script printed>');
+```
+
+Both halves are required. A token naming a sub-organization that has no
+`organizations` row is **refused**, deliberately: a sub-organization the
+database has never heard of means someone provisioned a tenant in the identity
+provider and not here, and creating one on the strength of a claim is how a
+person ends up inside another tenant's data.
+
+Users created inside the sub-organization get their roles there, not in the
+root organization. The application roles from step 7 need to exist in each
+sub-organization that uses them.
+
+`setup-asgardeo.sh` creates the roles in whichever organization it is pointed
+at, which is the root one. It does **not** create them inside a
+sub-organization it has just made, so a new agency needs its roles adding
+before anyone there can sign in. Once per agency, by hand, is fine; automating
+it belongs with the rest of agency signup rather than here.
