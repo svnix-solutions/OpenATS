@@ -53,7 +53,8 @@ describe("tagOrganization", () => {
     const { tagOrganization } = await import("../../src/config/sentry");
 
     // Startup, the pool, shutdown. Inventing a tenant would be worse.
-    expect(tagOrganization({}).tags).toBeUndefined();
+    const event: { tags?: Record<string, unknown> } = {};
+    expect(tagOrganization(event).tags).toBeUndefined();
   });
 
   it("keeps tags already on the event", async () => {
