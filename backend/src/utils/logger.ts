@@ -1,4 +1,5 @@
 import winston from "winston";
+import { currentOrganizationId } from "../db/org-context";
 
 /**
  * Extra arguments (`logger.error("msg:", err)`) arrive as winston "splat"
@@ -25,6 +26,10 @@ function renderValue(value: unknown): string {
 /** One line of JSON per event, for a log shipper to parse. */
 const json = winston.format.printf((info) => {
   const extra = splatOf(info);
+  // Which tenant a line came from. Row-level security keeps their data apart;
+  // it does nothing for logs, and "a user reports an error" starts with
+  // knowing whose. Null outside a request — startup, the pool, shutdown.
+  const organizationId = currentOrganizationId();
 
   // An Error among the extras is the reason most of these lines exist, so it
   // gets named fields rather than being flattened into the message.
@@ -35,6 +40,7 @@ const json = winston.format.printf((info) => {
     timestamp: info.timestamp,
     level: info.level,
     message: String(info.message),
+    ...(organizationId !== null && { organizationId }),
     ...(error && {
       error: { name: error.name, message: error.message, stack: error.stack },
     }),
@@ -46,7 +52,9 @@ const json = winston.format.printf((info) => {
 const pretty = winston.format.printf((info) => {
   const extra = splatOf(info);
   const suffix = extra.length ? " " + extra.map(renderValue).join(" ") : "";
-  return `[${info.timestamp}] ${info.level.toUpperCase()}: ${info.message}${suffix}`;
+  const organizationId = currentOrganizationId();
+  const org = organizationId === null ? "" : ` [org ${organizationId}]`;
+  return `[${info.timestamp}] ${info.level.toUpperCase()}:${org} ${info.message}${suffix}`;
 });
 
 // Console only, on purpose. pm2 already writes stdout and stderr to files and

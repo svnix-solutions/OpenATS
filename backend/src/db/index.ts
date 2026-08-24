@@ -1,9 +1,9 @@
 import "dotenv/config";
-import { AsyncLocalStorage } from "node:async_hooks";
 import { Pool } from "pg";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { sql } from "drizzle-orm";
 import * as schema from "./schema";
+import { orgContext } from "./org-context";
 import logger from "../utils/logger";
 
 const pool = new Pool({
@@ -25,20 +25,6 @@ type Db = typeof rootDb;
 // which nothing in the app touches.
 type ScopedDb = Omit<Db, "$client">;
 
-/**
- * The connection the current request is bound to, if any.
- *
- * Row-level security reads the organization from a session setting, so every
- * query a request makes has to land on the connection carrying it. Holding one
- * here means services keep importing `db` and never thread it through.
- */
-interface RequestContext {
-  /** Bound to one connection, which is the one carrying the org setting. */
-  scoped: ScopedDb;
-  organizationId: number;
-}
-
-const orgContext = new AsyncLocalStorage<RequestContext>();
 
 /**
  * The database handle every module imports.
@@ -51,7 +37,10 @@ const orgContext = new AsyncLocalStorage<RequestContext>();
  */
 export const db = new Proxy(rootDb, {
   get(target, property, receiver) {
-    const active: ScopedDb = orgContext.getStore()?.scoped ?? target;
+    // The store types `scoped` loosely so that org-context.ts can stay free
+    // of db imports; this is the one place that knows what it really is.
+    const active: ScopedDb =
+      (orgContext.getStore()?.scoped as ScopedDb | undefined) ?? target;
     const value = Reflect.get(active, property, receiver);
     return typeof value === "function" ? value.bind(active) : value;
   },
@@ -131,18 +120,11 @@ export async function resolveMembership(asgardeoUserId: string): Promise<{
   };
 }
 
-/**
- * The organization the current request is acting for, or null outside one.
- *
- * Anything that keys a cache, a file path or a queue job needs this: row-level
- * security scopes the *rows*, and cannot help with state the application keeps
- * beside them.
- */
-export function currentOrganizationId(): number | null {
-  return orgContext.getStore()?.organizationId ?? null;
-}
-
 /** Escape hatch for migrations, seeding and tests. Bypasses the proxy. */
 export const unscopedDb = rootDb;
+
+// Re-exported so the many modules importing it from here keep working; it
+// lives in org-context.ts to keep the logger able to read it.
+export { currentOrganizationId } from "./org-context";
 
 export * from "./schema";

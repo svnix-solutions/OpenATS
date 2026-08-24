@@ -69,7 +69,13 @@ without thinking about tenancy is not wrong — it simply returns nothing.
   because `current_setting(..., true)` returns `''`, not `NULL`, once the
   setting has been used in a session, and `''::int` raises.
 
-**Establishing the context.** `runInOrganization(orgId, fn)` in
+**Establishing the context.** The `AsyncLocalStorage` itself lives in
+`db/org-context.ts`, which imports nothing but Node — `db/index.ts` imports the
+logger, so anything the logger needs to read (it stamps every line with the
+organization) cannot live in `db/index.ts`. `currentOrganizationId` is
+re-exported from `db/index.ts`, so existing imports are unaffected.
+
+`runInOrganization(orgId, fn)` in
 `db/index.ts` checks out a connection, sets `app.org_id` on it, and puts it in
 `AsyncLocalStorage`. The exported `db` is a proxy that resolves to that
 connection, so services keep importing `db` and never thread anything through.
