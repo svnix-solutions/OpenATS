@@ -8,6 +8,7 @@ import oauthRouter from "./modules/integrations/oauth.routes";
 import { errorMiddleware } from "./middlewares/error.middleware";
 import { swaggerUi, swaggerDocument } from "./config/swagger";
 import { authMiddleware } from "./middlewares/auth.middleware";
+import { Sentry } from "./config/sentry";
 import { apiLimiter } from "./middlewares/rate-limit.middleware";
 import { pageSettingsService } from "./modules/settings/page-settings.service";
 import { sql } from "drizzle-orm";
@@ -105,6 +106,12 @@ app.use("/oauth", oauthRouter);
 app.use("/api", authMiddleware, apiLimiter, router);
 
 app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerDocument));
+
+// Before errorMiddleware, which ends the request: Sentry's handler passes the
+// error along, but only sees what reaches it first.
+if (process.env.SENTRY_DSN) {
+  Sentry.setupExpressErrorHandler(app);
+}
 
 app.use(errorMiddleware);
 
