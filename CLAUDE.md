@@ -99,15 +99,30 @@ forgotten, and the connection it writes was silently refused for it:
 | CV analysis worker | `organizationId` carried on the BullMQ job |
 | Google OAuth callback | `organizationId` carried in the signed `state` |
 
-**The deliberate holes.** Six `SECURITY DEFINER` functions run outside the
+**The deliberate holes.** Seven `SECURITY DEFINER` functions run outside the
 boundary because they answer "which tenant is this" before one is known:
 `app_provision_user`, `app_resolve_membership`,
 `app_attach_membership_by_asgardeo_org`, `app_attach_default_membership`,
 `app_resolve_org_by_client_slug`, and `app_resolve_public_org`. Each takes an
 identifier and returns ids — never a row of tenant data, which is the rule that
 keeps them from becoming a way around the boundary. `EXECUTE` is revoked from
-`PUBLIC` on all six; only the owner and `openats_app` may call them. Do not add
-a seventh without a good reason.
+`PUBLIC` on all seven; only the owner and `openats_app` may call them.
+
+The seventh, `app_allowed_origins`, is the exception to the shape and worth
+understanding before it is copied. CORS answers before routing, so it cannot
+know the tenant and an `Origin` header does not name one; through the policy
+the lookup returned nothing and every configured origin was refused. It returns
+origins and nothing else — never which organization configured them — and CORS
+is not the authorization boundary anyway. It must never gain a way to ask
+"which organization owns this origin". See `drizzle/0044`.
+
+**Origin checks on `/public/*` are a different thing** and must stay
+policy-filtered: `checkOrigins` is mounted *after* `withPublicOrganization` on
+every route so it reads that organization's own list. Mounted before it, it
+sees an empty list, treats that as "not configured", and waves everything
+through — which is how it was, silently, until an audit went looking.
+
+Do not add an eighth without a good reason.
 
 The count was wrong here until an audit checked the catalog rather than this
 file: two were added without updating it. `psql -c "\df app_*"` is the
