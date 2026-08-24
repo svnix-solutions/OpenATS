@@ -78,7 +78,7 @@ The "do it properly" phase. None of this is urgent, all of it is what separates 
 | Error tracking | Sentry on both the backend and the worker, off unless `SENTRY_DSN` is set. Events carry the `organizationId`; PII is deliberately not sent. | 🟢 Done |
 | Structured logging | One JSON object per line when `NODE_ENV=production`, readable otherwise; errors keep their stack in a named field, and every line carries the `organizationId` it came from. Console only — pm2 already writes and rotates stdout. | 🟢 Done |
 | Security review | Before telling anyone to run this with real candidate data. | 🔴 Planned |
-| Complete documentation | Deployment guide, configuration reference, upgrade guide. | 🔴 Planned |
+| Complete documentation | [DEPLOYMENT.md](DEPLOYMENT.md), [CONFIGURATION.md](CONFIGURATION.md), [UPGRADING.md](UPGRADING.md). Writing them found five frontend and one backend env var read by code but absent from `.env.example`. | 🟢 Done |
 
 ---
 

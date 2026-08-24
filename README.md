@@ -167,12 +167,38 @@ Each package reads its own `.env` - there's no shared root env file.
 | `NEXT_PUBLIC_ASGARDEO_*` / `ASGARDEO_*`   | Sign-in against the same Asgardeo application as the backend   |
 | `OPENATS_API_URL` / `NEXT_PUBLIC_API_URL` | Where the backend is reachable from the server and the browser |
 
+Optional too: `MIGRATION_DATABASE_URL` (the owner role, read only by drizzle-kit),
+`LOG_LEVEL`, `SENTRY_DSN` and friends, `RATE_LIMIT_*`, and the Google Meet OAuth
+credentials.
+
 Startup fails fast with a clear message if a required backend variable is missing,
-rather than crashing later on the first request that needs it.
+rather than crashing later on the first request that needs it. Optional variables
+are not validated, so a typo in one is silent.
+
+**[docs-draft/CONFIGURATION.md](./docs-draft/CONFIGURATION.md) is the complete
+reference** — every variable both packages read, which are required, and what
+the defaults are.
 
 ## Deploying
 
-TODO
+See **[docs-draft/DEPLOYMENT.md](./docs-draft/DEPLOYMENT.md)** for the full
+guide, and **[docs-draft/UPGRADING.md](./docs-draft/UPGRADING.md)** for moving
+an existing install forward.
+
+In short: pushing to `main` deploys the backend to an Azure VM, but only if the
+test suite passes. CI builds `backend/dist` and ships that exact tarball — the
+VM does not compile, because compiling there produced an artifact from whatever
+toolchain that box happened to have rather than the one CI tested.
+
+The frontend is a standard Next.js app and is not deployed by that workflow.
+
+Two things that bite on a first deploy:
+
+- `DATABASE_URL` must be the least-privileged `openats_app` role. Owners and
+  superusers **bypass row-level security**, so pointing it at the owner turns
+  multi-tenancy off silently — every query still works and nothing is filtered.
+- `ecosystem.config.js` is not in this repository. It lives on the VM, and the
+  deploy restarts pm2 against it.
 
 ## Contributing
 
