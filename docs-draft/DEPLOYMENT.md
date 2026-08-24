@@ -123,18 +123,42 @@ line.
 
 ## Rolling back
 
-**There is no rollback mechanism.** The way back from a bad deploy is another
-deploy — revert the commit on `main` and let the workflow run.
+Every deploy keeps its build tarball on the VM, in `~/releases`, named by
+commit. Going back is unpacking one that is already there — no CI run, no
+rebuild, no network:
 
-Two things to know when you do:
+```bash
+./scripts/rollback.sh              # list what is available, marking the current one
+./scripts/rollback.sh previous     # the one before the current
+./scripts/rollback.sh <commit>     # a specific build
+```
 
-- **Migrations do not roll back.** drizzle-kit only rolls forward. Reverting
-  code does not revert a schema change, and old code against a new schema may
-  or may not work depending on the change.
-- Reverting is a normal push, so it runs the full test suite first, which
-  costs a few minutes when you are in a hurry.
+It unpacks to a temporary directory and checks the build before touching what
+is running, so a truncated archive fails without taking the working build with
+it. Then it restarts pm2, re-stamps `SENTRY_RELEASE` so errors are attributed
+to what is actually running, and fails if `/health` does not come back.
 
----
+The last **5** releases are kept. Older ones are pruned on each deploy.
+
+### It rolls back code, not the database
+
+Migrations only roll forward. Nothing here undoes one, and reverting the code
+does not revert the schema.
+
+- Going back **past an additive migration** — a new nullable column, a new
+  table — is safe. The old code ignores what it does not know about.
+- Going back **past a destructive one** — a rename, a drop, a narrowed
+  constraint — is not. The old code expects something that no longer exists.
+  Restore the backup instead.
+
+The script cannot tell these apart, which is why it does not try to. Check what
+the bad deploy migrated before rolling back past it.
+
+### When to revert instead
+
+Rolling back is for getting production working now. It leaves `main` still
+containing the bad commit, so the next deploy ships it again. Follow a rollback
+with a revert.
 
 ## Logs and errors
 

@@ -38,8 +38,12 @@ Practically:
 - After a failed deploy, the database is on the new schema and the process is
   on the old code. Whether that works depends entirely on the change. Adding a
   nullable column is harmless; renaming or dropping one is not.
-- Rolling back means reverting the commit and deploying forward, and living
-  with the schema as it is.
+- `scripts/rollback.sh` puts the previous build back in seconds without a CI
+  run, but it rolls back **code only** — see
+  [DEPLOYMENT.md](./DEPLOYMENT.md). Past an additive migration that is safe;
+  past a destructive one it is not.
+- Rolling back leaves `main` still containing the bad commit, so follow it with
+  a revert or the next deploy ships it again.
 
 ---
 

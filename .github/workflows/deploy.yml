@@ -93,12 +93,24 @@ jobs:
             # replacement is on the box.
             rm -rf backend/dist
             tar -xzf /tmp/backend-dist.tar.gz -C backend
-            rm -f /tmp/backend-dist.tar.gz
 
             # Guard against deploying a tarball that unpacked to nothing: the
             # health check below would otherwise be the first thing to notice,
             # after pm2 had already been restarted onto it.
             test -f backend/dist/src/server.js
+
+            # Archived only once the build is known to be usable, so a bad
+            # tarball never becomes something rollback.sh offers to go back to.
+            # Rolling back is then unpacking one already on this machine — no
+            # CI run, no rebuild. Named by commit, which SENTRY_RELEASE
+            # already carries.
+            mkdir -p "$HOME/releases"
+            mv /tmp/backend-dist.tar.gz "$HOME/releases/$SENTRY_RELEASE.tar.gz"
+            echo "$SENTRY_RELEASE" > .current-release
+
+            # Keep the last 5: enough to get back past a bad run of deploys,
+            # small enough not to fill the disk quietly.
+            ls -t "$HOME"/releases/*.tar.gz 2>/dev/null | tail -n +6 | xargs -r rm -f
 
             pnpm --filter ./backend exec drizzle-kit migrate
 
