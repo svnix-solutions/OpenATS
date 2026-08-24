@@ -72,7 +72,7 @@ The "do it properly" phase. None of this is urgent, all of it is what separates 
 
 | Item | Why it matters | Status |
 | --- | --- | --- |
-| Build artifacts in CI | Compiling TypeScript on the production VM is how the current drift happened. Build once in CI, ship the result. | 🔴 Planned |
+| Build artifacts in CI | CI builds `backend/dist`, uploads it, and the deploy unpacks that exact tarball on the VM. Unverified end to end: this fork has no `SSH_HOST`. | 🟡 In progress |
 | Rollback mechanism | There is no way back from a bad deploy except another deploy. | 🔴 Planned |
 | Staging environment | Every change currently goes straight to production. | 🔴 Planned |
 | Error tracking | Console-only logging means a user-reported error cannot be investigated. | 🔴 Planned |
