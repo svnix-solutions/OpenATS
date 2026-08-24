@@ -224,7 +224,7 @@ See `docs-draft/TESTING.md` for the full guide. In short:
 
 Two separate `.env` files are required (copy from `.env.example` in each directory):
 
-- `backend/.env` — `DATABASE_URL` (the least-privileged `openats_app` role), `MIGRATION_DATABASE_URL` (the owner, read only by drizzle-kit), `REDIS_URL`, `R2_*`, `RESEND_*`, `ASGARDEO_*`, `GEMINI_API_KEY`, `GOOGLE_SERVICE_ACCOUNT_JSON`, `GOOGLE_CALENDAR_ID`
+- `backend/.env` — `DATABASE_URL` (the least-privileged `openats_app` role), `MIGRATION_DATABASE_URL` (the owner, read only by drizzle-kit), `REDIS_URL`, `R2_*`, `RESEND_*`, `ASGARDEO_*`, `GEMINI_API_KEY`, `GOOGLE_SERVICE_ACCOUNT_JSON`, `GOOGLE_CALENDAR_ID`, and optionally `SENTRY_DSN` (error tracking is off without it, which is what development and CI want) and `LOG_LEVEL`
 - `frontend/.env` — `NEXT_PUBLIC_ASGARDEO_*`, `ASGARDEO_*`, `OPENATS_API_URL`, `NEXT_PUBLIC_API_URL`
 
 ## CI/CD

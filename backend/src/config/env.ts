@@ -22,6 +22,10 @@ const envSchema = z.object({
   GEMINI_API_KEY: z.string().min(1, "GEMINI_API_KEY is required"),
 
   PORT: z.coerce.number().int().positive().default(8080),
+
+  // Optional on purpose: without it error tracking is simply off, which is
+  // what development, CI and the test suite want. Required nowhere.
+  SENTRY_DSN: z.string().url("SENTRY_DSN must be a valid URL").optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;

@@ -8,6 +8,7 @@ import { runInOrganization } from "../../db";
 import { cvAnalysisService } from "../../modules/candidate/cv-analysis.service";
 import { publishCvAnalysisEvent } from "./events";
 import logger from "../../utils/logger";
+import { captureError } from "../../config/sentry";
 
 export function startCvAnalysisWorker(): Worker<CvAnalysisJobData> {
   const worker = new Worker<CvAnalysisJobData>(
@@ -47,6 +48,16 @@ export function startCvAnalysisWorker(): Worker<CvAnalysisJobData> {
     const exhausted = job.attemptsMade >= maxAttempts;
 
     if (exhausted) {
+      // Only once retries are done, so a transient failure that later
+      // succeeds does not raise an alert nobody needs to act on.
+      captureError(err, {
+        queue: "cv-analysis",
+        candidateId: job.data.candidateId,
+        jobId: job.data.jobId,
+        organizationId: job.data.organizationId,
+        attempts: job.attemptsMade,
+      });
+
       await runInOrganization(job.data.organizationId, () =>
         cvAnalysisService.markFailed(job.data.candidateId, err.message),
       );
@@ -58,8 +69,11 @@ export function startCvAnalysisWorker(): Worker<CvAnalysisJobData> {
     }
   });
 
+  // Not a job failing but the worker itself — a lost Redis connection, a
+  // handler that threw outside a job. Nothing retries these.
   worker.on("error", (err) => {
     logger.error(`[worker] worker error: ${err.message}`);
+    captureError(err, { queue: "cv-analysis", scope: "worker" });
   });
 
   return worker;
