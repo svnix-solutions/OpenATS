@@ -61,11 +61,18 @@ jobs:
           target: /tmp
 
       - name: Migrate and restart
+        env:
+          SENTRY_RELEASE: ${{ github.sha }}
         uses: appleboy/ssh-action@v1.2.2
         with:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
+          # Ties a Sentry error to the commit that shipped it. Passed in
+          # rather than read on the VM: the checkout there is a reset to
+          # origin/main, so its HEAD is whatever main points at by the time
+          # the deploy runs, not necessarily the commit that was built.
+          envs: SENTRY_RELEASE
           script: |
             set -e
 
@@ -95,6 +102,10 @@ jobs:
 
             pnpm --filter ./backend exec drizzle-kit migrate
 
+            # --update-env is what carries SENTRY_RELEASE into the process;
+            # without it pm2 restarts with the environment it first started
+            # with, and the release would be stuck at whatever shipped first.
+            export SENTRY_RELEASE
             pm2 restart ecosystem.config.js --update-env
             pm2 save
 
