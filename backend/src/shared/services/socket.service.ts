@@ -10,6 +10,7 @@ import {
   isClientScoped,
   canAccessJob,
   parseRoomId,
+  parseChatMessage,
 } from "../auth/job-access";
 import logger from "../../utils/logger";
 import { getErrorMessage } from "../../utils/error.utils";
@@ -179,14 +180,19 @@ export class SocketService {
             return;
           }
 
+          const message = parseChatMessage(data?.message);
+          if (message === null) return;
+
+          const replyToId = parseRoomId(data?.replyToId) ?? undefined;
+
           try {
             const [newMessage] = await db
               .insert(jobChatMessages)
               .values({
                 jobId,
                 senderId: user.id,
-                message: data.message,
-                replyToId: data.replyToId,
+                message,
+                replyToId,
               })
               .returning();
 
@@ -222,13 +228,19 @@ export class SocketService {
             return;
           }
 
+          const messageId = parseRoomId(data?.messageId);
+          if (messageId === null) return;
+
+          const message = parseChatMessage(data?.message);
+          if (message === null) return;
+
           try {
             const [updated] = await db
               .update(jobChatMessages)
-              .set({ message: data.message })
+              .set({ message })
               .where(
                 and(
-                  eq(jobChatMessages.id, data.messageId),
+                  eq(jobChatMessages.id, messageId),
                   eq(jobChatMessages.jobId, jobId),
                   eq(jobChatMessages.senderId, user.id),
                   eq(jobChatMessages.isDeleted, false),
@@ -270,13 +282,16 @@ export class SocketService {
             return;
           }
 
+          const messageId = parseRoomId(data?.messageId);
+          if (messageId === null) return;
+
           try {
             const [deleted] = await db
               .update(jobChatMessages)
               .set({ isDeleted: true })
               .where(
                 and(
-                  eq(jobChatMessages.id, data.messageId),
+                  eq(jobChatMessages.id, messageId),
                   eq(jobChatMessages.jobId, jobId),
                   eq(jobChatMessages.senderId, user.id),
                   eq(jobChatMessages.isDeleted, false),
@@ -307,6 +322,11 @@ export class SocketService {
             return;
           }
 
+          const message = parseChatMessage(data?.message);
+          if (message === null) return;
+
+          const replyToId = parseRoomId(data?.replyToId) ?? undefined;
+
           try {
             const [newMessage] = await db
               .insert(candidateChatMessages)
@@ -315,8 +335,8 @@ export class SocketService {
                 // hire Ada for Dev" is not the same conversation as "for Ops".
                 applicationId: candidateId,
                 senderId: user.id,
-                message: data.message,
-                replyToId: data.replyToId,
+                message,
+                replyToId,
               })
               .returning();
 
