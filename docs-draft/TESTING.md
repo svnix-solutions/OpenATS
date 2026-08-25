@@ -44,6 +44,22 @@ These catch what unit tests cannot: real SQL errors, wrong column names, broken 
 
 Note that no server is started on port 8080. Supertest imports the Express app directly and binds it to a random free port for the duration of each request, so integration tests never conflict with a running dev server.
 
+**Socket tests are the exception.** Socket.IO needs a listening server, so
+`socket-authorization.test.ts` creates one on an ephemeral port (`listen(0)`),
+attaches `socketService`, and connects with `socket.io-client`. Still no fixed
+port, so it does not conflict with `pnpm dev` either.
+
+One trap: the handshake reads the **raw** token from `handshake.auth.token`,
+not `Bearer <token>` as the HTTP header does. Passing `bearer()` from the jwt
+helper produces `JWS Protected Header is invalid` and looks like a broken key
+rather than a wrong format — use `signToken` for sockets.
+
+When testing a rule, check the rule rather than the outcome. Chat refuses a
+client contact *and* refuses anyone off the hiring team; asserting only that a
+client is refused passes with the client rule deleted, because the team rule
+catches them too. That test puts the contact on the hiring team first, so
+only the rule under test can produce the refusal.
+
 ### End-to-end (E2E) tests
 
 An E2E test opens a real browser and uses the app the way a person would. The whole stack runs: Next.js frontend, Express backend, and Postgres.
