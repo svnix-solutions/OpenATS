@@ -6,6 +6,7 @@ import logger from "../../utils/logger";
 import { listScopeFor } from "../../shared/auth/job-access";
 import { asEnum } from "../../utils/object.utils";
 import { offers } from "../../db/schema";
+import { presentOfferRow } from "../../shared/auth/present";
 
 const bulkDeleteOffersSchema = z.object({
   ids: z.array(z.number().int().positive()).min(1),
@@ -76,14 +77,16 @@ export const getAllOffers = async (req: Request, res: Response) => {
         ...scope,
       });
       res.status(200).json({
-        data: result.rows,
+        data: result.rows.map((row) => presentOfferRow(row, req.user!)),
         pagination: { total: result.total, page: result.page, limit: result.limit, totalPages: result.totalPages },
       });
       return;
     }
 
     const result = await offerService.getAllDetails(scope.teamUserId, scope.clientCompanyId);
-    res.status(200).json({ data: result });
+    res.status(200).json({
+      data: result.map((row) => presentOfferRow(row, req.user!)),
+    });
   } catch (error) {
     logger.error(`Failed to fetch all offers: ${(error as Error)?.message}`);
     res.status(500).json({ error: "Failed to fetch all offers" });
@@ -146,6 +149,7 @@ export const getAllOffersByJob = async (req: Request, res: Response) => {
       return;
     }
 
+    // Plain offer rows with no candidate joined, so nothing to withhold here.
     const result = await offerService.getAllByJob(jobId);
     res.status(200).json({ data: result });
   } catch (error) {

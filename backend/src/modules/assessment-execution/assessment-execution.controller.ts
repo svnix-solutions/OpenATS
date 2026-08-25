@@ -6,6 +6,7 @@ import { socketService } from "../../shared/services/socket.service";
 import logger from "../../utils/logger";
 import { canReadCandidate } from "../../shared/auth/job-access";
 import { getErrorMessage} from "../../utils/error.utils";
+import { presentAttempt } from "../../shared/auth/present";
 
 const inviteCandidateSchema = z.object({
   candidateId: z.number().int().positive(),
@@ -273,7 +274,11 @@ export const getAttemptResults = async (req: Request, res: Response) => {
       return;
     }
 
-    res.status(200).json({ data: result });
+    // The attempt carries the candidate's email flattened onto it, which is
+    // the one field a client contact must not be handed.
+    res.status(200).json({
+      data: { ...result, attempt: presentAttempt(result.attempt, req.user!) },
+    });
   } catch (error) {
     logger.error(`Failed to fetch attempt results for id=${req.params.attemptId}: ${getErrorMessage(error)}`);
     res.status(500).json({ error: "Failed to fetch attempt results" });

@@ -27,6 +27,7 @@ import { randomUUID } from "crypto";
 import logger from "../../utils/logger";
 import { integrationConnectionService } from "../../shared/integrations/connection.service";
 import { getErrorMessage} from "../../utils/error.utils";
+import { presentAttempt } from "../../shared/auth/present";
 
 const router: Router = Router();
 
@@ -127,7 +128,10 @@ router.get("/interviews", async (req, res) => {
       ...listScopeFor(req.user),
     };
     const interviews = await interviewService.getAll(filters);
-    res.status(200).json({ data: interviews });
+    // Another shape carrying the candidate's address, flattened onto the row.
+    res.status(200).json({
+      data: interviews.map((row) => presentAttempt(row, req.user!)),
+    });
   } catch (error) {
     logger.error(`Failed to list interviews: ${getErrorMessage(error)}`);
     res.status(500).json({ error: "Failed to list interviews" });
