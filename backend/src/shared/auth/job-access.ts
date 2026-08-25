@@ -34,6 +34,32 @@ export function parseRoomId(value: unknown): number | null {
   return id;
 }
 
+/**
+ * The longest a chat message may be.
+ *
+ * The column is `text`, so nothing else bounds it. Socket.IO's default frame
+ * is 1 MB, which is what a sender was previously limited to — per message,
+ * repeatable, by anyone on the hiring team.
+ */
+export const MAX_CHAT_MESSAGE_LENGTH = 4000;
+
+/**
+ * Narrows an untrusted client-supplied chat message.
+ *
+ * The socket handlers annotate this parameter as `string`, but a TypeScript
+ * annotation on a socket payload describes what a well-behaved client sends,
+ * not what arrives. Anything may arrive.
+ *
+ * Returns null for a message that should not be stored: a non-string, one
+ * that is empty once trimmed, or one over the limit.
+ */
+export function parseChatMessage(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.length > MAX_CHAT_MESSAGE_LENGTH) return null;
+  return trimmed;
+}
+
 async function isOnHiringTeam(userId: number, jobId: number): Promise<boolean> {
   const [member] = await db
     .select({ id: jobHiringTeam.id })
