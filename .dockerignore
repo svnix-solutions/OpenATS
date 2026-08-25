@@ -1,0 +1,20 @@
+# Everything the build does not need. Keeping node_modules out matters most:
+# pnpm's are symlink farms that mean nothing inside an image, and copying them
+# is both slow and wrong.
+**/node_modules
+**/dist
+**/.next
+**/coverage
+**/test-results
+**/playwright-report
+.git
+.github
+**/.env
+**/.env.*
+!**/.env.example
+*.md
+docs-draft
+e2e
+**/tests
+**/*.test.ts
+**/*.test.tsx
