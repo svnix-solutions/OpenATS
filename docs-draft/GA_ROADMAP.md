@@ -30,7 +30,7 @@ The focus of this phase is correctness and safety, not new features. Nothing her
 | Authorize chat history over HTTP | `GET /chat/job/:jobId` and `/chat/candidate/:candidateId` return any conversation to any authenticated user. The socket rooms are now gated, so this is the remaining way to read another hiring team's chat. | 🟢 Done |
 | Rate limit authenticated routes | Only `/public/*` is rate limited today. | 🟢 Done |
 | Scope record reads to the hiring team | `requireJobAccess` existed but was wired to 3 of ~70 authenticated routes, so any logged-in user could read a job, offer, interview, assessment attempt, or rejection belonging to a team they are not on by requesting its id. Extends the guard to record reads and scopes the offer and interview lists. | 🟢 Done |
-| Resolve dependency vulnerabilities | 54 reported (15 high). Every high comes through `next@16.1.6`, the only direct dependency involved: bumping it to `>=16.2.11` also clears the `sharp` and `postcss` copies it pins. `dompurify` arrives via `@asgardeo/react` and needs a `pnpm.overrides` entry or an upstream fix. Do this last, right before release, so the version bump is fresh. | 🔴 Planned |
+| Resolve dependency vulnerabilities | `next` 16.1.6 → 16.3.2 cleared every high; `nanoid`, `dompurify` and `uuid` pinned forward via overrides in `pnpm-workspace.yaml` (**not** `pnpm.overrides` in package.json — pnpm 11 ignores that with a warning). 16 high → 0. Two left, both unfixable here: `esbuild` (dev-only, via drizzle-kit) and `elliptic` (no patched release exists — latest is 6.6.1, the advisory wants 6.6.2). Re-run `pnpm audit` before release. | 🟢 Done |
 
 ### Deployment
 
@@ -77,7 +77,7 @@ The "do it properly" phase. None of this is urgent, all of it is what separates 
 | Staging environment | Every change currently goes straight to production. | 🔴 Planned |
 | Error tracking | Sentry on both the backend and the worker, off unless `SENTRY_DSN` is set. Events carry the `organizationId`; PII is deliberately not sent. | 🟢 Done |
 | Structured logging | One JSON object per line when `NODE_ENV=production`, readable otherwise; errors keep their stack in a named field, and every line carries the `organizationId` it came from. Console only — pm2 already writes and rotates stdout. | 🟢 Done |
-| Security review | Uploads, raw SQL, token generation, secret logging and CORS reviewed; the tenancy boundary was covered separately in #39. Found the `/public/*` origin check silently disabled. Socket.IO payloads and assessment execution reviewed since. Not yet reviewed: the dependency surface, which is the deferred bump. | 🟡 In progress |
+| Security review | Uploads, raw SQL, token generation, secret logging and CORS reviewed; the tenancy boundary was covered separately in #39. Found the `/public/*` origin check silently disabled. Socket.IO payloads, assessment execution and the dependency surface all reviewed since. | 🟡 In progress |
 | Complete documentation | [DEPLOYMENT.md](DEPLOYMENT.md), [CONFIGURATION.md](CONFIGURATION.md), [UPGRADING.md](UPGRADING.md). Writing them found five frontend and one backend env var read by code but absent from `.env.example`. | 🟢 Done |
 
 ---
