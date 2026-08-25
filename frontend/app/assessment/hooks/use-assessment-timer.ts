@@ -2,10 +2,11 @@
 
 import { useState, useEffect } from "react";
 import type { AttemptData } from "../_lib/assessment-types";
+import { timeLimitSeconds } from "../_lib/assessment-types";
 
 // An in-progress attempt resumes where it left off; anything else starts full.
 function remainingSeconds(attempt: AttemptData): number {
-  const limit = attempt.assessment.timeLimit ?? 0;
+  const limit = timeLimitSeconds(attempt);
   if (attempt.status !== "started" || !attempt.startedAt) return limit;
   const elapsed = Math.floor(
     (Date.now() - new Date(attempt.startedAt).getTime()) / 1000,

@@ -3,6 +3,7 @@
 import { COLORS } from "../../_lib/assessment-constants";
 import { CheckIcon, PlayIcon } from "../icons/assessment-icons";
 import type { AttemptData } from "../../_lib/assessment-types";
+import { timeLimitMinutes } from "../../_lib/assessment-types";
 
 interface IntroScreenProps {
   attempt: AttemptData;
@@ -11,7 +12,7 @@ interface IntroScreenProps {
 }
 
 export function IntroScreen({ attempt, starting, onStart }: IntroScreenProps) {
-  const timeMins = Math.floor((attempt.assessment.timeLimit ?? 0) / 60);
+  const timeMins = timeLimitMinutes(attempt);
 
   const guidelines = [
     `You will have ${timeMins} minutes to complete this assessment. The timer will automatically submit when time expires.`,
