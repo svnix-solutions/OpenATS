@@ -15,6 +15,8 @@ export interface CreateUserPayload {
 }
 
 export interface UpdateUserPayload {
+  /** Required when the role is a client one; ignored otherwise. */
+  clientCompanyId?: number | null;
   firstName?: string;
   lastName?: string;
   email?: string;
