@@ -298,6 +298,8 @@ export type User = {
   firstName: string;
   lastName: string;
   email: string;
+  /** Set for a client contact; null for agency staff. */
+  clientCompanyId?: number | null;
   role: "super_admin"
     | "hiring_manager"
     | "interviewer"

@@ -1,6 +1,7 @@
 import { eq, or } from "drizzle-orm";
 import { db } from "../../db";
-import { users } from "../../db/schema";
+import { clientCompanies, organizationMembers, users } from "../../db/schema";
+import { orgRole } from "../../db/schema/enums";
 import { cleanObject as clean } from "../../utils/object.utils";
 
 export interface UpdateUserInput {
@@ -18,10 +19,37 @@ export interface CreateUserInput {
 }
 
 export const userService = {
+  /**
+   * Members of this organization, with the role and client company that
+   * actually govern what they see.
+   *
+   * An inner join, not a left one. The policy on `users` admits members of
+   * the current organization *or* users who belong to no organization at all —
+   * the second clause so a just-provisioned account is visible before it is
+   * attached. Selecting from `users` alone therefore also returned every
+   * unattached account on the install. Joining the membership restricts this
+   * to actual members, and carries the two columns the caller needs anyway.
+   */
   async getAll() {
     return db
-      .select()
+      .select({
+        id: users.id,
+        asgardeoUserId: users.asgardeoUserId,
+        firstName: users.firstName,
+        lastName: users.lastName,
+        email: users.email,
+        avatarUrl: users.avatarUrl,
+        isActive: users.isActive,
+        createdAt: users.createdAt,
+        updatedAt: users.updatedAt,
+        role: organizationMembers.role,
+        clientCompanyId: organizationMembers.clientCompanyId,
+      })
       .from(users)
+      .innerJoin(
+        organizationMembers,
+        eq(organizationMembers.userId, users.id),
+      )
       .where(eq(users.isActive, true))
       .orderBy(users.firstName);
   },
@@ -90,3 +118,97 @@ export const userService = {
     return updated ?? null;
   },
 };
+
+/**
+ * A user's place in this organization: what they may do, and — for a client
+ * contact — whose work they may see.
+ *
+ * Both live on `organization_members` rather than on `users`, because `users`
+ * is a global identity and the same person could in principle be a manager in
+ * one organization and a client contact in another.
+ */
+export type MembershipInput = {
+  role?: (typeof orgRole.enumValues)[number];
+  clientCompanyId?: number | null;
+};
+
+export class MembershipNotFoundError extends Error {
+  constructor() {
+    super("That user is not a member of this organization");
+    this.name = "MembershipNotFoundError";
+  }
+}
+
+export class ClientCompanyRequiredError extends Error {
+  constructor() {
+    super("A client role needs a client company");
+    this.name = "ClientCompanyRequiredError";
+  }
+}
+
+export class UnknownClientCompanyError extends Error {
+  constructor() {
+    super("No such client company in this organization");
+    this.name = "UnknownClientCompanyError";
+  }
+}
+
+export const membershipService = {
+  async get(userId: number) {
+    const [row] = await db
+      .select()
+      .from(organizationMembers)
+      .where(eq(organizationMembers.userId, userId))
+      .limit(1);
+    return row ?? null;
+  },
+
+  /**
+   * Changing this is the only way a role change takes effect. The role on the
+   * token seeds this column at first sign-in and is ignored afterwards, so
+   * updating the identity provider alone changes nothing.
+   */
+  async update(userId: number, input: MembershipInput) {
+    const current = await this.get(userId);
+    if (!current) throw new MembershipNotFoundError();
+
+    const role = input.role ?? current.role;
+    const clientCompanyId =
+      input.clientCompanyId === undefined
+        ? current.clientCompanyId
+        : input.clientCompanyId;
+
+    // The same rule verify-token enforces at sign-in: a client contact with no
+    // company has no coherent view, so it is refused rather than stored.
+    if (isClientOrgRole(role) && clientCompanyId === null) {
+      throw new ClientCompanyRequiredError();
+    }
+
+    // Agency staff are not scoped to a client, and leaving a stale link on a
+    // demoted account is how someone keeps a narrower view than their role.
+    const resolved = isClientOrgRole(role) ? clientCompanyId : null;
+
+    if (resolved !== null) {
+      // Policy-filtered, so this also proves the company belongs to this
+      // organization rather than merely existing.
+      const [company] = await db
+        .select({ id: clientCompanies.id })
+        .from(clientCompanies)
+        .where(eq(clientCompanies.id, resolved))
+        .limit(1);
+      if (!company) throw new UnknownClientCompanyError();
+    }
+
+    const [updated] = await db
+      .update(organizationMembers)
+      .set({ role, clientCompanyId: resolved, updatedAt: new Date() })
+      .where(eq(organizationMembers.userId, userId))
+      .returning();
+
+    return updated ?? null;
+  },
+};
+
+function isClientOrgRole(role: string): boolean {
+  return role === "client_admin" || role === "client_reviewer";
+}

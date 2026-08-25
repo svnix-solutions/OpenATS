@@ -1,6 +1,12 @@
 import { Request, Response } from "express";
 import { z } from "zod";
-import { userService } from "./user.service";
+import {
+  ClientCompanyRequiredError,
+  MembershipNotFoundError,
+  UnknownClientCompanyError,
+  membershipService,
+  userService,
+} from "./user.service";
 import logger from "../../utils/logger";
 import { getErrorMessage } from "../../utils/error.utils";
 
@@ -155,5 +161,63 @@ export const deactivateUser = async (req: Request, res: Response) => {
   } catch (error) {
     logger.error(`[deactivateUser] error:`, error);
     res.status(500).json({ error: "Failed to remove user" });
+  }
+};
+
+
+const membershipSchema = z
+  .object({
+    role: z.enum([
+      "super_admin",
+      "hiring_manager",
+      "interviewer",
+      "client_admin",
+      "client_reviewer",
+    ]),
+    clientCompanyId: z.number().int().positive().nullable().optional(),
+  })
+  .partial({ role: true });
+
+/**
+ * Sets what a user may do in this organization, and which client company they
+ * belong to if they are a contact rather than staff.
+ *
+ * Role lives here, not in the identity provider: the token seeds this column
+ * at first sign-in and is ignored afterwards, so changing a role in Asgardeo
+ * alone has no effect on what the person can actually do.
+ */
+export const updateMembership = async (req: Request, res: Response) => {
+  const id = parseInt((req.params.id ?? "").toString());
+  if (isNaN(id)) {
+    res.status(400).json({ error: "Invalid user ID" });
+    return;
+  }
+
+  const parsed = membershipSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({
+      error: "Validation failed",
+      details: z.flattenError(parsed.error).fieldErrors,
+    });
+    return;
+  }
+
+  try {
+    const updated = await membershipService.update(id, parsed.data);
+    res.status(200).json({ data: updated });
+  } catch (error) {
+    if (error instanceof MembershipNotFoundError) {
+      res.status(404).json({ error: error.message });
+      return;
+    }
+    if (
+      error instanceof ClientCompanyRequiredError ||
+      error instanceof UnknownClientCompanyError
+    ) {
+      res.status(400).json({ error: error.message });
+      return;
+    }
+    logger.error(`Failed to update membership: ${getErrorMessage(error)}`);
+    res.status(500).json({ error: "Failed to update membership" });
   }
 };

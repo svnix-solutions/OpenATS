@@ -12,7 +12,13 @@ import type { User } from "@/types";
 const ROUTE_LOG = "[API /users]";
 
 type AppRole = "super_admin" | "hiring_manager" | "interviewer";
-type DbUser = Omit<User, "role"> & { asgardeoUserId: string };
+// The backend list carries the membership role now, so this is no longer
+// Omit<User, "role"> — it is optional because an account provisioned in the
+// identity provider but not yet attached here has no membership to read.
+type DbUser = Omit<User, "role"> & {
+  asgardeoUserId: string;
+  role?: AppRole | null;
+};
 
 async function buildRoleMap(token: string): Promise<Map<string, AppRole>> {
   const base = getAsgardeoApiBase();
@@ -55,9 +61,14 @@ export async function GET() {
 
     const roleMap = await buildRoleMap(scimToken);
 
+    // The database role is the one that governs access — the token's role
+    // seeds it at first sign-in and is ignored afterwards. Showing Asgardeo's
+    // here meant the screen could disagree with what the person could
+    // actually do. Asgardeo's is the fallback, for an account provisioned in
+    // the identity provider but not yet attached here.
     const users: User[] = dbData.data.map(({ asgardeoUserId, ...u }) => ({
       ...u,
-      role: roleMap.get(asgardeoUserId) ?? "interviewer",
+      role: u.role ?? roleMap.get(asgardeoUserId) ?? "interviewer",
     }));
 
     console.log(`${ROUTE_LOG} fetched ${users.length} users`);

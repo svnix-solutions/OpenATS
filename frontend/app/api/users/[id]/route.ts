@@ -104,6 +104,21 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
       await assignAsgardeoRole(scimToken, asgardeoUserId, body.role);
     }
 
+    // Asgardeo is updated above so a *future* first sign-in seeds the right
+    // role. For an account that already has a membership the token's role is
+    // ignored, so without this the change had no effect on anything.
+    if (body.role !== undefined || body.clientCompanyId !== undefined) {
+      await serverFetch<{ data: unknown }>(`/users/${id}/membership`, {
+        method: "PUT",
+        body: JSON.stringify({
+          ...(body.role !== undefined && { role: body.role }),
+          ...(body.clientCompanyId !== undefined && {
+            clientCompanyId: body.clientCompanyId,
+          }),
+        }),
+      });
+    }
+
     const updated = await serverFetch<{ data: User }>(`/users/${id}`, {
       method: "PUT",
       body: JSON.stringify({

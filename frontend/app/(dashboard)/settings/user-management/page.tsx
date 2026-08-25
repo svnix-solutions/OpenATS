@@ -74,6 +74,8 @@ import {
 import { ListSectionSpinner } from "@/components/dashboard-main-loading";
 import { Spinner } from "@/components/ui/spinner";
 import { TableFooter } from "@/components/table/table-footer";
+import { useClientCompanies } from "@/hooks/queries/use-client-companies";
+import { isClientRole } from "@/lib/roles";
 
 const inputCls =
   "h-9 bg-gray-50 dark:bg-neutral-800 border-slate-200 dark:border-neutral-700 rounded-md shadow-none text-sm placeholder:text-slate-400 dark:placeholder:text-neutral-500 focus-visible:ring-0 focus-visible:border-slate-400 dark:focus-visible:border-neutral-600 transition-colors";
@@ -174,6 +176,9 @@ export default function UserManagementPage() {
   });
   const [query, setQuery] = useState("");
 
+  const { data: clientCompanyData } = useClientCompanies();
+  const clientCompanies = clientCompanyData?.data ?? [];
+
   const [editUser, setEditUser] = useState<AsgardeoUser | null>(null);
   const [editForm, setEditForm] = useState<UpdateUserPayload>({});
   const [saving, setSaving] = useState(false);
@@ -206,11 +211,16 @@ export default function UserManagementPage() {
       lastName: u.lastName ?? "",
       email: u.email ?? "",
       role: u.role ?? "interviewer",
+      clientCompanyId: u.clientCompanyId ?? null,
     });
   };
 
   const handleSave = async () => {
     if (!editUser) return;
+    if (isClientRole(editForm.role) && !editForm.clientCompanyId) {
+      toast.error("Choose a client company for this contact");
+      return;
+    }
     setSaving(true);
     try {
       await updateUser(editUser.id, { ...editForm, oldRole: editUser.role });
@@ -747,6 +757,41 @@ export default function UserManagementPage() {
                 </SelectContent>
               </Select>
             </div>
+
+            {isClientRole(editForm.role) ? (
+              <div>
+                <Label className="text-xs font-medium text-slate-500 dark:text-neutral-400 mb-1.5 block">
+                  Client company
+                </Label>
+                <Select
+                  value={editForm.clientCompanyId?.toString() ?? ""}
+                  onValueChange={(v) =>
+                    setEditForm((f) => ({ ...f, clientCompanyId: Number(v) }))
+                  }
+                >
+                  <SelectTrigger className="w-full h-10! rounded-lg bg-white dark:bg-neutral-900 border-slate-200 dark:border-neutral-800 shadow-none px-3! py-0! focus-visible:ring-2 focus-visible:ring-theme focus-visible:border-theme">
+                    <SelectValue placeholder="Select a client company">
+                      {clientCompanies.find(
+                        (c) => c.id === editForm.clientCompanyId,
+                      )?.name ?? null}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {clientCompanies.map((c) => (
+                      <SelectItem key={c.id} value={String(c.id)}>
+                        {c.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {/* The backend refuses a client role with no company, and
+                    sign-in refuses one too — so this is required, not optional. */}
+                <p className="mt-1.5 text-xs text-slate-400">
+                  A client contact only sees this company&apos;s jobs and
+                  candidates.
+                </p>
+              </div>
+            ) : null}
           </div>
 
           <DialogFooter className="gap-2">
