@@ -309,6 +309,13 @@
       "when": 1787446713364,
       "tag": "0043_one_role_vocabulary",
       "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1787446773364,
+      "tag": "0044_allowed_origins_lookup",
+      "breakpoints": true
     }
   ]
 }

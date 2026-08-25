@@ -10,7 +10,8 @@ const originsBodySchema = z.object({
 
 export async function getAllowedOrigins(_req: Request, res: Response) {
   try {
-    const origins = await pageSettingsService.getAllowedOrigins();
+    const origins =
+      await pageSettingsService.getAllowedOriginsForOrganization();
     res.status(200).json({ data: { origins } });
   } catch (error) {
     logger.error(`Failed to load allowed origins: ${getErrorMessage(error)}`);

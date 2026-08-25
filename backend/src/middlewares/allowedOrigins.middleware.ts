@@ -31,7 +31,11 @@ export async function checkOrigins(
   next: NextFunction,
 ) {
   try {
-    const allowed = await pageSettingsService.getAllowedOrigins();
+    // This organization's own list. The global one exists for the CORS callback,
+    // which runs before routing and cannot know the tenant; using it here would
+    // mean one organization configuring an origin starts refusing every other
+    // organization's careers page.
+    const allowed = await pageSettingsService.getAllowedOriginsForOrganization();
     if (allowed.length === 0) {
       next();
       return;

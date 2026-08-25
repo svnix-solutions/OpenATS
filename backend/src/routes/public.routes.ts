@@ -8,6 +8,9 @@ import {
   listPublishedCareersJobs,
 } from "../modules/job/job.controller";
 import { getPublicCompany } from "../modules/company/company.controller";
+// Mounted after withPublicOrganization on every route, never before: it reads
+// the organization's own allowed origins, and without a tenant that list is
+// empty, which it treats as "not configured" and waves the request through.
 import { checkOrigins } from "../middlewares/allowedOrigins.middleware";
 import { getCustomQuestions } from "../modules/custom-question/custom-question.controller";
 import { applyForJob } from "../modules/candidate/candidate.controller";
@@ -103,31 +106,31 @@ const publicReadLimiter = rateLimit({
 // the "only" routes below still make.
 router.get(
   "/clients",
-  checkOrigins,
   publicReadLimiter,
   withPublicOrganization("only"),
+  checkOrigins,
   listPublicClientCompanies,
 );
 
 router.get(
   "/clients/:clientSlug/jobs",
-  checkOrigins,
   publicReadLimiter,
   withPublicOrganization("client_slug", "clientSlug"),
+  checkOrigins,
   listCareersJobsForClient,
   listPublicClientCompanies,
 );
 
-router.get("/company", checkOrigins, withPublicOrganization("only"), getPublicCompany);
-router.get("/jobs", checkOrigins, withPublicOrganization("only"), listPublishedCareersJobs);
-router.get("/jobs/:id", checkOrigins, withPublicOrganization("job", "id"), getPublicJobById);
-router.get("/jobs/:jobId/questions", checkOrigins, withPublicOrganization("job", "jobId"), getCustomQuestions);
-router.post("/jobs/:jobId/apply", checkOrigins, applyLimiter, withPublicOrganization("job", "jobId"), applyForJob);
+router.get("/company", withPublicOrganization("only"), checkOrigins, getPublicCompany);
+router.get("/jobs", withPublicOrganization("only"), checkOrigins, listPublishedCareersJobs);
+router.get("/jobs/:id", withPublicOrganization("job", "id"), checkOrigins, getPublicJobById);
+router.get("/jobs/:jobId/questions", withPublicOrganization("job", "jobId"), checkOrigins, getCustomQuestions);
+router.post("/jobs/:jobId/apply", applyLimiter, withPublicOrganization("job", "jobId"), checkOrigins, applyForJob);
 router.post(
   "/upload/resume",
-  checkOrigins,
   publicWriteLimiter,
   withPublicOrganization("only"),
+  checkOrigins,
   handleResumeUpload,
   uploadFile,
 );
