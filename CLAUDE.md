@@ -61,6 +61,10 @@ without thinking about tenancy is not wrong — it simply returns nothing.
 - `organizations` is the tenant, one per recruiting agency. `client_companies`
   are the companies an agency recruits for; `organization_members` places a
   user in an organization, and carries `client_company_id` for client contacts.
+  **Nothing writes that column yet**, so a client contact cannot currently be
+  linked to a company — and a client role without one is refused at login
+  rather than falling through to an unscoped view. Assigning one is still to
+  be built.
 - Every other table has `organization_id NOT NULL DEFAULT app_current_org()`.
   **Existing INSERT statements need no change** — the column fills itself from
   the connection. Existing SELECTs need no change either — the policy filters

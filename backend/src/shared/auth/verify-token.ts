@@ -21,6 +21,11 @@ export type AppRole =
   | "client_admin"
   | "client_reviewer";
 
+/** Roles held by a contact at a client company rather than agency staff. */
+export function isClientRole(role: string): boolean {
+  return role === "client_admin" || role === "client_reviewer";
+}
+
 const APP_ROLES = [
   "super_admin",
   "hiring_manager",
@@ -247,6 +252,23 @@ export async function verifyAccessToken(
       `[auth] membership for user ${user.id} has unknown role ${membership.role}`,
     );
     throw new AuthError(403, "Your role is not recognised. Contact your administrator.");
+  }
+
+  // A client contact who is not linked to a client company has no coherent
+  // view: every scoping rule below keys on that link, so without it they fall
+  // through to the unrestricted branch and see the agency's whole book of
+  // business — every client's jobs and every candidate's contact details.
+  //
+  // Refusing is the only safe reading. It is a misconfiguration, not a state
+  // to render, and it stays refused until someone assigns them a company.
+  if (isClientRole(membership.role) && membership.clientCompanyId === null) {
+    logger.warn(
+      `[auth] ${membership.role} user ${user.id} has no client company; refusing`,
+    );
+    throw new AuthError(
+      403,
+      "Your account is not linked to a client company. Contact your administrator.",
+    );
   }
 
   return {

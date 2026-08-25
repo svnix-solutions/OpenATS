@@ -8,7 +8,7 @@ import {
 import { candidateInterviews } from "../../db/schema/interviews";
 import { offers } from "../../db/schema/offers";
 import { jobs } from "../../db/schema/jobs";
-import type { AuthenticatedUser } from "./verify-token";
+import { isClientRole, type AuthenticatedUser } from "./verify-token";
 
 // Per-job authorization, shared by the sockets and the HTTP middleware.
 //
@@ -113,7 +113,7 @@ export function isTeamScoped(user: AuthenticatedUser): boolean {
  * read as agency staff.
  */
 export function isClientScoped(user: AuthenticatedUser): boolean {
-  return user.clientCompanyId !== null;
+  return user.clientCompanyId !== null || isClientRole(user.role);
 }
 
 /**
@@ -128,7 +128,11 @@ export function listScopeFor(user: AuthenticatedUser): {
   clientCompanyId?: number;
 } {
   if (isClientScoped(user)) {
-    return { clientCompanyId: user.clientCompanyId! };
+    // -1 matches nothing. Reachable only if a client contact without a company
+    // gets past login, which verify-token refuses — but the failure mode if
+    // this returned {} is the agency's entire book of business, so it does not
+    // rely on that being true.
+    return { clientCompanyId: user.clientCompanyId ?? -1 };
   }
   if (isTeamScoped(user)) return { teamUserId: user.id };
   return {};
