@@ -74,7 +74,7 @@ The "do it properly" phase. None of this is urgent, all of it is what separates 
 | --- | --- | --- |
 | Build artifacts in CI | CI builds `backend/dist`, uploads it, and the deploy unpacks that exact tarball on the VM. Unverified end to end: this fork has no `SSH_HOST`. | 🟡 In progress |
 | Rollback mechanism | Deploys keep the last 5 build tarballs on the VM; `scripts/rollback.sh` unpacks one and restarts. Code only — migrations still roll forward. Unverified end to end: no `SSH_HOST` on this fork. | 🟡 In progress |
-| Staging environment | Every change currently goes straight to production. | 🔴 Planned |
+| Staging environment | Every change still goes straight to production, but the app now runs entirely in Docker (`docker compose --profile app up`), so a staging host is a compose file and a second `.env` rather than a bespoke build. | 🟡 In progress |
 | Error tracking | Sentry on both the backend and the worker, off unless `SENTRY_DSN` is set. Events carry the `organizationId`; PII is deliberately not sent. | 🟢 Done |
 | Structured logging | One JSON object per line when `NODE_ENV=production`, readable otherwise; errors keep their stack in a named field, and every line carries the `organizationId` it came from. Console only — pm2 already writes and rotates stdout. | 🟢 Done |
 | Security review | Uploads, raw SQL, token generation, secret logging and CORS reviewed; the tenancy boundary was covered separately in #39. Found the `/public/*` origin check silently disabled. Socket.IO payloads, assessment execution and the dependency surface all reviewed since. | 🟡 In progress |

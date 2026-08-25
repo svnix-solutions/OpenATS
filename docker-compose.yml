@@ -13,6 +13,11 @@ services:
     volumes:
       - postgres-data:/var/lib/postgresql/data
       - ./docker/init-app-role.sql:/docker-entrypoint-initdb.d/10-app-role.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U openats -d openats"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
     restart: unless-stopped
 
   redis:
@@ -22,6 +27,11 @@ services:
       - "6379:6379"
     volumes:
       - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
     restart: unless-stopped
 
   postgres-test:
@@ -37,6 +47,97 @@ services:
       - ./docker/init-app-role.sql:/docker-entrypoint-initdb.d/10-app-role.sql:ro
     tmpfs:
       - /var/lib/postgresql/data
+
+  # ── The application itself ────────────────────────────────────────────────
+  #
+  # All behind the "app" profile, so `docker compose up -d` still starts only
+  # Postgres and Redis, which is what CONTRIBUTING and the test docs assume and
+  # what everyone already has muscle memory for.
+  #
+  #   docker compose --profile app up -d --build
+  #
+  # Both .env files are still required — nothing here invents configuration.
+  # The connection strings are the exception: those in backend/.env point at
+  # localhost, which inside a container is the container.
+
+  migrate:
+    profiles: ["app"]
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+      target: migrate
+    env_file: [backend/.env]
+    environment:
+      # The owner role: migrations create and alter, and drizzle-kit reads
+      # this one rather than DATABASE_URL.
+      MIGRATION_DATABASE_URL: postgresql://openats:openats@postgres:5432/openats
+      DATABASE_URL: postgresql://openats_app:openats_app@postgres:5432/openats
+    depends_on:
+      postgres: { condition: service_healthy }
+    restart: "no"
+
+  backend:
+    profiles: ["app"]
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+      target: runtime
+    env_file: [backend/.env]
+    environment:
+      # openats_app, never the owner: owners bypass row-level security, so the
+      # tenancy boundary would be off with every query still working.
+      DATABASE_URL: postgresql://openats_app:openats_app@postgres:5432/openats
+      REDIS_URL: redis://redis:6379
+      PORT: 8080
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      migrate: { condition: service_completed_successfully }
+    restart: unless-stopped
+
+  worker:
+    profiles: ["app"]
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+      target: runtime
+    # Same image, different process. Without this running, uploaded CVs queue
+    # and are never analysed, and nothing reports an error.
+    command: ["node", "dist/src/worker.js"]
+    env_file: [backend/.env]
+    environment:
+      DATABASE_URL: postgresql://openats_app:openats_app@postgres:5432/openats
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      migrate: { condition: service_completed_successfully }
+    restart: unless-stopped
+
+  frontend:
+    profiles: ["app"]
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+      args:
+        # Inlined into the bundle at build time, so they are build args rather
+        # than environment. Changing one needs a rebuild, not a restart.
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8080/api}
+        NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-http://localhost:3000}
+        NEXT_PUBLIC_ASGARDEO_BASE_URL: ${NEXT_PUBLIC_ASGARDEO_BASE_URL:-}
+        NEXT_PUBLIC_ASGARDEO_CLIENT_ID: ${NEXT_PUBLIC_ASGARDEO_CLIENT_ID:-}
+    env_file: [frontend/.env]
+    environment:
+      # Server-side calls go container to container; the browser uses
+      # NEXT_PUBLIC_API_URL, which was baked in above.
+      OPENATS_API_URL: http://backend:8080/api
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    restart: unless-stopped
 
 volumes:
   postgres-data:

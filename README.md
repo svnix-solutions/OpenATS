@@ -179,6 +179,19 @@ are not validated, so a typo in one is silent.
 reference** — every variable both packages read, which are required, and what
 the defaults are.
 
+## Running it all in Docker
+
+```bash
+docker compose --profile app up -d --build
+```
+
+API, worker, frontend, Postgres and Redis. Without `--profile app` you get
+Postgres and Redis only — unchanged, and still what local development uses.
+
+Both `.env` files are required, and a first run needs an organization created
+and seeded before the app is usable. See
+[docs-draft/DEPLOYMENT.md](./docs-draft/DEPLOYMENT.md#running-the-whole-thing-in-docker).
+
 ## Deploying
 
 See **[docs-draft/DEPLOYMENT.md](./docs-draft/DEPLOYMENT.md)** for the full

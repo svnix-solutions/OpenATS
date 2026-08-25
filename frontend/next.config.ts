@@ -1,6 +1,11 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // Emits .next/standalone with a server and only the modules it actually
+  // traced, which is what the Docker image copies. Additive: `next start`
+  // and `next dev` are unaffected, so nothing outside Docker changes.
+  output: "standalone",
+
   // Bundle optimization — tree-shake these large package re-exports
   experimental: {
     optimizePackageImports: [

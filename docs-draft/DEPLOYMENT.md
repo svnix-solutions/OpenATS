@@ -34,6 +34,67 @@ abort, which used to leave the server quietly running stale code.
 
 ---
 
+## Running the whole thing in Docker
+
+Everything — API, worker, frontend, Postgres, Redis — behind one profile:
+
+```bash
+docker compose --profile app up -d --build
+```
+
+Without `--profile app` you get Postgres and Redis only, which is what local
+development wants and what `docker compose up -d` has always done. That has not
+changed.
+
+`backend/.env` and `frontend/.env` are still required; nothing here invents
+configuration. The connection strings are the exception — compose overrides
+them, because the ones in `.env` point at `localhost`, which inside a container
+is the container.
+
+**First run needs two manual steps.** Migrations apply automatically (the
+`migrate` service must exit cleanly before the API starts), but a fresh
+database has no tenant, and stage templates belong to one:
+
+```bash
+# 1. Create an organization.
+docker compose --profile app exec postgres \
+  psql -U openats -d openats \
+  -c "INSERT INTO organizations (name, slug) VALUES ('Your Agency','your-agency');"
+
+# 2. Seed its pipeline stages, naming it explicitly.
+ORG=$(docker compose --profile app exec -T postgres psql -U openats -d openats \
+  -tAc "SELECT id FROM organizations WHERE slug='your-agency';" | tr -d ' \r')
+
+docker compose --profile app run --rm --entrypoint sh migrate -c \
+  "DATABASE_URL=postgresql://openats_app:openats_app@postgres:5432/openats \
+   SEED_ORGANIZATION_ID=$ORG ./node_modules/.bin/tsx src/db/seed.ts"
+```
+
+`SEED_ORGANIZATION_ID` is not optional in practice. The seed script can also
+find the organization itself when only one exists, but that path reads
+`organizations` through the row-level policy with no tenant set, so it sees
+nothing and reports "No organization exists" even when one does.
+
+A job with no pipeline stages cannot take an application, so skipping step 2
+gives an app that loads and cannot be used.
+
+### What the images are
+
+| Service | Notes |
+| --- | --- |
+| `backend` | `node dist/src/server.js`, non-root, production dependencies only |
+| `worker` | The same image, `node dist/src/worker.js`. Without it, uploaded CVs queue and are never analysed |
+| `frontend` | Next.js standalone output, non-root |
+| `migrate` | The build stage, kept because `drizzle-kit` is a devDependency and so is absent from the runtime image |
+
+`NEXT_PUBLIC_*` values are compiled into the browser bundle, so they are build
+args rather than environment. Changing one needs `--build`, not a restart.
+
+`DATABASE_URL` is pinned to `openats_app` for the app and `MIGRATION_DATABASE_URL`
+to the owner for migrations, for the reason in the next section.
+
+---
+
 ## What you need before the first deploy
 
 **On GitHub** — repository secrets:
