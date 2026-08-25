@@ -124,15 +124,21 @@ services:
       args:
         # Inlined into the bundle at build time, so they are build args rather
         # than environment. Changing one needs a rebuild, not a restart.
-        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8080/api}
+        #
+        # The bare origin, with no /api: lib/api.ts appends /api itself, the
+        # public pages append /public, and lib/socket.ts uses it as the socket
+        # origin. Including /api here double-prefixes the dashboard and 404s
+        # every candidate-facing page.
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8080}
         NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-http://localhost:3000}
         NEXT_PUBLIC_ASGARDEO_BASE_URL: ${NEXT_PUBLIC_ASGARDEO_BASE_URL:-}
         NEXT_PUBLIC_ASGARDEO_CLIENT_ID: ${NEXT_PUBLIC_ASGARDEO_CLIENT_ID:-}
     env_file: [frontend/.env]
     environment:
       # Server-side calls go container to container; the browser uses
-      # NEXT_PUBLIC_API_URL, which was baked in above.
-      OPENATS_API_URL: http://backend:8080/api
+      # NEXT_PUBLIC_API_URL, which was baked in above. Bare origin again —
+      # see the note on that build arg.
+      OPENATS_API_URL: http://backend:8080
     ports:
       - "3000:3000"
     depends_on:

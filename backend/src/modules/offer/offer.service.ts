@@ -446,8 +446,11 @@ export const offerService = {
       `<p>Please review your offer using this secure link: <a href="${reviewUrl}">${reviewUrl}</a></p>`,
       "<p>You can accept or decline directly from the page.</p>",
       "<hr />",
-      "<p>OpenATS Hiring Team</p>",
+      "<p>{{brand}} Hiring Team</p>",
     ].join("\n");
+
+    const previousStatus = offer.status;
+    const previousSentAt = offer.sentAt;
 
     const updated = await offerRepository.updateById(id, {
       status: "sent",
@@ -460,7 +463,20 @@ export const offerService = {
       throw new Error("Failed to update offer before sending");
     }
 
-    await mailService.sendOfferEmail(candidate.email, subject, mailHtml);
+    // The update has to come first: it persists the reviewToken the link in
+    // this email points at. But a failure here used to leave the offer marked
+    // sent with an email that never went — the API reported failure while the
+    // row said otherwise, and nothing prompted a retry. Undo the status so the
+    // two agree and sending again is the obvious next step.
+    try {
+      await mailService.sendOfferEmail(candidate.email, subject, mailHtml);
+    } catch (error) {
+      await offerRepository.updateById(id, {
+        status: previousStatus,
+        sentAt: previousSentAt,
+      });
+      throw error;
+    }
 
     await candidateActivityService.create({
       candidateId: updated.candidateId,

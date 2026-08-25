@@ -5,8 +5,12 @@ import { SignInButton, SignIn } from "@asgardeo/nextjs";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Copy01Icon, CheckmarkCircle02Icon } from "@hugeicons/core-free-icons";
 
-const DEMO_USERNAME = "demo@openats.dev";
-const DEMO_PASSWORD = "Demo@123#";
+// Opt-in, and not hardcoded. This panel used to render real credentials on
+// every deployment's login page, demo or not. Set both variables to show it;
+// leave either unset and it does not render.
+const DEMO_USERNAME = process.env.NEXT_PUBLIC_DEMO_USERNAME;
+const DEMO_PASSWORD = process.env.NEXT_PUBLIC_DEMO_PASSWORD;
+const SHOW_DEMO_CREDENTIALS = Boolean(DEMO_USERNAME && DEMO_PASSWORD);
 
 function CredentialRow({ label, value }: { label: string; value: string }) {
   const [copied, setCopied] = useState(false);
@@ -58,15 +62,17 @@ export default function LoginPage() {
         />
       </div>
 
-      <div className="fixed top-6 right-6 w-96 rounded-xl border border-theme/30 bg-theme/5 p-6">
-        <p className="text-[15px] font-semibold tracking-wider text-theme mb-3">
-          Demo credentials
-        </p>
-        <div className="flex flex-col gap-2">
-          <CredentialRow label="Username" value={DEMO_USERNAME} />
-          <CredentialRow label="Password" value={DEMO_PASSWORD} />
+      {SHOW_DEMO_CREDENTIALS ? (
+        <div className="fixed top-6 right-6 w-96 rounded-xl border border-theme/30 bg-theme/5 p-6">
+          <p className="text-[15px] font-semibold tracking-wider text-theme mb-3">
+            Demo credentials
+          </p>
+          <div className="flex flex-col gap-2">
+            <CredentialRow label="Username" value={DEMO_USERNAME!} />
+            <CredentialRow label="Password" value={DEMO_PASSWORD!} />
+          </div>
         </div>
-      </div>
+      ) : null}
     </div>
   );
 }
