@@ -104,7 +104,8 @@ Not part of the road to v1.0, but decided and written down so it is not invisibl
 | Client company CRUD (API, settings page, job-form selector) | Found by functional testing: the column and the reads shipped, the writes never did, so no job could be created through the product | 🟢 Done |
 | Split candidates into a person and an application | [0003](decisions/0003-application-split-is-separable.md) | 🟢 Done |
 | Role read from `organization_members`, not the JWT | [0001 §6](decisions/0001-multi-tenancy.md) | 🟢 Done |
-| Client portal: roles and company scoping | [0001 §6](decisions/0001-multi-tenancy.md) | 🟢 Done |
+| Client portal: roles and company scoping | [0001 §6](decisions/0001-multi-tenancy.md) | 🟡 In progress |
+| Assign a client contact to a client company | Nothing writes `organization_members.client_company_id`, so the scoping keyed on it never engaged. A client role without one is now refused at login; the way to assign one is still missing | 🔴 Planned |
 | Client portal: redaction of the agency's working view | [0001 §6](decisions/0001-multi-tenancy.md) | 🟢 Done |
 | Client portal: the client-facing UI | [0001 §6](decisions/0001-multi-tenancy.md) | 🟢 Done |
 | Per-client careers pages | [0001 §7](decisions/0001-multi-tenancy.md) | 🟢 Done |
