@@ -4,6 +4,7 @@ export type CreateJobPayload = Pick<
   Job,
   | "title"
   | "departmentId"
+  | "clientCompanyId"
   | "employmentType"
   | "skills"
   | "salaryType"
@@ -21,6 +22,8 @@ export type CreateJobPayload = Pick<
 interface BuildJobPayloadParams {
   title: string;
   departmentId: number;
+  /** Every job belongs to one; the column is NOT NULL. */
+  clientCompanyId: number;
   employmentType: Job["employmentType"];
   location: string;
   description: string;
@@ -40,6 +43,7 @@ export function buildJobPayload(
   const {
     title,
     departmentId,
+    clientCompanyId,
     employmentType,
     location,
     description,
@@ -100,6 +104,7 @@ export function buildJobPayload(
   return {
     title: title.trim(),
     departmentId,
+    clientCompanyId,
     employmentType,
     location: location || undefined,
     description: description || undefined,

@@ -3,6 +3,8 @@ export type Job = {
   slug: string;
   title: string;
   departmentId: number;
+  /** The company this role is being filled for. NOT NULL in the database. */
+  clientCompanyId: number;
   employmentType:
     | "full_time"
     | "part_time"
@@ -83,6 +85,20 @@ export type ChatMessage = {
   isSystemMessage: boolean;
   senderName: string | null;
   senderAvatar: string | null;
+};
+
+/** A company the agency recruits for. Every job belongs to one. */
+export type ClientCompany = {
+  id: number;
+  organizationId: number;
+  name: string;
+  /** Addresses the public careers page at /careers/:slug. */
+  slug: string;
+  website: string | null;
+  description: string | null;
+  logoUrl: string | null;
+  createdAt: string;
+  updatedAt: string;
 };
 
 export type Department = {

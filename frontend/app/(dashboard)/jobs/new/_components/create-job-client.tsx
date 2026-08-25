@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCreateJob } from "@/hooks/queries/use-jobs";
 import { useDepartments } from "@/hooks/queries/use-company";
+import { useClientCompanies } from "@/hooks/queries/use-client-companies";
 import { serverFetch } from "@/lib/auth-action";
 import type { Job } from "@/types";
 import { JobHeader } from "./job-header";
@@ -21,10 +22,12 @@ export default function CreateJobPageClient() {
   const queryClient = useQueryClient();
   const createJob = useCreateJob();
   const { data: deptData } = useDepartments();
+  const { data: clientData } = useClientCompanies();
   const departments = deptData?.data ?? [];
 
   const [title, setTitle] = useState("");
   const [departmentId, setDepartmentId] = useState<number | null>(null);
+  const [clientCompanyId, setClientCompanyId] = useState<number | null>(null);
   const [employmentType, setEmploymentType] = useState<
     Job["employmentType"] | null
   >(null);
@@ -56,11 +59,13 @@ export default function CreateJobPageClient() {
   };
 
   const handleSubmit = () => {
-    if (!title.trim() || !departmentId || !employmentType) return;
+    if (!title.trim() || !departmentId || !employmentType || !clientCompanyId)
+      return;
 
     const payload = buildJobPayload({
       title,
       departmentId,
+      clientCompanyId,
       employmentType,
       location,
       description,
@@ -100,7 +105,11 @@ export default function CreateJobPageClient() {
   };
 
   const isSubmitDisabled =
-    !title.trim() || !departmentId || !employmentType || createJob.isPending;
+    !title.trim() ||
+    !departmentId ||
+    !clientCompanyId ||
+    !employmentType ||
+    createJob.isPending;
 
   return (
     <div className="flex flex-1 flex-col bg-white dark:bg-neutral-950">
@@ -112,6 +121,9 @@ export default function CreateJobPageClient() {
             title={title}
             onTitleChange={setTitle}
             departmentId={departmentId}
+            clientCompanyId={clientCompanyId}
+            onClientCompanyChange={setClientCompanyId}
+            clientCompanies={clientData?.data ?? []}
             onDepartmentChange={setDepartmentId}
             employmentType={employmentType}
             onEmploymentTypeChange={setEmploymentType}

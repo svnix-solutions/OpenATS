@@ -101,6 +101,7 @@ Not part of the road to v1.0, but decided and written down so it is not invisibl
 | Organization resolved from the Asgardeo `org_id` claim | [0001 §5](decisions/0001-multi-tenancy.md) | 🟢 Done |
 | Sub-organization provisioning in `setup-asgardeo.sh` | [0001 §5](decisions/0001-multi-tenancy.md) | 🟢 Done |
 | Jobs belong to a client company | [0001 §7](decisions/0001-multi-tenancy.md) | 🟢 Done |
+| Client company CRUD (API, settings page, job-form selector) | Found by functional testing: the column and the reads shipped, the writes never did, so no job could be created through the product | 🟢 Done |
 | Split candidates into a person and an application | [0003](decisions/0003-application-split-is-separable.md) | 🟢 Done |
 | Role read from `organization_members`, not the JWT | [0001 §6](decisions/0001-multi-tenancy.md) | 🟢 Done |
 | Client portal: roles and company scoping | [0001 §6](decisions/0001-multi-tenancy.md) | 🟢 Done |
