@@ -169,6 +169,63 @@ describe("joining a job room", () => {
   });
 });
 
+describe("dashboard broadcasts", () => {
+  it("reach the owning organization and no other", async () => {
+    // Every authenticated socket used to join one global "staff" room, so
+    // every tenant received every other tenant's candidate_applied,
+    // offer_changed and the rest — job and candidate ids included. It sat
+    // next to a bare io.emit() looking like the safe alternative.
+    //
+    // Asserting both directions on purpose: silencing the event for everyone
+    // would satisfy the leak half of this on its own.
+    const other = await createScenario("sock-other");
+    try {
+      const otherToken = await signToken({
+        sub: other.admin.asgardeoUserId,
+        email: other.admin.email,
+        given_name: "Test",
+        family_name: "User",
+        roles: ["super_admin"],
+      });
+
+      const mine = await bare(adminToken);
+      const theirs = await bare(otherToken);
+      const heardHere: unknown[] = [];
+      const heardThere: unknown[] = [];
+      mine.on("candidate_applied", (p) => heardHere.push(p));
+      theirs.on("candidate_applied", (p) => heardThere.push(p));
+      await wait(300);
+
+      await runInOrganization(s.organizationId, async () => {
+        socketService.notifyCandidateApplied(s.jobA.id);
+      });
+      await wait(700);
+      mine.close();
+      theirs.close();
+
+      expect(heardHere).toEqual([{ jobId: s.jobA.id }]);
+      expect(heardThere).toEqual([]);
+    } finally {
+      await destroyScenario(other);
+    }
+  });
+
+  it("are dropped, not widened, when there is no organization to send to", async () => {
+    // Outside a context there is no room this belongs to. Falling back to a
+    // wider audience is exactly the bug.
+    const mine = await bare(adminToken);
+    const heard: unknown[] = [];
+    mine.on("candidate_applied", (p) => heard.push(p));
+    await wait(300);
+
+    socketService.notifyCandidateApplied(s.jobA.id);
+    await wait(600);
+    mine.close();
+
+    expect(heard).toEqual([]);
+  });
+});
+
 describe("job chat", () => {
   it("refuses a write from a socket that never joined the room", async () => {
     // Otherwise a client could skip join_job and post into any job it can

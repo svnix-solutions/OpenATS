@@ -9,6 +9,15 @@ export type CvAnalysisEvent = {
   candidateId: number;
   jobId: number;
   status: "done" | "failed";
+  /**
+   * Which tenant this belongs to.
+   *
+   * Redis pub/sub is the one hop where the organization context does not
+   * survive — the subscriber is a different process with no request behind
+   * it. Without this the subscriber had no tenant to send to, and the event
+   * went to every organization's dashboard.
+   */
+  organizationId: number;
 };
 
 const publisher = createRedisConnection();

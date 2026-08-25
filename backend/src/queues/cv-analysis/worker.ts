@@ -35,6 +35,7 @@ export function startCvAnalysisWorker(): Worker<CvAnalysisJobData> {
       candidateId: job.data.candidateId,
       jobId: job.data.jobId,
       status: "done",
+      organizationId: job.data.organizationId,
     });
   });
 
@@ -65,6 +66,7 @@ export function startCvAnalysisWorker(): Worker<CvAnalysisJobData> {
         candidateId: job.data.candidateId,
         jobId: job.data.jobId,
         status: "failed",
+        organizationId: job.data.organizationId,
       });
     }
   });
