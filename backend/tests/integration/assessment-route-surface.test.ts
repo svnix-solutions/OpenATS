@@ -49,7 +49,7 @@ afterAll(async () => {
   await dropTestOrganization(organizationId);
 });
 
-// The candidate-facing assessment routes belong to /public/* and nowhere else.
+// The candidate-facing token routes belong to /public/* and nowhere else.
 // Mounted under /api as well they ran as whichever staff member was signed in,
 // skipping withPublicOrganization, the public rate limiters and denyClients —
 // so anyone in the organization holding a token could answer an assessment as
@@ -60,6 +60,9 @@ describe("assessment route surface", () => {
     ["post", "/api/assessment-execution/public/any-token/start"],
     ["post", "/api/assessment-execution/public/any-token/answer"],
     ["post", "/api/assessment-execution/public/any-token/complete"],
+    // Same shape, found later by driving the product: the interview route was
+    // mounted under /api as well, running as whoever was signed in.
+    ["get", "/api/public/interview/any-token"],
   ];
 
   for (const [method, path] of paths) {

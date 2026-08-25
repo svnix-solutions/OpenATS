@@ -333,47 +333,11 @@ router.post("/candidates/:id/schedule", requireManager, async (req, res) => {
   }
 });
 
-router.get("/public/interview/:token", async (req, res) => {
-  try {
-    const [interview] = await db
-      .select({
-        id: candidateInterviews.id,
-        eventName: candidateInterviews.eventName,
-        eventType: candidateInterviews.eventType,
-        meetingUrl: candidateInterviews.meetingUrl,
-        location: candidateInterviews.location,
-        bodyText: candidateInterviews.bodyText,
-        timeSlots: candidateInterviews.timeSlots,
-        status: candidateInterviews.status,
-        candidateName: {
-          first: candidates.firstName,
-          last: candidates.lastName,
-        },
-        jobTitle: jobs.title,
-      })
-      .from(candidateInterviews)
-      .leftJoin(candidates, eq(candidateInterviews.candidateId, candidates.id))
-      .leftJoin(jobs, eq(candidateInterviews.jobId, jobs.id))
-      .where(eq(candidateInterviews.publicToken, req.params.token));
-
-    if (!interview) {
-      res.status(404).json({ error: "Invalid link" });
-      return;
-    }
-
-    res.status(200).json({
-      data: {
-        ...interview,
-        candidateName: interview.candidateName
-          ? `${interview.candidateName.first} ${interview.candidateName.last}`
-          : "Unknown",
-      },
-    });
-  } catch (error) {
-    logger.error(`Failed to load interview: ${getErrorMessage(error)}`);
-    res.status(500).json({ error: "Failed to load interview" });
-  }
-});
+// The candidate-facing interview route lives in routes/public.routes.ts and
+// only there. Mounted here as well it sat behind authMiddleware, so it ran as
+// whichever staff member was signed in: no withPublicOrganization to resolve
+// the tenant from the token, no public rate limiter, and no denyClients. Same
+// shape as the assessment routes removed earlier. Nothing called it.
 
 router.delete("/interviews/:id", requireManager, async (req, res) => {
   try {
