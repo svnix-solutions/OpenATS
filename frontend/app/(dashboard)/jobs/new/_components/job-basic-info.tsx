@@ -10,7 +10,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { EMPLOYMENT_TYPE_LABELS } from "@/lib/job-labels";
-import type { Department, Job } from "@/types";
+import type { ClientCompany, Department, Job } from "@/types";
 
 interface JobBasicInfoProps {
   title: string;
@@ -20,6 +20,10 @@ interface JobBasicInfoProps {
   employmentType: Job["employmentType"] | null;
   onEmploymentTypeChange: (type: Job["employmentType"] | null) => void;
   departments: Department[];
+  /** Every job belongs to one of these; the column is NOT NULL. */
+  clientCompanyId: number | null;
+  onClientCompanyChange: (id: number | null) => void;
+  clientCompanies: ClientCompany[];
 }
 
 export function JobBasicInfo({
@@ -30,6 +34,9 @@ export function JobBasicInfo({
   employmentType,
   onEmploymentTypeChange,
   departments,
+  clientCompanyId,
+  onClientCompanyChange,
+  clientCompanies,
 }: JobBasicInfoProps) {
   return (
     <div className="space-y-5">
@@ -43,6 +50,37 @@ export function JobBasicInfo({
           placeholder="Senior Software Engineer - Backend"
           className="h-10! bg-gray-100 dark:bg-neutral-800 border border-slate-300 dark:border-neutral-600 shadow-none rounded-lg placeholder:text-slate-400 dark:placeholder:text-neutral-500 focus-visible:border-slate-300 dark:focus-visible:border-neutral-600 focus-visible:ring-0"
         />
+      </div>
+
+      <div className="space-y-2.5">
+        <Label className="text-sm font-semibold text-slate-700 dark:text-neutral-300">
+          Client Company
+        </Label>
+        <Select
+          value={clientCompanyId?.toString() ?? ""}
+          onValueChange={(val) => onClientCompanyChange(Number(val))}
+        >
+          <SelectTrigger className="w-full h-10! bg-gray-100 dark:bg-neutral-800 border border-slate-300 dark:border-neutral-600 shadow-none rounded-lg text-slate-500 dark:text-neutral-400 focus:ring-0 focus:border-slate-300 dark:focus:border-neutral-600">
+            <SelectValue placeholder="Select">
+              {clientCompanyId
+                ? (clientCompanies.find((c) => c.id === clientCompanyId)?.name ??
+                  null)
+                : null}
+            </SelectValue>
+          </SelectTrigger>
+          <SelectContent className="rounded-lg shadow-lg border-slate-200 dark:border-neutral-800 bg-white dark:bg-neutral-900">
+            {clientCompanies.map((c) => (
+              <SelectItem key={c.id} value={String(c.id)}>
+                {c.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {clientCompanies.length === 0 ? (
+          <p className="text-xs text-amber-600 dark:text-amber-500">
+            No client companies yet — add one in Settings before creating a job.
+          </p>
+        ) : null}
       </div>
 
       <div className="grid grid-cols-2 gap-6">

@@ -4,6 +4,7 @@ import { buildJobPayload } from "@/lib/jobs-utils";
 const base = {
   title: "  Senior Engineer  ",
   departmentId: 3,
+  clientCompanyId: 7,
   employmentType: "full_time" as const,
   location: "",
   description: "",

@@ -70,6 +70,10 @@ const navMainData = [
         url: "/settings/profile",
       },
       {
+        title: "Client Companies",
+        url: "/settings/client-companies",
+      },
+      {
         title: "Careers Page",
         url: "/settings/careers-page",
       },
@@ -109,6 +113,9 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           items: item.items.filter((sub) => {
             if (sub.url === "/settings/user-management") return isSuperAdmin;
             if (sub.url === "/settings/careers-page") return isManager;
+            // Managing the agency's book of business is manager-and-up, and the
+            // endpoints behind it refuse client contacts outright.
+            if (sub.url === "/settings/client-companies") return isManager;
             return true;
           }),
         };

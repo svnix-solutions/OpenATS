@@ -1,4 +1,5 @@
 import { Router } from "express";
+import clientCompanyRoutes from "../modules/client-company/client-company.routes";
 import companyRoutes from "../modules/company/company.routes";
 import jobRoutes from "../modules/job/job.routes";
 import userRoutes from "../modules/user/user.routes";
@@ -18,6 +19,7 @@ import integrationRoutes from "../modules/integrations/integrations.routes";
 const router: Router = Router();
 
 router.use("/company", companyRoutes);
+router.use("/client-companies", clientCompanyRoutes);
 router.use("/jobs", jobRoutes);
 router.use("/users", userRoutes);
 router.use("/templates", templateRoutes);
