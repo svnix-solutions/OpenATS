@@ -43,3 +43,45 @@ export function presentCandidate<
     ...("rejections" in candidate ? { rejections: [] } : {}),
   };
 }
+
+/**
+ * The same withholding, for the shapes that do not put contact details at the
+ * top level.
+ *
+ * Candidate contact details reach a client through three different shapes:
+ * flat `email`/`phone` on a candidate row, a nested `candidate` object on an
+ * offer, and a flattened `candidateEmail` on an assessment attempt. Only the
+ * first was redacted, so a client contact could read the email off an offer or
+ * an assessment result — the field the agency's whole business depends on
+ * withholding.
+ *
+ * These live here, next to `presentCandidate`, so the rule has one home. The
+ * thing that stops the next shape being missed is the test that sweeps every
+ * client-reachable endpoint looking for the candidate's real address.
+ */
+export function presentOfferRow<
+  T extends { candidate?: { email?: unknown; phone?: unknown } | null },
+>(row: T, viewer: AuthenticatedUser): T {
+  if (!isClientScoped(viewer) || !row.candidate) return row;
+
+  return {
+    ...row,
+    candidate: {
+      ...row.candidate,
+      ...("email" in row.candidate ? { email: null } : {}),
+      ...("phone" in row.candidate ? { phone: null } : {}),
+    },
+  };
+}
+
+export function presentAttempt<
+  T extends { candidateEmail?: unknown; candidatePhone?: unknown },
+>(attempt: T, viewer: AuthenticatedUser): T {
+  if (!isClientScoped(viewer)) return attempt;
+
+  return {
+    ...attempt,
+    ...("candidateEmail" in attempt ? { candidateEmail: null } : {}),
+    ...("candidatePhone" in attempt ? { candidatePhone: null } : {}),
+  };
+}
