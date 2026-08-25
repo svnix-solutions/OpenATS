@@ -55,6 +55,8 @@ export type CreateJobInput = {
 export type UpdateJobInput = {
   title?: string;
   departmentId?: number;
+  /** Moving a job to a different one of the agency's client companies. */
+  clientCompanyId?: number;
   employmentType?:
     | "full_time"
     | "part_time"

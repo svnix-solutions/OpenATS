@@ -1,5 +1,17 @@
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { runInOrganization } from "../../src/db";
+import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
+
+vi.mock("jose", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("jose")>();
+  const { jwks } = await import("../helpers/jwks-holder");
+  return { ...actual, createRemoteJWKSet: () => async () => jwks.publicKey };
+});
+
+import request from "supertest";
+import app from "../../src/app";
+import { initTestKeys, bearer } from "../helpers/jwt";
+import { eq } from "drizzle-orm";
+import { db, runInOrganization } from "../../src/db";
+import { jobs } from "../../src/db";
 import {
   ClientCompanyInUseError,
   DuplicateSlugError,
@@ -17,6 +29,7 @@ let organizationId: number;
 let otherOrganizationId: number;
 
 beforeAll(async () => {
+  await initTestKeys();
   organizationId = await createTestOrganization(SUFFIX);
   otherOrganizationId = await createTestOrganization(`${SUFFIX}-other`);
 });
@@ -24,6 +37,47 @@ beforeAll(async () => {
 afterAll(async () => {
   await dropTestOrganization(otherOrganizationId);
   await dropTestOrganization(organizationId);
+});
+
+describe("job creation names its client company", () => {
+  // The service always accepted clientCompanyId; the controller's zod schema
+  // did not list it, and zod strips unknown keys. So the value was dropped in
+  // transit and the service fell back to "the only client company" — which
+  // throws once an agency has two. Nothing caught it, because the tests below
+  // call the service directly and never crossed the HTTP boundary.
+  it("keeps clientCompanyId through the request schema", async () => {
+    const s = await createScenario("cc-payload");
+    try {
+      const second = await runInOrganization(s.organizationId, () =>
+        clientCompanyService.create({
+          name: "Globex",
+          slug: `globex-${s.suffix}`,
+        }),
+      );
+
+      const res = await request(app)
+        .post("/api/jobs")
+        .set("Authorization", await bearer({ sub: s.admin.asgardeoUserId, email: s.admin.email }))
+        .send({
+          title: "Globex Engineer",
+          departmentId: s.departmentId,
+          clientCompanyId: second!.id,
+          employmentType: "full_time",
+        });
+
+      expect(res.status).toBe(201);
+      // Not merely 201: with the field stripped and two companies present the
+      // service throws, so a wrong id here would still be a real regression.
+      expect(res.body.data.clientCompanyId).toBe(second!.id);
+
+      // destroyScenario deletes the department, which this job references.
+      await runInOrganization(s.organizationId, () =>
+        db.delete(jobs).where(eq(jobs.id, res.body.data.id)),
+      );
+    } finally {
+      await destroyScenario(s);
+    }
+  });
 });
 
 describe("client companies", () => {
