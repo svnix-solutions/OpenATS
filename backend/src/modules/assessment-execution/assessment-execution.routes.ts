@@ -1,10 +1,6 @@
 import { Router } from "express";
 import {
   inviteCandidateToAssessment,
-  getAssessmentForCandidate,
-  startAssessment,
-  submitAssessmentAnswer,
-  completeAssessment,
   getCandidateAttempts,
   getAttemptResults,
 } from "./assessment-execution.controller";
@@ -29,12 +25,16 @@ router.get(
   getAttemptResults,
 );
 
-router.get("/public/:token", getAssessmentForCandidate);
-
-router.post("/public/:token/start", startAssessment);
-
-router.post("/public/:token/answer", submitAssessmentAnswer);
-
-router.post("/public/:token/complete", completeAssessment);
+// The candidate-facing assessment routes are mounted in routes/public.routes.ts
+// and only there. They used to be duplicated here as well, under /api, which
+// meant a second way in that skipped everything the intended one applies:
+// withPublicOrganization resolves the tenant from the attempt token, the public
+// limiters bound how fast answers can be submitted, and denyClients keeps
+// client contacts out. Behind /api they instead ran as whichever staff member
+// was signed in — so anyone in the organization holding a token, a client
+// contact included, could read an assessment and answer it as the candidate.
+//
+// Nothing called them. Deleting the routes is the fix; the handlers they named
+// are the same ones public.routes.ts uses.
 
 export default router;
