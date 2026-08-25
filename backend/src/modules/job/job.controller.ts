@@ -30,6 +30,11 @@ const createJobSchema = z
   .object({
     title: z.string().min(1, "Title is required").max(255),
     departmentId: z.number().int().positive("Department is required"),
+    // Optional only because an organization with exactly one client company
+    // has nothing to choose between; the service defaults in that case and
+    // refuses to guess otherwise. Absent from this schema it was silently
+    // stripped, so an agency with two clients could not create a job at all.
+    clientCompanyId: z.number().int().positive().optional(),
     employmentType: employmentTypeEnum,
     location: z.string().max(255).optional().nullable(),
     description: z.string().optional().nullable(),
@@ -63,6 +68,10 @@ const createJobSchema = z
 const updateJobSchema = z.object({
   title: z.union([z.string().min(1).max(255), z.undefined()]).optional(),
   departmentId: z
+    .union([z.number().int().positive(), z.undefined()])
+    .optional(),
+  // A job can be moved between the companies an agency recruits for.
+  clientCompanyId: z
     .union([z.number().int().positive(), z.undefined()])
     .optional(),
   employmentType: employmentTypeEnum.optional(),

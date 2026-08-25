@@ -111,6 +111,10 @@ describe("per-agency email branding", () => {
     const { from } = lastPayload();
     expect(from).not.toContain("\r");
     expect(from).not.toContain("\n");
-    expect(from).toBe("Evil Bcc: victim@example.test <onboarding@resend.dev>");
+    // The display name is what this guards; the address comes from
+    // RESEND_FROM_EMAIL, which .env.test does not set. Asserting the whole
+    // header pinned it to the fallback address and failed for anyone whose
+    // backend/.env happened to define one.
+    expect(from).toMatch(/^Evil Bcc: victim@example\.test <[^<>]+>$/);
   });
 });
