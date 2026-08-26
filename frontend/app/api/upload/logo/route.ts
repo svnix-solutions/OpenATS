@@ -1,18 +1,18 @@
 import { NextResponse } from "next/server";
-import { asgardeo } from "@asgardeo/nextjs/server";
+import { getAccessToken } from "@/lib/auth/session";
+
+/** The local helper threw when unauthenticated; callers still rely on that. */
+async function requireAccessToken(): Promise<string> {
+  const token = await getAccessToken();
+  if (!token) throw new Error("Unauthorized");
+  return token;
+}
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
 
-async function getAccessToken() {
-  const client = await asgardeo();
-  const sessionId = await client.getSessionId();
-  if (!sessionId) throw new Error("Unauthorized");
-  return client.getAccessToken(sessionId);
-}
-
 export async function POST(req: Request) {
   try {
-    const token = await getAccessToken();
+    const token = await requireAccessToken();
     const formData = await req.formData();
 
     const res = await fetch(`${API_BASE_URL}/api/upload/logo`, {

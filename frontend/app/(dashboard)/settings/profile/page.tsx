@@ -1,4 +1,4 @@
-import { asgardeo } from "@asgardeo/nextjs/server";
+import { getServerSession } from "@/lib/auth/session";
 
 function decodeJWT(token: string) {
   try {
@@ -10,12 +10,11 @@ function decodeJWT(token: string) {
 }
 
 export default async function ProfilePage() {
-  const client = await asgardeo();
-  const sessionId = await client.getSessionId();
-  if (!sessionId) {
+  const session = await getServerSession();
+  if (!session) {
     return <p className="p-6 text-neutral-500">You are not signed in.</p>;
   }
-  const accessToken = await client.getAccessToken(sessionId);
+  const accessToken = session.accessToken;
   const claims = decodeJWT(accessToken);
 
   if (!claims) {

@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { Changa_One, Geist, Geist_Mono, Public_Sans } from "next/font/google";
-import { AsgardeoProvider } from "@asgardeo/nextjs/server";
+import { AuthProvider } from "@/lib/auth/client";
 import "./globals.css";
 
 const publicSans = Public_Sans({ subsets: ["latin"], variable: "--font-sans" });
@@ -51,7 +51,7 @@ export default function RootLayout({
           disableTransitionOnChange
         >
           <ThemeInitializer />
-          <AsgardeoProvider>{children}</AsgardeoProvider>
+          <AuthProvider>{children}</AuthProvider>
         </ThemeProvider>
       </body>
     </html>

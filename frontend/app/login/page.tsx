@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { SignInButton, SignIn } from "@asgardeo/nextjs";
+import { SignInForm } from "@/components/auth/sign-in-form";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Copy01Icon, CheckmarkCircle02Icon } from "@hugeicons/core-free-icons";
 
@@ -53,13 +53,7 @@ export default function LoginPage() {
             font-size: 1.375rem;
           }
         `}</style>
-        <SignIn
-          size="small"
-          variant="outlined"
-          className="custom-signin"
-          onSuccess={() => {}}
-          onError={() => {}}
-        />
+        <SignInForm />
       </div>
 
       {SHOW_DEMO_CREDENTIALS ? (
