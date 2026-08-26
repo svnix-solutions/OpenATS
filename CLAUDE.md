@@ -155,9 +155,17 @@ authority, not this list.
 
 **Two database roles.** Migrations run as the owner via
 `MIGRATION_DATABASE_URL`; everything else runs as `openats_app` via
-`DATABASE_URL`. This is not cosmetic: Postgres lets superusers and table owners
-bypass RLS, so an app connecting as the owner would ignore every policy
-silently and every isolation test would pass without testing anything.
+`DATABASE_URL`. This is not cosmetic: Postgres exempts superusers and
+`BYPASSRLS` roles from every policy, so an app connecting as one ignores the
+whole boundary silently and every isolation test passes without testing
+anything. (`FORCE ROW LEVEL SECURITY` closes the *owner* loophole — owning the
+tables is fine — but not the superuser one.)
+
+This is not hypothetical: `playwright.config.ts` pointed the E2E backend at the
+owner, which is a superuser, so the entire E2E suite ran with no tenancy
+boundary at all until an authenticated spec went looking for another
+organization's jobs and found them. `assertTenancyIsEnforceable()` in
+`db/index.ts` now refuses to start the server or the worker on such a role.
 
 **Which organization a user belongs to** comes from the `org_id` claim on the
 provider token. A token naming an organization with no

@@ -13,7 +13,7 @@ initSentry();
 import app from "./app";
 import { socketService } from "./shared/services/socket.service";
 import { subscribeToCvAnalysisEvents } from "./queues/cv-analysis/events";
-import { runInOrganization } from "./db";
+import { runInOrganization, assertTenancyIsEnforceable } from "./db";
 import logger from "./utils/logger";
 
 const PORT = env.PORT;
@@ -31,7 +31,17 @@ subscribeToCvAnalysisEvents((event) => {
   });
 });
 
-server.listen(PORT, () => {
-  logger.info(`OpenATS Backend running on port ${PORT}`);
-  logger.info(`Socket.io initialized and listening on the same port.`);
-});
+// Before accepting a request, not after: a boundary that is not being
+// enforced should stop the process, not serve one tenant's data to another
+// while someone reads the logs.
+assertTenancyIsEnforceable()
+  .then(() => {
+    server.listen(PORT, () => {
+      logger.info(`OpenATS Backend running on port ${PORT}`);
+      logger.info(`Socket.io initialized and listening on the same port.`);
+    });
+  })
+  .catch((err: unknown) => {
+    logger.error(err instanceof Error ? err.message : String(err));
+    process.exit(1);
+  });
