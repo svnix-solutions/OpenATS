@@ -19,6 +19,7 @@ export type SeededWorld = {
   organizationId: number;
   clientCompanyId: number;
   clientSlug: string;
+  clientName: string;
   jobId: number;
   jobTitle: string;
   stageId: number;
@@ -88,10 +89,11 @@ export async function seedWorld(tag: string): Promise<SeededWorld> {
        VALUES ($1, 'E2E', 'Author', $2) RETURNING id`,
       [`${suffix}-author`, `author.${suffix}@example.test`],
     );
+    const clientName = `Acme ${suffix}`;
     const clientCompany = await c.query<{ id: number }>(
       `INSERT INTO client_companies (organization_id, name, slug)
        VALUES ($1, $2, $3) RETURNING id`,
-      [organizationId, `Acme ${suffix}`, suffix],
+      [organizationId, clientName, suffix],
     );
 
     // Unique per world. A shared constant made "the other agency's job is not
@@ -129,6 +131,7 @@ export async function seedWorld(tag: string): Promise<SeededWorld> {
       organizationId,
       clientCompanyId: clientCompany.rows[0]!.id,
       clientSlug: suffix,
+      clientName,
       jobId: job.rows[0]!.id,
       jobTitle,
       stageId: stage.rows[0]!.id,
@@ -267,5 +270,45 @@ export async function seedApplicant(
       name: `${first} ${last}`,
       applicationId: application.rows[0]!.id,
     };
+  });
+}
+
+/**
+ * A second client company in the same organization, with its own job.
+ *
+ * Scoping is only demonstrable when there is something to be scoped out of. A
+ * client contact seeing "their" job proves nothing if it is the only job the
+ * agency has.
+ */
+export async function seedSecondClient(
+  world: SeededWorld,
+): Promise<{ clientSlug: string; jobTitle: string; jobId: number }> {
+  const stamp = Date.now();
+  const slug = `other-${world.clientSlug}`;
+
+  return withOwner(world.organizationId, async (c) => {
+    const client = await c.query<{ id: number }>(
+      `INSERT INTO client_companies (organization_id, name, slug)
+       VALUES ($1, $2, $3) RETURNING id`,
+      [world.organizationId, `Rival ${stamp}`, slug],
+    );
+    const department = await c.query<{ id: number }>(
+      "SELECT id FROM departments LIMIT 1",
+    );
+    const jobTitle = `Rival Engineer ${stamp}`;
+    const job = await c.query<{ id: number }>(
+      `INSERT INTO jobs (title, slug, client_company_id, department_id,
+                         employment_type, status, description, created_by)
+       VALUES ($1, $2, $3, $4, 'full_time', 'published', $5, $6) RETURNING id`,
+      [
+        jobTitle,
+        `rival-job-${stamp}`,
+        client.rows[0]!.id,
+        department.rows[0]!.id,
+        "Someone else's opening.",
+        world.authorId,
+      ],
+    );
+    return { clientSlug: slug, jobTitle, jobId: job.rows[0]!.id };
   });
 }
