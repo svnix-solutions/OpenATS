@@ -80,10 +80,16 @@ import { isClientRole } from "@/lib/roles";
 const inputCls =
   "h-9 bg-gray-50 dark:bg-neutral-800 border-slate-200 dark:border-neutral-700 rounded-md shadow-none text-sm placeholder:text-slate-400 dark:placeholder:text-neutral-500 focus-visible:ring-0 focus-visible:border-slate-400 dark:focus-visible:border-neutral-600 transition-colors";
 
+// All five, not three. The two client roles were missing, and because both
+// dialogs map over this list, there was no way to make anyone a client contact
+// — which left the entire client portal, and the client-company selector
+// below it, unreachable through the product.
 const ROLES = [
   { value: "interviewer", label: "Interviewer" },
   { value: "hiring_manager", label: "Hiring Manager" },
   { value: "super_admin", label: "Super Admin" },
+  { value: "client_admin", label: "Client Admin" },
+  { value: "client_reviewer", label: "Client Reviewer" },
 ] as const;
 
 type Role = (typeof ROLES)[number]["value"];
@@ -147,6 +153,7 @@ const emptyCreate = {
   lastName: "",
   password: "",
   role: "interviewer" as Role,
+  clientCompanyId: null as number | null,
 };
 
 export default function UserManagementPage() {
@@ -188,8 +195,12 @@ export default function UserManagementPage() {
 
   const [createOpen, setCreateOpen] = useState(false);
   const [creating, setCreating] = useState(false);
-  const [passwordMethod, setPasswordMethod] =
-    useState<PasswordMethod>("invite");
+  // "set", not "invite". Inviting needs an admin-side create that sends mail,
+  // and the provider has none without its own mail service configured — so the
+  // invite path threw "A password is required to create a user" every time.
+  // It was also the default, which made creating any user fail until the
+  // administrator noticed the radio.
+  const [passwordMethod, setPasswordMethod] = useState<PasswordMethod>("set");
   const [createForm, setCreateForm] = useState(emptyCreate);
   const [showPassword, setShowPassword] = useState(false);
 
@@ -250,7 +261,7 @@ export default function UserManagementPage() {
   };
 
   const openCreate = () => {
-    setPasswordMethod("invite");
+    setPasswordMethod("set");
     setShowPassword(false);
     setCreateForm(emptyCreate);
     setCreateOpen(true);
@@ -282,6 +293,14 @@ export default function UserManagementPage() {
       }
     }
 
+    // Same guard as saving an edit. A client role with no company is refused
+    // by the backend and again at sign-in, so letting it through here would
+    // create an account that can never log in.
+    if (isClientRole(createForm.role) && !createForm.clientCompanyId) {
+      toast.error("Choose a client company for this contact");
+      return;
+    }
+
     const payload: InviteUserPayload = {
       email,
       userName: email,
@@ -290,6 +309,9 @@ export default function UserManagementPage() {
       role: createForm.role,
       askPassword: passwordMethod === "invite",
       ...(passwordMethod === "set" ? { password } : {}),
+      ...(isClientRole(createForm.role)
+        ? { clientCompanyId: createForm.clientCompanyId }
+        : {}),
     };
 
     setCreating(true);
@@ -366,6 +388,9 @@ export default function UserManagementPage() {
                 <TableHead className="h-11 px-6 font-semibold text-slate-900 dark:text-neutral-100 text-sm">
                   Role
                 </TableHead>
+                <TableHead className="h-11 px-6 font-semibold text-slate-900 dark:text-neutral-100 text-sm">
+                  Client
+                </TableHead>
                 <TableHead className="h-11 px-6 w-44 text-right font-semibold text-slate-900 dark:text-neutral-100 text-sm">
                   Actions
                 </TableHead>
@@ -374,14 +399,14 @@ export default function UserManagementPage() {
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={4} className="p-0">
+                  <TableCell colSpan={5} className="p-0">
                     <ListSectionSpinner />
                   </TableCell>
                 </TableRow>
               ) : filteredUsers.length === 0 ? (
                 <TableRow>
                   <TableCell
-                    colSpan={4}
+                    colSpan={5}
                     className="h-32 text-center text-slate-400 text-sm"
                   >
                     No users found.
@@ -401,6 +426,13 @@ export default function UserManagementPage() {
                     </TableCell>
                     <TableCell className="h-10 px-6 py-0 text-slate-600 dark:text-neutral-400 font-normal capitalize">
                       {u.role.replace(/_/g, " ")}
+                    </TableCell>
+                    <TableCell className="h-10 px-6 py-0 text-slate-600 dark:text-neutral-400 font-normal">
+                      {isClientRole(u.role)
+                        ? (clientCompanies.find(
+                            (c) => c.id === u.clientCompanyId,
+                          )?.name ?? "—")
+                        : "—"}
                     </TableCell>
                     <TableCell
                       className="h-10 px-6 py-0"
@@ -528,6 +560,42 @@ export default function UserManagementPage() {
                 </Select>
               </div>
 
+              {isClientRole(createForm.role) ? (
+                <div className="col-span-2">
+                  <Label className="text-xs font-medium text-slate-500 dark:text-neutral-400 mb-1.5 block">
+                    Client company
+                  </Label>
+                  <Select
+                    value={createForm.clientCompanyId?.toString() ?? ""}
+                    onValueChange={(v) =>
+                      setCreateForm((f) => ({
+                        ...f,
+                        clientCompanyId: Number(v),
+                      }))
+                    }
+                  >
+                    <SelectTrigger className="w-full h-9! rounded-md bg-gray-50 dark:bg-neutral-800 border-slate-200 dark:border-neutral-700 shadow-none px-3! py-0! text-sm focus-visible:ring-0 focus-visible:border-slate-400 dark:focus-visible:border-neutral-600 transition-colors">
+                      <SelectValue placeholder="Select a client company">
+                        {clientCompanies.find(
+                          (c) => c.id === createForm.clientCompanyId,
+                        )?.name ?? null}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {clientCompanies.map((c) => (
+                        <SelectItem key={c.id} value={String(c.id)}>
+                          {c.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="mt-1.5 text-xs text-slate-400">
+                    A client contact only sees this company&apos;s jobs and
+                    candidates.
+                  </p>
+                </div>
+              ) : null}
+
               <div className="col-span-2 pt-0.5">
                 <p className="text-xs font-medium text-slate-500 dark:text-neutral-400 mb-3">
                   Select the method to set the user password
@@ -537,14 +605,24 @@ export default function UserManagementPage() {
                   onValueChange={(v) => setPasswordMethod(v as PasswordMethod)}
                   className="gap-3"
                 >
-                  <div className="flex items-center gap-2">
-                    <RadioGroupItem id="pw-method-invite" value="invite" />
-                    <Label
-                      htmlFor="pw-method-invite"
-                      className="text-sm font-medium text-slate-800 dark:text-neutral-200 cursor-pointer"
-                    >
-                      Invite the user to set their own password
-                    </Label>
+                  <div className="flex items-start gap-2">
+                    <RadioGroupItem
+                      id="pw-method-invite"
+                      value="invite"
+                      disabled
+                    />
+                    <div>
+                      <Label
+                        htmlFor="pw-method-invite"
+                        className="text-sm font-medium text-slate-400 dark:text-neutral-500"
+                      >
+                        Invite the user to set their own password
+                      </Label>
+                      <p className="text-xs text-slate-400">
+                        Needs a mail service configured on the identity
+                        provider. Unavailable on this install.
+                      </p>
+                    </div>
                   </div>
                   <div className="flex items-center gap-2">
                     <RadioGroupItem id="pw-method-set" value="set" />
