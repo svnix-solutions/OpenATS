@@ -40,6 +40,10 @@ export type PipelineStage = {
 export type JobDetail = Job & {
   pipelineStages: PipelineStage[];
   hiringTeam: { id: number; jobId: number; userId: number; addedAt: string }[];
+  // Careers pages are addressed by client slug, not by client id, so the
+  // dashboard needs the slug to link to the public posting at all.
+  clientCompanySlug: string | null;
+  clientCompanyName: string | null;
 };
 
 export type CurrentUser = {

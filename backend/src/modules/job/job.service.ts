@@ -213,8 +213,20 @@ export const jobService = {
       .where(eq(jobPipelineStages.jobId, id))
       .orderBy(jobPipelineStages.position);
 
+    // The slug, not just the id: the public careers page is addressed by
+    // client slug (/careers/<client>/<job>), so without it the dashboard
+    // cannot link to the job it is showing. It linked to /careers/<job id>
+    // instead, which is a 404 — the shape from before careers pages were
+    // per-client.
+    const [client] = await db
+      .select({ slug: clientCompanies.slug, name: clientCompanies.name })
+      .from(clientCompanies)
+      .where(eq(clientCompanies.id, job.clientCompanyId));
+
     return {
       ...job,
+      clientCompanySlug: client?.slug ?? null,
+      clientCompanyName: client?.name ?? null,
       skills: skills.map((s) => s.skill),
       hiringTeam: team,
       pipelineStages: stages,
