@@ -21,6 +21,8 @@ const TEST_DATABASE_URL =
 
 export default defineConfig({
   testDir: "./e2e",
+  // Clears worlds an earlier run left behind, before anything else runs.
+  globalSetup: "./e2e/global-setup.ts",
   use: { baseURL: "http://localhost:3000" },
   webServer: {
     // `pnpm test:e2e` clears frontend/.next first, and the suite is not

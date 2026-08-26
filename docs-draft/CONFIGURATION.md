@@ -22,6 +22,8 @@ Optional variables are not validated, so a typo in one is silent.
 | `ENCRYPTION_KEY` | Base64 AES-256 key (32 bytes decoded). Encrypts stored integration credentials and signs OAuth state |
 | `FRONTEND_URL` | CORS origin, Socket.IO origin, and the base for links in outbound email |
 | `R2_ENDPOINT`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME`, `R2_PUBLIC_URL` | Cloudflare R2 or any S3-compatible store, for CVs and uploads |
+| `SMTP_HOST` | Send over SMTP instead of Resend. Unset in production; set to `localhost` with `docker compose up -d mailpit` to read outgoing mail at http://localhost:8025 |
+| `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASSWORD` | Only when `SMTP_HOST` points at something other than the local catcher |
 | `RESEND_API_KEY` | Transactional email |
 | `RESEND_FROM_EMAIL` | The address email is sent from. The *display name* is the agency's own name, per organization; only the address is shared |
 | `GEMINI_API_KEY` | CV parsing, scoring and summaries |

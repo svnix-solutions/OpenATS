@@ -1,4 +1,5 @@
 import { Resend } from "resend";
+import nodemailer from "nodemailer";
 import dotenv from "dotenv";
 import { eq } from "drizzle-orm";
 import { db, currentOrganizationId } from "../../db";
@@ -9,6 +10,59 @@ dotenv.config();
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 const FROM_EMAIL = process.env.RESEND_FROM_EMAIL || "onboarding@resend.dev";
+
+/**
+ * Where mail goes.
+ *
+ * With `SMTP_HOST` set it goes over SMTP; otherwise to Resend. The point of
+ * the first is that outgoing mail can be *read* during development — the
+ * Mailpit container in docker-compose accepts anything on :1025 and shows it
+ * at :8025 — rather than being sent for real, or not sent at all and assumed
+ * fine. Offer, rejection and interview mails are the ones worth looking at,
+ * and no unit test tells you what they look like in a client.
+ *
+ * Deliberately one branch, at the transport and nowhere else: everything
+ * above this line — the branding, the header escaping, the templates — is the
+ * same code either way. A development path that formats mail differently from
+ * production would be worse than having no development path.
+ */
+let cachedTransport: nodemailer.Transporter | null | undefined;
+
+/**
+ * Built on first use rather than at import, so that a test can decide which
+ * transport it is exercising. A module-level `createTransport` runs before any
+ * test can set an environment variable, which would leave the SMTP path
+ * permanently unreachable from the suite — and an unreachable path is where
+ * the two formats quietly drift apart.
+ */
+function transport(): nodemailer.Transporter | null {
+  if (cachedTransport !== undefined) return cachedTransport;
+
+  const host = process.env.SMTP_HOST;
+  cachedTransport = host
+    ? nodemailer.createTransport({
+        host,
+        port: Number(process.env.SMTP_PORT ?? 1025),
+        // A local catcher has no TLS and wants no credentials. Both become
+        // real settings the moment SMTP_HOST points at anything else.
+        secure: process.env.SMTP_SECURE === "true",
+        ...(process.env.SMTP_USER
+          ? {
+              auth: {
+                user: process.env.SMTP_USER,
+                pass: process.env.SMTP_PASSWORD ?? "",
+              },
+            }
+          : {}),
+      })
+    : null;
+  return cachedTransport;
+}
+
+/** Test seam: forget the memoised transport so the next send re-reads env. */
+export function resetMailTransport(): void {
+  cachedTransport = undefined;
+}
 
 export interface SendEmailOptions {
   to: string;
@@ -141,11 +195,30 @@ export const mailService = {
     try {
       const brand = await currentBrand();
 
+      const from = `${headerSafe(brand) || DEFAULT_BRAND} <${FROM_EMAIL}>`;
+      const renderedSubject = subject.replaceAll(
+        "{{brand}}",
+        headerSafe(brand),
+      );
+      const renderedHtml = html.replaceAll("{{brand}}", escapeHtml(brand));
+
+      const smtp = transport();
+      if (smtp) {
+        const sent = await smtp.sendMail({
+          from,
+          to,
+          subject: renderedSubject,
+          html: renderedHtml,
+        });
+        logger.info(`[mail] sent over SMTP to ${to} (${sent.messageId})`);
+        return { id: sent.messageId };
+      }
+
       const { data, error } = await resend.emails.send({
-        from: `${headerSafe(brand) || DEFAULT_BRAND} <${FROM_EMAIL}>`,
+        from,
         to: [to],
-        subject: subject.replaceAll("{{brand}}", headerSafe(brand)),
-        html: html.replaceAll("{{brand}}", escapeHtml(brand)),
+        subject: renderedSubject,
+        html: renderedHtml,
       });
 
       if (error) {

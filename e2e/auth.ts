@@ -138,3 +138,27 @@ export async function providerSubjectOf(email: string): Promise<string> {
     await client.end();
   }
 }
+
+/**
+ * Removes an account created through the product rather than by `seedOperator`,
+ * which is the only way a spec learns its provider id — by asking.
+ *
+ * The organization cascade takes the local rows; the provider's copy is
+ * outside it, and every run would otherwise leave an account behind.
+ */
+export async function deleteProviderUserByEmail(email: string): Promise<void> {
+  const found = await graphql<{ _users: { users: { id: string; email: string }[] } }>(
+    `query { _users(params: { pagination: { limit: 500, page: 1 } }) {
+       users { id email } } }`,
+    {},
+    true,
+  );
+  const match = found._users.users.find((u) => u.email === email);
+  if (match) {
+    await graphql(
+      `mutation ($id: String!) { _delete_user(params: { id: $id }) { message } }`,
+      { id: match.id },
+      true,
+    );
+  }
+}
