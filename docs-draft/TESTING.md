@@ -44,6 +44,12 @@ These catch what unit tests cannot: real SQL errors, wrong column names, broken 
 
 Note that no server is started on port 8080. Supertest imports the Express app directly and binds it to a random free port for the duration of each request, so integration tests never conflict with a running dev server.
 
+**Queue tests use a real worker.** `cv-analysis-worker.test.ts` runs BullMQ
+against the real Redis and stubs only `cvAnalysisService`, which is the one
+part that would call Gemini. It drains the queue before and after, and uses
+`attempts: 2, backoff: { delay: 1 }` on the job rather than the queue's real
+`5s` exponential backoff — correct in production, untestable here.
+
 **Socket tests are the exception.** Socket.IO needs a listening server, so
 `socket-authorization.test.ts` creates one on an ephemeral port (`listen(0)`),
 attaches `socketService`, and connects with `socket.io-client`. Still no fixed
