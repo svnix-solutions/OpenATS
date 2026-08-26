@@ -2,16 +2,6 @@ import { eq } from "drizzle-orm";
 import { db } from "../../db";
 import { company, departments } from "../../db";
 
-type Department = typeof departments.$inferSelect;
-
-const departmentsCache = new Map<
-  string,
-  {
-    value: Department[];
-    expiresAt: number;
-  }
->();
-const DEPARTMENTS_CACHE_TTL_MS = 5 * 60_000;
 
 export type UpdateCompanyInput = {
   name: string;
@@ -66,30 +56,32 @@ export const companyService = {
 };
 
 export const departmentService = {
+  /**
+   * This organization's departments.
+   *
+   * Deliberately uncached. There was a process-wide Map here keyed on the
+   * literal string "all", so the first organization to ask populated it and
+   * every other organization was served that answer for the next five
+   * minutes — their own department names replaced by someone else's.
+   *
+   * Keying it by organization would have fixed that, and the analytics cache
+   * does exactly that for a report that is expensive to compute. This is one
+   * indexed select over a table with a handful of rows. It did not earn
+   * process-global mutable state, and not having it is one fewer thing to get
+   * wrong.
+   */
   async getAll() {
-    const cacheKey = "all";
-    const cached = departmentsCache.get(cacheKey);
-    if (cached && cached.expiresAt > Date.now()) return cached.value;
-
     const comp = await db.select().from(company).limit(1);
     if (!comp[0]) return [];
 
-    const result = await db
+    return db
       .select()
       .from(departments)
       .where(eq(departments.companyId, comp[0].id))
       .orderBy(departments.name);
-
-    departmentsCache.set(cacheKey, {
-      value: result,
-      expiresAt: Date.now() + DEPARTMENTS_CACHE_TTL_MS,
-    });
-
-    return result;
   },
 
   async create(input: CreateDepartmentInput) {
-    departmentsCache.delete("all");
     const comp = await db.select().from(company).limit(1);
     if (!comp[0]) {
       throw new Error("Company must be set up before creating departments.");
@@ -106,7 +98,6 @@ export const departmentService = {
   },
 
   async update(id: number, input: UpdateDepartmentInput) {
-    departmentsCache.delete("all");
     const [updated] = await db
       .update(departments)
       .set({
@@ -120,7 +111,6 @@ export const departmentService = {
   },
 
   async delete(id: number) {
-    departmentsCache.delete("all");
     const [deleted] = await db
       .delete(departments)
       .where(eq(departments.id, id))

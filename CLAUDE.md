@@ -106,6 +106,14 @@ forgotten, and the connection it writes was silently refused for it:
 | Google OAuth callback | `organizationId` carried in the signed `state` |
 | CV analysis broadcast | `organizationId` carried on the Redis pub/sub event |
 
+**In-memory state is outside the boundary.** Row-level security scopes rows,
+not the process. Anything cached, memoised or broadcast in Node is shared by
+every tenant unless its key says otherwise — a `Map` keyed on the literal
+string `"all"` served one organization's departments to all of them for five
+minutes, and a single global socket room did the same for dashboard events.
+`currentOrganizationId()` belongs in any such key, and a cache that cannot
+justify process-global mutable state is better deleted than parameterised.
+
 **The deliberate holes.** Seven `SECURITY DEFINER` functions run outside the
 boundary because they answer "which tenant is this" before one is known:
 `app_provision_user`, `app_resolve_membership`,
