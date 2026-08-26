@@ -13,6 +13,7 @@ initSentry();
 import app from "./app";
 import { socketService } from "./shared/services/socket.service";
 import { subscribeToCvAnalysisEvents } from "./queues/cv-analysis/events";
+import { runInOrganization } from "./db";
 import logger from "./utils/logger";
 
 const PORT = env.PORT;
@@ -21,8 +22,13 @@ const server = http.createServer(app);
 
 socketService.initialize(server);
 
+// The one broadcast with no request behind it: the analysis finished in the
+// worker process and arrives here over Redis. Re-enter the organization the
+// event names so it reaches that tenant's dashboards and no others.
 subscribeToCvAnalysisEvents((event) => {
-  socketService.emitCvAnalysisUpdate(event);
+  void runInOrganization(event.organizationId, async () => {
+    socketService.emitCvAnalysisUpdate(event);
+  });
 });
 
 server.listen(PORT, () => {

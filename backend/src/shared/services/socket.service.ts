@@ -1,6 +1,6 @@
 import { Server, Socket } from "socket.io";
 import { Server as HttpServer } from "http";
-import { db, runInOrganization } from "../../db";
+import { currentOrganizationId, db, runInOrganization } from "../../db";
 import { jobChatMessages, candidateChatMessages, users } from "../../db/schema";
 import { eq, and } from "drizzle-orm";
 import { verifyAccessToken } from "../auth/verify-token";
@@ -15,7 +15,17 @@ import {
 import logger from "../../utils/logger";
 import { getErrorMessage } from "../../utils/error.utils";
 
-const STAFF_ROOM = "staff";
+/**
+ * Dashboard events go to the staff of one organization, not to everyone.
+ *
+ * This used to be a single global room that every authenticated socket
+ * joined, so every tenant received every other tenant's `candidate_applied`,
+ * `offer_changed`, and the rest — job and candidate ids included. It read as a
+ * safety measure next to a bare `io.emit()`, and was the same thing.
+ */
+function staffRoom(organizationId: number): string {
+  return `staff:${organizationId}`;
+}
 const jobRoom = (jobId: number) => `job_${jobId}`;
 // The room is one submission, not a person. Its number is an application id
 // — the same id the dashboard links to and canAccessCandidate authorises.
@@ -101,7 +111,7 @@ export class SocketService {
         };
       };
 
-      socket.join(STAFF_ROOM);
+      socket.join(staffRoom(user.organizationId));
       logger.info(`Socket connected: ${socket.id} (user ${user.id})`);
 
       // job room — hiring team members only
@@ -356,8 +366,27 @@ export class SocketService {
     });
   }
 
+  /**
+   * Sends to the staff of whichever organization this call is running for.
+   *
+   * Every caller is inside `runInOrganization`, so the tenant is already
+   * established. Outside one there is no room this could belong to, and
+   * emitting to all of them is what the bug was — so it drops the event and
+   * says so rather than falling back to a wider audience.
+   */
+  private broadcastToStaff(event: string, payload: unknown) {
+    const organizationId = currentOrganizationId();
+    if (organizationId === null) {
+      logger.warn(
+        `[socket] dropped "${event}" — no organization context to send it to`,
+      );
+      return;
+    }
+    this.io?.to(staffRoom(organizationId)).emit(event, payload);
+  }
+
   public notifyCandidateApplied(jobId: number) {
-    this.io?.to(STAFF_ROOM).emit("candidate_applied", { jobId });
+    this.broadcastToStaff("candidate_applied", { jobId });
   }
 
   // Broadcast a candidate pipeline stage change to authenticated dashboard clients
@@ -366,7 +395,7 @@ export class SocketService {
     jobId: number;
     stageId: number;
   }) {
-    this.io?.to(STAFF_ROOM).emit("candidate_stage_changed", event);
+    this.broadcastToStaff("candidate_stage_changed", event);
   }
 
   // Broadcast an offer create/update/status change to authenticated dashboard clients
@@ -375,7 +404,7 @@ export class SocketService {
     candidateId: number;
     jobId: number;
   }) {
-    this.io?.to(STAFF_ROOM).emit("offer_changed", event);
+    this.broadcastToStaff("offer_changed", event);
   }
 
   // Broadcast an interview create/update/delete/feedback change
@@ -383,7 +412,7 @@ export class SocketService {
     interviewId: number;
     candidateId: number;
   }) {
-    this.io?.to(STAFF_ROOM).emit("interview_changed", event);
+    this.broadcastToStaff("interview_changed", event);
   }
 
   // Broadcast assessment attempt progress (answer saved / attempt completed)
@@ -391,7 +420,7 @@ export class SocketService {
     candidateId: number;
     attemptId: number;
   }) {
-    this.io?.to(STAFF_ROOM).emit("assessment_progress_updated", event);
+    this.broadcastToStaff("assessment_progress_updated", event);
   }
 
   public async sendSystemMessageToJob(jobId: number, message: string) {
@@ -417,7 +446,7 @@ export class SocketService {
     jobId: number;
     status: "done" | "failed";
   }) {
-    this.io?.to(STAFF_ROOM).emit("cv_analysis_updated", event);
+    this.broadcastToStaff("cv_analysis_updated", event);
   }
 }
 

@@ -46,7 +46,7 @@ pnpm lint     # eslint
 - **Rate limiting**: `/public/*` has its own IP-keyed limiters in `public.routes.ts`. The authenticated API is limited by `middlewares/rate-limit.middleware.ts`, keyed by **user id** rather than IP so one office behind a NAT does not share a budget — `apiLimiter` is mounted on all of `/api`, and `expensiveLimiter` on uploads. Both are tunable with `RATE_LIMIT_API` / `RATE_LIMIT_EXPENSIVE`.
 - **Per-job authorization**: `middlewares/job-access.middleware.ts` (`requireJobAccess`, `requireCandidateAccess`) gates HTTP routes on hiring-team membership using the same `shared/auth/job-access.ts` rule as the sockets. Job creation adds the creator to the hiring team, and `job.service.getAll` already filters by it, so membership is the app-wide notion of "your jobs".
 - **`req.user`** is available via augmentation in `backend/src/types/express.d.ts`.
-- **Socket.IO** runs on the same HTTP server. Connections require a valid Asgardeo JWT in `handshake.auth.token`, verified by an `io.use()` middleware before any handler runs; the verified user is on `socket.data.user`. Chat handlers take the sender from that user, never from the client payload. Dashboard-wide events are emitted to the `staff` room (which every authenticated socket joins), not with a bare `io.emit()`. CORS is restricted to `FRONTEND_URL`.
+- **Socket.IO** runs on the same HTTP server. Connections require a valid Asgardeo JWT in `handshake.auth.token`, verified by an `io.use()` middleware before any handler runs; the verified user is on `socket.data.user`. Chat handlers take the sender from that user, never from the client payload. Dashboard-wide events go to a **per-organization** staff room, `staff:<orgId>`, resolved from the request context at emit time. A single global `staff` room that every authenticated socket joined read as the safe alternative to `io.emit()` and was the same thing across tenants — every organization received every other one's `candidate_applied`, `offer_changed` and the rest, ids included. With no context the event is dropped rather than widened. CORS is restricted to `FRONTEND_URL`.
 - **Socket authorization** is separate from authentication: `join_job` / `join_candidate` are gated by `shared/auth/job-access.ts` (hiring-team membership, with `super_admin` exempt), and the chat write handlers require the socket to already be in that room — so a client cannot skip the join and write to an arbitrary job. Client sockets are created by `frontend/lib/socket.ts`, which re-fetches a token from `/api/socket-token` on every connect attempt so reconnects survive token expiry.
 - Logger is winston with console transport only (file transports commented out).
 - `exactOptionalPropertyTypes: false` in tsconfig — deliberate.
@@ -93,7 +93,7 @@ writes its response from inside the callback, so a wrapping transaction would
 commit only after the response had been flushed, and the client would see a 200
 for uncommitted work. Use `db.transaction` where you actually want atomicity.
 
-Five entry points establish the context, and they are the five places a new one
+Six entry points establish the context, and they are the six places a new one
 could be forgotten — the OAuth callback is on this list because it *was*
 forgotten, and the connection it writes was silently refused for it:
 
@@ -104,6 +104,7 @@ forgotten, and the connection it writes was silently refused for it:
 | Socket.IO | the `inOrg` wrapper in `socket.service.ts` |
 | CV analysis worker | `organizationId` carried on the BullMQ job |
 | Google OAuth callback | `organizationId` carried in the signed `state` |
+| CV analysis broadcast | `organizationId` carried on the Redis pub/sub event |
 
 **The deliberate holes.** Seven `SECURITY DEFINER` functions run outside the
 boundary because they answer "which tenant is this" before one is known:
