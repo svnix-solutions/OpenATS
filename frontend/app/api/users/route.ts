@@ -1,156 +1,98 @@
 import { NextResponse } from "next/server";
 import { serverFetch } from "@/lib/auth-action";
 import { requireRole } from "@/lib/require-role";
-import { assignAsgardeoRole } from "@/lib/asgardeo-roles";
-import {
-  getAsgardeoApiBase,
-  getScimAccessToken,
-  scimRequestHeaders,
-} from "@/lib/asgardeo-scim-token";
+import { createUser, listUsers } from "@/lib/auth/directory";
 import type { User } from "@/types";
 
-const ROUTE_LOG = "[API /users]";
+export const dynamic = "force-dynamic";
 
-type AppRole = "super_admin" | "hiring_manager" | "interviewer";
-// The backend list carries the membership role now, so this is no longer
-// Omit<User, "role"> — it is optional because an account provisioned in the
-// identity provider but not yet attached here has no membership to read.
+/**
+ * The user list is a join across two systems.
+ *
+ * The application owns membership — which organization someone belongs to,
+ * their role, and their client company — and the identity provider owns the
+ * account. Neither alone is the answer: the provider does not know about
+ * organizations, and the application does not know about accounts that have
+ * never signed in.
+ */
 type DbUser = Omit<User, "role"> & {
   asgardeoUserId: string;
-  role?: AppRole | null;
+  role?: User["role"] | null;
 };
 
-async function buildRoleMap(token: string): Promise<Map<string, AppRole>> {
-  const base = getAsgardeoApiBase();
-  const map = new Map<string, AppRole>();
-
-  const roleDefs: [string | undefined, AppRole][] = [
-    [process.env.ASGARDEO_SUPER_ADMIN_ROLE_ID, "super_admin"],
-    [process.env.ASGARDEO_HIRING_MANAGER_ROLE_ID, "hiring_manager"],
-    [process.env.ASGARDEO_INTERVIEWER_ROLE_ID, "interviewer"],
-  ];
-
-  await Promise.all(
-    roleDefs.map(async ([roleId, appRole]) => {
-      if (!roleId) return;
-      try {
-        const res = await fetch(`${base}/scim2/v2/Roles/${roleId}`, {
-          headers: scimRequestHeaders(token, false),
-        });
-        if (!res.ok) return;
-        const data = await res.json();
-        for (const u of data.users ?? []) {
-          if (u.value) map.set(u.value, appRole);
-        }
-      } catch {
-        // non-fatal — user will just have no role shown
-      }
-    }),
-  );
-
-  return map;
-}
-
 export async function GET() {
-  console.log(`${ROUTE_LOG} GET /api/users`);
   try {
-    const [dbData, scimToken] = await Promise.all([
+    await requireRole("super_admin");
+
+    const [dbData, directory] = await Promise.all([
       serverFetch<{ data: DbUser[] }>("/users"),
-      getScimAccessToken(),
+      // A provider that is down should not blank the screen: membership is
+      // what governs access, and it is the half worth showing.
+      listUsers().catch(() => []),
     ]);
 
-    const roleMap = await buildRoleMap(scimToken);
+    const byProviderId = new Map(directory.map((u) => [u.id, u]));
 
-    // The database role is the one that governs access — the token's role
-    // seeds it at first sign-in and is ignored afterwards. Showing Asgardeo's
-    // here meant the screen could disagree with what the person could
-    // actually do. Asgardeo's is the fallback, for an account provisioned in
-    // the identity provider but not yet attached here.
     const users: User[] = dbData.data.map(({ asgardeoUserId, ...u }) => ({
       ...u,
-      role: u.role ?? roleMap.get(asgardeoUserId) ?? "interviewer",
+      // The database role governs; the provider's is the fallback for an
+      // account provisioned there but not yet attached here.
+      role:
+        u.role ??
+        (byProviderId.get(asgardeoUserId)?.roles[0] as User["role"]) ??
+        "interviewer",
     }));
 
-    console.log(`${ROUTE_LOG} fetched ${users.length} users`);
     return NextResponse.json(users);
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
-    console.error(`${ROUTE_LOG} GET error:`, msg);
-    const status = msg === "Unauthorized" ? 401 : 500;
-    return NextResponse.json({ error: msg }, { status });
+    console.error("[api/users] GET failed:", msg);
+    return NextResponse.json(
+      { error: msg },
+      { status: msg === "Unauthorized" || msg === "Forbidden" ? 401 : 500 },
+    );
   }
 }
 
 export async function POST(req: Request) {
-  console.log(`${ROUTE_LOG} POST /api/users`);
   try {
     await requireRole("super_admin");
-    const scimToken = await getScimAccessToken();
     const body = await req.json();
-    const role = body.role ?? "interviewer";
 
-    console.log(
-      `${ROUTE_LOG} creating user — email: ${body.email}, role: ${role}, askPassword: ${!!body.askPassword}`,
-    );
-
-    const base = getAsgardeoApiBase();
-
-    const scimBody: Record<string, unknown> = {
-      schemas: ["urn:ietf:params:scim:schemas:core:2.0:User"],
-      name: { givenName: body.firstName, familyName: body.lastName },
-      userName: `DEFAULT/${body.userName}`,
-      emails: [{ primary: true, value: body.email }],
-    };
-    if (body.askPassword) {
-      scimBody["urn:scim:wso2:schema"] = { askPassword: true };
-    } else if (body.password) {
-      scimBody.password = body.password;
-    }
-
-    const scimUrl = `${base}/scim2/Users`;
-    console.log(`${ROUTE_LOG} POST ${scimUrl}`);
-
-    const scimRes = await fetch(scimUrl, {
-      method: "POST",
-      headers: scimRequestHeaders(scimToken, true),
-      body: JSON.stringify(scimBody),
+    const created = await createUser({
+      email: body.email,
+      firstName: body.firstName,
+      lastName: body.lastName,
+      role: body.role ?? "interviewer",
+      password: body.password,
     });
 
-    if (!scimRes.ok) {
-      const err = await scimRes.json();
-      console.error(
-        `${ROUTE_LOG} Asgardeo create user failed — HTTP ${scimRes.status}:`,
-        err,
-      );
-      return NextResponse.json(
-        { error: err.detail ?? "Failed to create user in Asgardeo" },
-        { status: scimRes.status },
-      );
-    }
-
-    const scimUser = await scimRes.json();
-    console.log(
-      `${ROUTE_LOG} Asgardeo user created — asgardeoUserId: ${scimUser.id}`,
-    );
-
-    await assignAsgardeoRole(scimToken, scimUser.id, role);
-
-    await serverFetch<{ data: unknown }>("/users", {
+    // Mirror the account into this organization. Without it the person exists
+    // in the provider and is a member of nothing — they cannot be given a
+    // role, and they do not appear in the directory, which lists members.
+    await serverFetch<{ data: { id: number } }>("/users", {
       method: "POST",
       body: JSON.stringify({
-        asgardeoUserId: scimUser.id,
+        asgardeoUserId: created.id,
         firstName: body.firstName,
         lastName: body.lastName,
         email: body.email,
+        // The role travels with the account: the backend creates both
+        // together, because an account with no membership is a member of
+        // nothing and cannot be given a role afterwards.
+        role: body.role ?? "interviewer",
+        ...(body.clientCompanyId !== undefined && {
+          clientCompanyId: body.clientCompanyId,
+        }),
       }),
     });
 
-    console.log(`${ROUTE_LOG} user created and stored in DB successfully`);
-    return NextResponse.json({ success: true }, { status: 201 });
+    return NextResponse.json({ id: created.id, email: created.email });
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
-    console.error(`${ROUTE_LOG} POST error:`, msg);
-    const status = msg === "Unauthorized" ? 401 : msg === "Forbidden" ? 403 : 500;
-    return NextResponse.json({ error: msg }, { status });
+    return NextResponse.json(
+      { error: msg },
+      { status: msg === "Unauthorized" || msg === "Forbidden" ? 401 : 500 },
+    );
   }
 }

@@ -1,112 +1,65 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 import { serverFetch } from "@/lib/auth-action";
 import { requireRole } from "@/lib/require-role";
-import { assignAsgardeoRole, removeAsgardeoRole } from "@/lib/asgardeo-roles";
-import {
-  getAsgardeoApiBase,
-  getScimAccessToken,
-  scimRequestHeaders,
-} from "@/lib/asgardeo-scim-token";
+import { deleteUser, updateUser } from "@/lib/auth/directory";
 import type { User } from "@/types";
 
-const ROUTE_LOG = "[API /users/[id]]";
+export const dynamic = "force-dynamic";
 
-type RouteContext = {
-  params: Promise<{ id: string }>;
-};
+type RouteContext = { params: Promise<{ id: string }> };
+
+const status = (msg: string) =>
+  msg === "Unauthorized" || msg === "Forbidden" ? 401 : 500;
 
 export async function GET(_req: NextRequest, context: RouteContext) {
-  const { id } = await context.params;
-  console.log(`${ROUTE_LOG} GET /api/users/${id}`);
   try {
+    await requireRole("super_admin");
+    const { id } = await context.params;
     const data = await serverFetch<{ data: User }>(`/users/${id}`);
     return NextResponse.json(data.data);
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
-    console.error(`${ROUTE_LOG} GET error:`, msg);
-    return NextResponse.json({ error: msg }, { status: 500 });
+    return NextResponse.json({ error: msg }, { status: status(msg) });
   }
 }
 
+/**
+ * Changes a user's profile, role, and client company.
+ *
+ * The role is written to **both** the provider and the membership, and only
+ * the membership takes effect. The provider's copy seeds a membership at first
+ * sign-in and is ignored afterwards, so writing only there — which the previous
+ * integration did — changed what the screen showed and nothing about what the
+ * person could do.
+ */
 export async function PATCH(req: NextRequest, context: RouteContext) {
-  const { id } = await context.params;
-  console.log(`${ROUTE_LOG} PATCH /api/users/${id}`);
   try {
     await requireRole("super_admin");
-    const scimToken = await getScimAccessToken();
+    const { id } = await context.params;
     const body = await req.json();
-    const base = getAsgardeoApiBase();
 
-    const existing = await serverFetch<{
-      data: User & { asgardeoUserId: string };
-    }>(`/users/${id}`);
-    const { asgardeoUserId } = existing.data;
-    const oldRole = body.oldRole as string | undefined;
-    console.log(
-      `${ROUTE_LOG} updating asgardeoUserId=${asgardeoUserId}, oldRole=${oldRole}`,
+    const existing = await serverFetch<{ data: User & { asgardeoUserId?: string } }>(
+      `/users/${id}`,
     );
+    const providerId = existing.data.asgardeoUserId;
 
-    const operations: { op: string; path: string; value: unknown }[] = [];
-    if (body.firstName !== undefined)
-      operations.push({
-        op: "replace",
-        path: "name.givenName",
-        value: body.firstName,
-      });
-    if (body.lastName !== undefined)
-      operations.push({
-        op: "replace",
-        path: "name.familyName",
-        value: body.lastName,
-      });
-    if (body.email !== undefined)
-      operations.push({
-        op: "replace",
-        path: "emails",
-        value: [{ primary: true, value: body.email }],
-      });
-
-    if (operations.length > 0) {
-      const scimUrl = `${base}/scim2/Users/${asgardeoUserId}`;
-      console.log(
-        `${ROUTE_LOG} PATCH ${scimUrl} with ${operations.length} operation(s)`,
-      );
-
-      const scimRes = await fetch(scimUrl, {
-        method: "PATCH",
-        headers: scimRequestHeaders(scimToken, true),
-        body: JSON.stringify({
-          schemas: ["urn:ietf:params:scim:api:messages:2.0:PatchOp"],
-          Operations: operations,
-        }),
-      });
-
-      if (!scimRes.ok) {
-        const errBody = await scimRes.text();
-        console.error(
-          `${ROUTE_LOG} SCIM PATCH failed — HTTP ${scimRes.status}: ${errBody}`,
-        );
-        return NextResponse.json(
-          { error: errBody },
-          { status: scimRes.status },
-        );
-      }
-      console.log(`${ROUTE_LOG} SCIM PATCH successful`);
-    } else {
-      console.log(`${ROUTE_LOG} no profile fields to update in Asgardeo`);
+    if (
+      providerId &&
+      (body.firstName !== undefined ||
+        body.lastName !== undefined ||
+        body.email !== undefined ||
+        body.role !== undefined)
+    ) {
+      // Best-effort: the membership below is what governs access, and a
+      // provider outage should not block an administrator from changing it.
+      await updateUser(providerId, {
+        email: body.email,
+        firstName: body.firstName,
+        lastName: body.lastName,
+        role: body.role,
+      }).catch(() => {});
     }
 
-    if (body.role !== undefined && body.role !== oldRole) {
-      console.log(
-        `${ROUTE_LOG} role changed from "${oldRole}" → "${body.role}"`,
-      );
-      if (oldRole) await removeAsgardeoRole(scimToken, asgardeoUserId, oldRole);
-      await assignAsgardeoRole(scimToken, asgardeoUserId, body.role);
-    }
-
-    // Asgardeo is updated above so a *future* first sign-in seeds the right
-    // role. For an account that already has a membership the token's role is
-    // ignored, so without this the change had no effect on anything.
     if (body.role !== undefined || body.clientCompanyId !== undefined) {
       await serverFetch<{ data: unknown }>(`/users/${id}/membership`, {
         method: "PUT",
@@ -127,56 +80,34 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
       }),
     });
 
-    console.log(`${ROUTE_LOG} user ${id} updated successfully`);
     return NextResponse.json(updated.data);
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
-    const status = msg === "Unauthorized" ? 401 : 500;
-    console.error(`${ROUTE_LOG} PATCH error (id=${id}):`, msg);
-    return NextResponse.json({ error: msg }, { status });
+    return NextResponse.json({ error: msg }, { status: status(msg) });
   }
 }
 
 export async function DELETE(_req: NextRequest, context: RouteContext) {
-  const { id } = await context.params;
-  console.log(`${ROUTE_LOG} DELETE /api/users/${id}`);
   try {
     await requireRole("super_admin");
-    const scimToken = await getScimAccessToken();
-    const base = getAsgardeoApiBase();
+    const { id } = await context.params;
 
-    const existing = await serverFetch<{
-      data: User & { asgardeoUserId: string };
-    }>(`/users/${id}`);
-    const { asgardeoUserId } = existing.data;
-    console.log(`${ROUTE_LOG} deleting asgardeoUserId=${asgardeoUserId}`);
+    const existing = await serverFetch<{ data: User & { asgardeoUserId?: string } }>(
+      `/users/${id}`,
+    );
 
-    const scimUrl = `${base}/scim2/Users/${asgardeoUserId}`;
-    console.log(`${ROUTE_LOG} DELETE ${scimUrl}`);
+    // The application first: it deactivates rather than deletes, so the
+    // organization keeps its record of who did what. Removing the account from
+    // the provider only stops them signing in again.
+    await serverFetch<{ data: unknown }>(`/users/${id}`, { method: "DELETE" });
 
-    const scimRes = await fetch(scimUrl, {
-      method: "DELETE",
-      headers: scimRequestHeaders(scimToken, false),
-    });
-
-    if (!scimRes.ok) {
-      const errBody = await scimRes.text();
-      console.error(
-        `${ROUTE_LOG} SCIM DELETE failed — HTTP ${scimRes.status}: ${errBody}`,
-      );
-      return NextResponse.json({ error: errBody }, { status: scimRes.status });
+    if (existing.data.asgardeoUserId) {
+      await deleteUser(existing.data.asgardeoUserId).catch(() => {});
     }
 
-    console.log(`${ROUTE_LOG} Asgardeo user deleted (HTTP 204)`);
-
-    await serverFetch(`/users/${id}`, { method: "DELETE" });
-
-    console.log(`${ROUTE_LOG} user ${id} soft-deleted in DB`);
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ ok: true });
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
-    const status = msg === "Unauthorized" ? 401 : 500;
-    console.error(`${ROUTE_LOG} DELETE error (id=${id}):`, msg);
-    return NextResponse.json({ error: msg }, { status });
+    return NextResponse.json({ error: msg }, { status: status(msg) });
   }
 }

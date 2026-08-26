@@ -19,7 +19,11 @@ export type AppRole =
  * One mapping, in the place that also enforces it.
  */
 export async function requireRole(required: AppRole): Promise<void> {
-  const me = await serverFetch<{ data: { role: AppRole } }>("/api/users/me");
+  // "/users/me", not "/api/users/me": apiFetch prepends /api itself. With the
+  // prefix doubled this requested /api/api/users/me, got a 404, and threw —
+  // so every call to requireRole failed, and every route guarded by it
+  // answered 500 rather than enforcing anything.
+  const me = await serverFetch<{ data: { role: AppRole } }>("/users/me");
 
   if (me.data.role !== required) {
     throw new Error("Forbidden");

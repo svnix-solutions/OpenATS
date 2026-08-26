@@ -89,17 +89,30 @@ id_token     → { email: "…",  roles: null }              → 403 no role ass
 `--custom-access-token-script` copies the identity claims onto the access
 token, after which `/api/users/me` returns 200 and provisions the user.
 
+### The admin API, for user management
+
+Creating and changing users uses the admin GraphQL API with the
+`x-authorizer-admin-secret` header — `_users`, `_update_user`, `_delete_user`,
+and `signup` for creation, since there is no admin-side create.
+
+`Origin` must be set explicitly on those calls. Authorizer refuses
+state-changing requests carrying neither `Origin` nor `Referer`, and a
+server-to-server fetch sends neither — the same rule that stops its own SDK
+logging in from Node.
+
+Roles live in two places and mean different things. The provider's copy seeds a
+membership at first sign-in; `organization_members.role` is what governs
+access afterwards. Changing a role writes both: the provider for an account
+that has not signed in yet, the membership for everyone who has.
+
 ### What this does not cover
 
-- **The frontend still uses `@asgardeo/nextjs`**, so browser sign-in continues
-  to require Asgardeo. Using authorizer end to end means replacing four SDK
-  call sites — `SignIn`, `SignInButton`, `useAsgardeo`, and the `asgardeo()`
-  server helper.
-- **User management** (creating users, assigning roles from Settings) goes
-  through Asgardeo's SCIM2 and role APIs. Authorizer has its own GraphQL admin
-  API; that code would need porting.
-- Authorizer's own multi-tenancy was not evaluated. For a single-agency install
-  it does not matter — sign-in attaches to the only organization.
+- Authorizer's own multi-tenancy was not evaluated. It has the pieces —
+  `_organizations`, `_org_members`, `_user_organizations`, even a
+  `_scim_endpoint` — but OpenATS keeps organizations in its own tables and only
+  needs a stable claim to map them, so none of it was required here. For a
+  single-agency install it does not matter at all: sign-in attaches to the only
+  organization.
 
 ## Other candidates, not yet verified
 
