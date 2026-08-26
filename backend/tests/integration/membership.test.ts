@@ -7,6 +7,7 @@ import {
   MembershipNotFoundError,
   UnknownClientCompanyError,
   membershipService,
+  placeNewMember,
   userService,
 } from "../../src/modules/user/user.service";
 import { clientCompanyService } from "../../src/modules/client-company/client-company.service";
@@ -109,6 +110,61 @@ describe("membership", () => {
       membershipService.update(userId, { role: "hiring_manager" }),
     );
     expect(updated?.clientCompanyId).toBeNull();
+  });
+
+  it("places a brand-new account in this organization", async () => {
+    // The account and its membership are created together. Doing it through
+    // `update` instead would mean accepting any user id — including one
+    // belonging to another organization, who would then appear in this one's
+    // directory.
+    const fresh = await runInOrganization(organizationId, async () => {
+      const [row] = await db
+        .insert(users)
+        .values({
+          asgardeoUserId: `${SUFFIX}-fresh`,
+          firstName: "Fresh",
+          lastName: "Account",
+          email: `fresh.${SUFFIX}@example.test`,
+        })
+        .returning({ id: users.id });
+      return row!.id;
+    });
+
+    expect(
+      await runInOrganization(organizationId, () =>
+        membershipService.get(fresh),
+      ),
+    ).toBeNull();
+
+    const created = await runInOrganization(organizationId, () =>
+      placeNewMember(fresh, "hiring_manager"),
+    );
+
+    expect(created?.role).toBe("hiring_manager");
+    expect(created?.organizationId).toBe(organizationId);
+  });
+
+  it("refuses to give a role to an account with no membership", async () => {
+    // `update` changes an existing membership; it does not create one, or an
+    // administrator could grant themselves a member from another tenant.
+    const fresh = await runInOrganization(organizationId, async () => {
+      const [row] = await db
+        .insert(users)
+        .values({
+          asgardeoUserId: `${SUFFIX}-noRole`,
+          firstName: "No",
+          lastName: "Role",
+          email: `norole.${SUFFIX}@example.test`,
+        })
+        .returning({ id: users.id });
+      return row!.id;
+    });
+
+    await expect(
+      runInOrganization(organizationId, () =>
+        membershipService.update(fresh, { role: "interviewer" }),
+      ),
+    ).rejects.toBeInstanceOf(MembershipNotFoundError);
   });
 
   it("refuses a user who is not a member here", async () => {

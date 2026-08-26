@@ -124,9 +124,11 @@ need `org_id` — sign-in attaches to the only organization that exists.
 
 ## Replacing the identity provider
 
-Verified against **authorizer.dev**, self-hosted in Docker: the backend
-accepted its tokens and served the whole authenticated API — reads and writes —
-**with no code change**, only the two environment variables repointed.
+Done, against **authorizer.dev** self-hosted in Docker. The backend needed no
+change at all — only the two environment variables repointed. The frontend's
+provider-specific code was gathered into five files under `lib/auth`,
+`components/auth` and `app/api/auth`, having previously been spread across
+eleven.
 
 Two things had to be true, and both are worth knowing before choosing a
 provider:

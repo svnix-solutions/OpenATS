@@ -1,5 +1,5 @@
 import { eq, or } from "drizzle-orm";
-import { db } from "../../db";
+import { currentOrganizationId, db } from "../../db";
 import { clientCompanies, organizationMembers, users } from "../../db/schema";
 import { orgRole } from "../../db/schema/enums";
 import { cleanObject as clean } from "../../utils/object.utils";
@@ -153,6 +153,33 @@ export class UnknownClientCompanyError extends Error {
   }
 }
 
+/**
+ * Places a newly created account in this organization.
+ *
+ * Split from `membershipService.update` on purpose: that one refuses to create,
+ * because it takes a user id from a request and cannot tell a new account from
+ * someone else's. This is only reachable from the code path that just created
+ * the account.
+ */
+export async function placeNewMember(
+  userId: number,
+  role: (typeof orgRole.enumValues)[number],
+  clientCompanyId: number | null = null,
+) {
+  const organizationId = currentOrganizationId();
+  if (organizationId === null) {
+    throw new Error("Cannot create a membership outside an organization");
+  }
+
+  const [created] = await db
+    .insert(organizationMembers)
+    .values({ organizationId, userId, role, clientCompanyId })
+    .onConflictDoNothing()
+    .returning();
+
+  return created ?? null;
+}
+
 export const membershipService = {
   async get(userId: number) {
     const [row] = await db
@@ -170,6 +197,11 @@ export const membershipService = {
    */
   async update(userId: number, input: MembershipInput) {
     const current = await this.get(userId);
+    // Deliberately strict. Creating a membership here would let an
+    // administrator grant one to any user id — including a person who belongs
+    // to another organization, who would then appear in this one's directory.
+    // A brand-new account gets its membership from `create` below, which knows
+    // the account is new because it just made it.
     if (!current) throw new MembershipNotFoundError();
 
     const role = input.role ?? current.role;

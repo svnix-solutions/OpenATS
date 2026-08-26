@@ -5,6 +5,7 @@ import {
   MembershipNotFoundError,
   UnknownClientCompanyError,
   membershipService,
+  placeNewMember,
   userService,
 } from "./user.service";
 import logger from "../../utils/logger";
@@ -27,6 +28,17 @@ const createUserSchema = z.object({
   firstName: z.string().min(1).max(100),
   lastName: z.string().min(1).max(100),
   email: z.string().email().max(255),
+  // What this person may do here. Required: an account with no membership is
+  // a member of nothing, cannot be given a role afterwards without one, and
+  // does not appear in a directory that lists members.
+  role: z.enum([
+    "super_admin",
+    "hiring_manager",
+    "interviewer",
+    "client_admin",
+    "client_reviewer",
+  ]),
+  clientCompanyId: z.number().int().positive().nullable().optional(),
 });
 
 export const getCurrentUser = async (req: Request, res: Response) => {
@@ -125,7 +137,17 @@ export const createUser = async (req: Request, res: Response) => {
       });
       return;
     }
-    const result = await userService.create(parsed.data);
+    const { role, clientCompanyId, ...account } = parsed.data;
+    const result = await userService.create(account);
+    if (!result) {
+      res.status(500).json({ error: "Failed to create user" });
+      return;
+    }
+
+    // The account and its membership together: an account without one is a
+    // member of nothing, and nothing else can give it a role afterwards.
+    await placeNewMember(result.id, role, clientCompanyId ?? null);
+
     res.status(201).json({ data: result });
   } catch (error) {
     logger.error(`Failed to create user: ${getErrorMessage(error)}`);
