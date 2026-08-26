@@ -44,6 +44,18 @@ These catch what unit tests cannot: real SQL errors, wrong column names, broken 
 
 Note that no server is started on port 8080. Supertest imports the Express app directly and binds it to a random free port for the duration of each request, so integration tests never conflict with a running dev server.
 
+**E2E seeds its own world.** `e2e/seed.ts` inserts an organization, client
+company and published job straight into the database as the owner, setting
+`app.org_id` first because row-level security is FORCEd — the owner is subject
+to it too. Each spec file gets its **own** organization so parallel workers
+cannot reach each other's rows, and teardown is a single cascade.
+
+Run it with `pnpm test:e2e`, which clears `frontend/.next` first. Without that
+the suite is not repeatable: `next dev` persists route results, so a
+`/careers/:slug` that 404'd before its company existed keeps 404ing on the next
+run while the same data serves fine over the API. Dev only — every careers
+route builds as dynamic.
+
 **Queue tests use a real worker.** `cv-analysis-worker.test.ts` runs BullMQ
 against the real Redis and stubs only `cvAnalysisService`, which is the one
 part that would call Gemini. It drains the queue before and after, and uses
