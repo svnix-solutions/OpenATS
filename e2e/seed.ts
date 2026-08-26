@@ -21,6 +21,18 @@ export type SeededWorld = {
   clientSlug: string;
   jobId: number;
   jobTitle: string;
+  stageId: number;
+  authorId: number;
+  candidateName: string;
+};
+
+/** The three candidate-facing pages reached by a token rather than a login. */
+export type SeededTokens = {
+  applicationId: number;
+  candidateId: number;
+  offerToken: string;
+  assessmentToken: string;
+  interviewToken: string;
 };
 
 async function withOwner<T>(
@@ -105,12 +117,20 @@ export async function seedWorld(tag: string): Promise<SeededWorld> {
       [job.rows[0]!.id],
     );
 
+    const stage = await c.query<{ id: number }>(
+      "SELECT id FROM job_pipeline_stages WHERE job_id = $1 LIMIT 1",
+      [job.rows[0]!.id],
+    );
+
     return {
       organizationId,
       clientCompanyId: clientCompany.rows[0]!.id,
       clientSlug: suffix,
       jobId: job.rows[0]!.id,
       jobTitle,
+      stageId: stage.rows[0]!.id,
+      authorId: author.rows[0]!.id,
+      candidateName: "Ada Lovelace",
     };
   });
 }
@@ -126,4 +146,91 @@ export async function destroyWorld(world: SeededWorld): Promise<void> {
   await withOwner(null, (c) =>
     c.query("DELETE FROM organizations WHERE id = $1", [world.organizationId]),
   );
+}
+
+/**
+ * A candidate who already has an offer, an assessment invite and an interview
+ * to confirm — the three pages reached by a token rather than a login.
+ *
+ * Seeded rather than driven through the dashboard, because creating any of
+ * them needs an authenticated agency session and these specs are about what
+ * the candidate sees.
+ */
+export async function seedTokenPages(
+  world: SeededWorld,
+): Promise<SeededTokens> {
+  const stamp = Date.now();
+
+  return withOwner(world.organizationId, async (c) => {
+    const candidate = await c.query<{ id: number }>(
+      `INSERT INTO candidates (first_name, last_name, email, phone)
+       VALUES ('Ada', 'Lovelace', $1, '+15550000009') RETURNING id`,
+      [`ada.tokens.${stamp}@example.test`],
+    );
+    const application = await c.query<{ id: number }>(
+      `INSERT INTO applications (candidate_id, job_id, current_stage_id, status)
+       VALUES ($1, $2, $3, 'active') RETURNING id`,
+      [candidate.rows[0]!.id, world.jobId, world.stageId],
+    );
+
+    // "sent", because a draft offer has nothing for a candidate to open.
+    const offerToken = `offer-${stamp}`;
+    await c.query(
+      `INSERT INTO offers (candidate_id, job_id, created_by, status, salary,
+                           currency, employment_type, start_date,
+                           reporting_manager, benefits, offer_letter_html,
+                           review_token, sent_at)
+       VALUES ($1, $2, $3, 'sent', 120000, 'USD', 'full_time', '2026-10-01',
+               'Jane Manager', 'Health, dental', '<p>We are pleased to offer…</p>',
+               $4, now())`,
+      [candidate.rows[0]!.id, world.jobId, world.authorId, offerToken],
+    );
+
+    const assessment = await c.query<{ id: number }>(
+      `INSERT INTO assessments (title, description, time_limit, created_by)
+       VALUES ('Technical Screen', 'A short exercise', 45, $1) RETURNING id`,
+      [String(world.authorId)],
+    );
+    await c.query(
+      `INSERT INTO assessment_questions (assessment_id, title, description,
+                                         question_type, points, position)
+       VALUES ($1, 'What is 2 + 2?', '', 'short_answer', 10, 1)`,
+      [assessment.rows[0]!.id],
+    );
+
+    const assessmentToken = `assess-${stamp}`;
+    await c.query(
+      `INSERT INTO candidate_assessment_attempts
+         (assessment_id, application_id, token, expires_at, status)
+       VALUES ($1, $2, $3, now() + interval '7 days', 'pending')`,
+      [assessment.rows[0]!.id, application.rows[0]!.id, assessmentToken],
+    );
+
+    const interviewToken = `interview-${stamp}`;
+    await c.query(
+      `INSERT INTO candidate_interviews
+         (candidate_id, stage_id, job_id, event_name, event_type, meeting_url,
+          status, public_token, time_slots)
+       VALUES ($1, $2, $3, 'Technical Interview', 'virtual',
+               'https://meet.example.test/abc', 'pending', $4, $5::jsonb)`,
+      [
+        candidate.rows[0]!.id,
+        world.stageId,
+        world.jobId,
+        interviewToken,
+        JSON.stringify([
+          { datetime: "2026-11-10T10:00:00.000Z", selected: false },
+          { datetime: "2026-11-11T14:00:00.000Z", selected: false },
+        ]),
+      ],
+    );
+
+    return {
+      applicationId: application.rows[0]!.id,
+      candidateId: candidate.rows[0]!.id,
+      offerToken,
+      assessmentToken,
+      interviewToken,
+    };
+  });
 }
