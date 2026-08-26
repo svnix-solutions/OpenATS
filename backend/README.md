@@ -6,7 +6,7 @@ OpenATS backend was written using Express.js.
 
 - **Folder layout**: code is grouped by feature under `src/modules/<feature>/`, each holding that feature's `*.controller.ts`, `*.service.ts`, and `*.routes.ts` together (for example `src/modules/candidate/`). There are no top-level `controllers/` or `services/` folders. Code shared by two or more modules lives in `src/shared/services/` (mail, socket, r2, google-calendar) and `src/shared/integrations/` (external provider infra).
 - **Request flow**: `src/server.ts` starts the HTTP server, `src/app.ts` wires up middleware and routes, `src/routes/index.ts` mounts each module's routes file, which delegates to that module's controller and then its service.
-- **Authentication**: WSO2 Asgardeo JWTs are verified in `src/middlewares/auth.middleware.ts`, which maps roles (`super_admin`, `hiring_manager`, `interviewer`) and auto-provisions new users on first login.
+- **Authentication**: OIDC access tokens are verified against a JWKS endpoint in `src/middlewares/auth.middleware.ts`, which maps roles (`super_admin`, `hiring_manager`, `interviewer`) and auto-provisions new users on first login. Any provider works; see `docs-draft/IDENTITY_PROVIDERS.md`.
 - **Public routes**: Career page and application endpoints under `/public/*` use origin-based access control instead of auth middleware. Assessment links use token-based auth.
 - **Database**: PostgreSQL via Drizzle ORM. Schema files live in `src/db/schema/`, one per domain.
 - **Background jobs**: CV analysis runs as a background job queue (BullMQ + Redis), colocated under `src/queues/cv-analysis/`. This runs in a separate worker process from the API server.
@@ -72,7 +72,7 @@ REDIS_URL=redis://localhost:6379
 
 The remaining variables are for external/cloud services and are only needed if you're working on the feature that depends on them:
 
-- `ASGARDEO_*` - WSO2 Asgardeo auth. Required for almost everything - most routes are gated behind the auth middleware.
+- `OIDC_JWKS_URL` / `OIDC_ISSUER` - token verification. Required for almost everything - most routes are gated behind the auth middleware.
 - `R2_*` - Cloudflare R2 object storage, used for file uploads (e.g. resumes).
 - `RESEND_*` - Resend API, used for sending emails (e.g. application confirmations).
 - `GEMINI_API_KEY` - Used by the CV analysis service.

@@ -36,7 +36,7 @@ beforeAll(async () => {
     const [contact] = await db
       .insert(users)
       .values({
-        asgardeoUserId: `${s.suffix}-contact`,
+        providerUserId: `${s.suffix}-contact`,
         firstName: "Client",
         lastName: "Contact",
         email: `contact.${s.suffix}@example.test`,

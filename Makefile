@@ -1,16 +1,16 @@
 # OpenATS quickstart
 #
-#   make setup       install everything, start infra, migrate + seed DB, run Asgardeo setup
+#   make setup       install everything, start infra, migrate + seed DB, start identity
 #   make dev          start infra + backend + frontend together
 #   make infra-up      start docker services only (Postgres, Redis)
 #   make infra-down    stop docker services
 #   make migrate       run pending database migrations
 #   make seed          seed the default pipeline stages
-#   make asgardeo       re-run just the Asgardeo tenant setup
+#   make identity       start the local identity provider on its own
 #   make build          build both packages
 #   make clean          remove all node_modules
 
-.PHONY: setup dev infra-up infra-down wait-for-db db-role migrate seed asgardeo encryption-key build lint clean
+.PHONY: setup dev infra-up infra-down wait-for-db db-role migrate seed identity encryption-key build lint clean
 
 setup:
 	@echo "📦 Installing dependencies (backend + frontend)..."
@@ -30,8 +30,8 @@ setup:
 	@$(MAKE) infra-up
 	@$(MAKE) wait-for-db
 	@echo ""
-	@echo "🏢 Setting up your Asgardeo tenant..."
-	@./setup-asgardeo.sh
+	@echo "🔑 Starting the identity provider..."
+	@./scripts/identity-up.sh
 	@echo ""
 	@$(MAKE) migrate
 	@$(MAKE) seed
@@ -79,8 +79,8 @@ seed:
 dev: infra-up
 	pnpm dev
 
-asgardeo:
-	./setup-asgardeo.sh
+identity:
+	./scripts/identity-up.sh
 
 build:
 	pnpm build

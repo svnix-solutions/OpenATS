@@ -89,14 +89,14 @@ export async function runInOrganization<T>(
 }
 
 /**
- * Resolves an Asgardeo subject to their membership, bypassing row-level
+ * Resolves a provider subject to their membership, bypassing row-level
  * security because login happens before any organization is known.
  *
  * The one deliberate hole in the boundary, kept narrow on purpose: the
  * underlying function is SECURITY DEFINER, takes a subject, and returns ids
  * and a role and nothing else.
  */
-export async function resolveMembership(asgardeoUserId: string): Promise<{
+export async function resolveMembership(providerUserId: string): Promise<{
   userId: number;
   organizationId: number;
   role: string;
@@ -107,7 +107,7 @@ export async function resolveMembership(asgardeoUserId: string): Promise<{
     organization_id: number;
     role: string;
     client_company_id: number | null;
-  }>(sql`SELECT * FROM app_resolve_membership(${asgardeoUserId})`);
+  }>(sql`SELECT * FROM app_resolve_membership(${providerUserId})`);
 
   const row = result.rows[0];
   if (!row) return null;

@@ -17,8 +17,8 @@ Optional variables are not validated, so a typo in one is silent.
 | Variable | What it is |
 | --- | --- |
 | `DATABASE_URL` | Postgres, as the least-privileged `openats_app` role. **Not the owner** — see below. |
-| `ASGARDEO_JWKS_URL` | Where to fetch the keys that verify access tokens |
-| `ASGARDEO_ISSUER` | Expected `iss` claim; a token from anywhere else is refused |
+| `OIDC_JWKS_URL` | Where to fetch the keys that verify access tokens |
+| `OIDC_ISSUER` | Expected `iss` claim; a token from anywhere else is refused |
 | `ENCRYPTION_KEY` | Base64 AES-256 key (32 bytes decoded). Encrypts stored integration credentials and signs OAuth state |
 | `FRONTEND_URL` | CORS origin, Socket.IO origin, and the base for links in outbound email |
 | `R2_ENDPOINT`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME`, `R2_PUBLIC_URL` | Cloudflare R2 or any S3-compatible store, for CVs and uploads |
@@ -63,21 +63,16 @@ reads it.
 
 | Variable | What it is |
 | --- | --- |
-| `NEXT_PUBLIC_ASGARDEO_BASE_URL` | Asgardeo organization base URL, in the browser |
-| `NEXT_PUBLIC_ASGARDEO_CLIENT_ID` | The sign-in application's client id |
-| `ASGARDEO_CLIENT_ID`, `ASGARDEO_CLIENT_SECRET` | Server-side credentials for the same application |
-| `NEXT_PUBLIC_ASGARDEO_SCOPES`, `NEXT_PUBLIC_ASGARDEO_SIGN_IN_URL`, `ASGARDEO_SECRET` | Read by `@asgardeo/nextjs` rather than by this codebase |
+| `NEXT_PUBLIC_AUTHORIZER_URL` | The identity provider's base URL, in the browser |
+| `NEXT_PUBLIC_AUTHORIZER_CLIENT_ID` | The sign-in application's client id |
+| `AUTHORIZER_ADMIN_SECRET` | Server-side only. Grants full directory access, so it must never be prefixed `NEXT_PUBLIC_` |
 | `OPENATS_API_URL` | Where the backend is reachable **from the server** |
 | `NEXT_PUBLIC_API_URL` | Where the backend is reachable **from the browser** |
 | `NEXT_PUBLIC_APP_URL` | Where this app is reachable, used to show the public careers-page URL |
-| `ASGARDEO_SUPER_ADMIN_ROLE_ID`, `ASGARDEO_HIRING_MANAGER_ROLE_ID`, `ASGARDEO_INTERVIEWER_ROLE_ID` | Role ids, for assigning roles when creating users |
-| `ASGARDEO_CLIENT_ADMIN_ROLE_ID`, `ASGARDEO_CLIENT_REVIEWER_ROLE_ID` | The two client-portal roles. Only needed on an install with client companies |
-| `ASGARDEO_SCIM_CLIENT_ID`, `ASGARDEO_SCIM_CLIENT_SECRET` | Optional. Only if user management uses a different Asgardeo application; falls back to `ASGARDEO_CLIENT_ID` |
-| `ASGARDEO_BASE_URL` | Optional server-side fallback for `NEXT_PUBLIC_ASGARDEO_BASE_URL` |
-| `ASGARDEO_MANAGEMENT_SCOPES` | Optional. Scopes for the SCIM token; defaults to what user management needs |
+| `NEXT_PUBLIC_DEMO_USERNAME`, `NEXT_PUBLIC_DEMO_PASSWORD` | Optional, demo deployments only. Set both to show a credentials panel on the login page; the values are visible to every visitor |
 
-`setup-asgardeo.sh` prints most of these. See
-[IAM_SETUP.md](./IAM_SETUP.md).
+`scripts/identity-up.sh` (via `make identity`) prints all of these. See
+[IDENTITY_PROVIDERS.md](./IDENTITY_PROVIDERS.md).
 
 ---
 

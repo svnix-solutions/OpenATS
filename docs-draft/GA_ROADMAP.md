@@ -98,14 +98,14 @@ Not part of the road to v1.0, but decided and written down so it is not invisibl
 | Request, socket, worker and public-route contexts | [0002 §2](decisions/0002-testing-multi-tenancy.md) | 🟢 Done |
 | Characterization tests for the services phase 1 rewrites | [0002 §2](decisions/0002-testing-multi-tenancy.md) | 🟢 Done |
 | Generated isolation sweep over the catalog | [0002 §2](decisions/0002-testing-multi-tenancy.md) | 🟢 Done |
-| Organization resolved from the Asgardeo `org_id` claim | [0001 §5](decisions/0001-multi-tenancy.md) | 🟢 Done |
-| Sub-organization provisioning in `setup-asgardeo.sh` | [0001 §5](decisions/0001-multi-tenancy.md) | 🟢 Done |
+| Organization resolved from the token's `org_id` claim | [0001 §5](decisions/0001-multi-tenancy.md) | 🟢 Done |
+| Sub-organization provisioning in the identity setup script | [0001 §5](decisions/0001-multi-tenancy.md) | 🟢 Done |
 | Jobs belong to a client company | [0001 §7](decisions/0001-multi-tenancy.md) | 🟢 Done |
 | Client company CRUD (API, settings page, job-form selector) | Found by functional testing: the column and the reads shipped, the writes never did, so no job could be created through the product | 🟢 Done |
 | Split candidates into a person and an application | [0003](decisions/0003-application-split-is-separable.md) | 🟢 Done |
 | Role read from `organization_members`, not the JWT | [0001 §6](decisions/0001-multi-tenancy.md) | 🟢 Done |
 | Client portal: roles and company scoping | [0001 §6](decisions/0001-multi-tenancy.md) | 🟢 Done |
-| Assign a client contact to a client company | `PUT /api/users/:id/membership`, wired into Settings → User Management. Also the only way a role change takes effect: the token seeds `organization_members.role` once and is ignored afterwards, so updating Asgardeo alone changed nothing | 🟢 Done |
+| Assign a client contact to a client company | `PUT /api/users/:id/membership`, wired into Settings → User Management. Also the only way a role change takes effect: the token seeds `organization_members.role` once and is ignored afterwards, so updating the provider alone changed nothing | 🟢 Done |
 | Client portal: redaction of the agency's working view | [0001 §6](decisions/0001-multi-tenancy.md) | 🟢 Done |
 | Client portal: the client-facing UI | [0001 §6](decisions/0001-multi-tenancy.md) | 🟢 Done |
 | Per-client careers pages | [0001 §7](decisions/0001-multi-tenancy.md) | 🟢 Done |
@@ -137,7 +137,7 @@ Two things still answer "which organization" by assuming there is only one, and 
 | Item | Status |
 | --- | --- |
 | Backend reorganized into feature modules (`src/modules/`, `src/shared/`) | 🟢 Done |
-| Fixed login failing when the Asgardeo `sub` changes | 🟢 Done |
+| Fixed login failing when the provider's `sub` changes | 🟢 Done |
 | Fixed the logger silently dropping error details at 41 call sites | 🟢 Done |
 | Fixed the backend not compiling (duplicate `ioredis` versions) | 🟢 Done |
 | Vitest set up for unit and integration tests | 🟢 Done |

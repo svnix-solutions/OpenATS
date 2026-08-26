@@ -14,7 +14,7 @@ import {
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 
-import type { User as AsgardeoUser } from "@/types";
+import type { User as DirectoryUser } from "@/types";
 import {
   deleteUser,
   fetchUsers,
@@ -89,7 +89,7 @@ const ROLES = [
 type Role = (typeof ROLES)[number]["value"];
 type PasswordMethod = "invite" | "set";
 
-function getDisplayName(u: AsgardeoUser) {
+function getDisplayName(u: DirectoryUser) {
   return [u.firstName, u.lastName].filter(Boolean).join(" ") || u.email;
 }
 
@@ -179,11 +179,11 @@ export default function UserManagementPage() {
   const { data: clientCompanyData } = useClientCompanies();
   const clientCompanies = clientCompanyData?.data ?? [];
 
-  const [editUser, setEditUser] = useState<AsgardeoUser | null>(null);
+  const [editUser, setEditUser] = useState<DirectoryUser | null>(null);
   const [editForm, setEditForm] = useState<UpdateUserPayload>({});
   const [saving, setSaving] = useState(false);
 
-  const [deleteTarget, setDeleteTarget] = useState<AsgardeoUser | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<DirectoryUser | null>(null);
   const [deleting, setDeleting] = useState(false);
 
   const [createOpen, setCreateOpen] = useState(false);
@@ -204,7 +204,7 @@ export default function UserManagementPage() {
     });
   }, [query, users]);
 
-  const openEdit = (u: AsgardeoUser) => {
+  const openEdit = (u: DirectoryUser) => {
     setEditUser(u);
     setEditForm({
       firstName: u.firstName ?? "",

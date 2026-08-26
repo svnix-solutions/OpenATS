@@ -123,7 +123,7 @@ async function seedFixtures() {
   const [manager] = await db
     .insert(users)
     .values({
-      asgardeoUserId: `${SUFFIX}-manager`,
+      providerUserId: `${SUFFIX}-manager`,
       firstName: "Flow",
       lastName: "Manager",
       email: `manager.${SUFFIX}@example.test`,

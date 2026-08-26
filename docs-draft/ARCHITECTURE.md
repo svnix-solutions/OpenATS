@@ -79,13 +79,14 @@ came from exactly that — a cache keyed `"all"`, and one global socket room.
 
 ## Identity is a seam, not a dependency
 
-The system looks tied to WSO2 Asgardeo. Most of it is not.
+The system was built against WSO2 Asgardeo and now runs against
+authorizer.dev. Almost nothing had to change, and that is the point.
 
 ### What the backend actually requires
 
 ```ts
-const JWKS = createRemoteJWKSet(new URL(process.env.ASGARDEO_JWKS_URL!));
-await jwtVerify(token, JWKS, { issuer: process.env.ASGARDEO_ISSUER! });
+const JWKS = createRemoteJWKSet(new URL(process.env.OIDC_JWKS_URL!));
+await jwtVerify(token, JWKS, { issuer: process.env.OIDC_ISSUER! });
 ```
 
 A JWKS URL, an issuer, and these claims:
@@ -98,16 +99,18 @@ A JWKS URL, an issuer, and these claims:
 | `roles` | **seeds** the membership on first sign-in only | yes |
 | `org_id` | maps the token to a local organization | only for multi-tenant installs |
 
-That is ordinary OIDC. The name "Asgardeo" survives in the variable names and
-nowhere else that matters.
+That is ordinary OIDC, and no provider name appears anywhere in the backend.
 
 ### What is genuinely provider-specific
 
-- **The frontend session** — `@asgardeo/nextjs` across 11 files, but a shallow
-  surface: `SignIn`, `SignInButton`, `useAsgardeo`, and the `asgardeo()` server
-  helper that yields an access token.
-- **User management** — creating users over SCIM2 (a standard, RFC 7644) and
-  assigning roles through Asgardeo's own role API (not a standard).
+Two files, both in the frontend:
+
+- **`lib/auth/session.ts`** — exchanging credentials for a token. The rest of
+  the app reads the session from an app-owned httpOnly cookie, so nothing
+  downstream knows who issued it.
+- **`lib/auth/directory.ts`** — creating and updating users in the provider's
+  directory. There is no standard for this; SCIM2 comes closest and most
+  providers do something else.
 
 ### Why roles and organizations are not really the provider's job
 

@@ -131,8 +131,8 @@ services:
         # every candidate-facing page.
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8080}
         NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-http://localhost:3000}
-        NEXT_PUBLIC_ASGARDEO_BASE_URL: ${NEXT_PUBLIC_ASGARDEO_BASE_URL:-}
-        NEXT_PUBLIC_ASGARDEO_CLIENT_ID: ${NEXT_PUBLIC_ASGARDEO_CLIENT_ID:-}
+        NEXT_PUBLIC_AUTHORIZER_URL: ${NEXT_PUBLIC_AUTHORIZER_URL:-http://localhost:8090}
+        NEXT_PUBLIC_AUTHORIZER_CLIENT_ID: ${NEXT_PUBLIC_AUTHORIZER_CLIENT_ID:-}
     env_file: [frontend/.env]
     environment:
       # Server-side calls go container to container; the browser uses

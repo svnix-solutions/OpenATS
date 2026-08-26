@@ -38,10 +38,10 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
     const { id } = await context.params;
     const body = await req.json();
 
-    const existing = await serverFetch<{ data: User & { asgardeoUserId?: string } }>(
+    const existing = await serverFetch<{ data: User & { providerUserId?: string } }>(
       `/users/${id}`,
     );
-    const providerId = existing.data.asgardeoUserId;
+    const providerId = existing.data.providerUserId;
 
     if (
       providerId &&
@@ -92,7 +92,7 @@ export async function DELETE(_req: NextRequest, context: RouteContext) {
     await requireRole("super_admin");
     const { id } = await context.params;
 
-    const existing = await serverFetch<{ data: User & { asgardeoUserId?: string } }>(
+    const existing = await serverFetch<{ data: User & { providerUserId?: string } }>(
       `/users/${id}`,
     );
 
@@ -101,8 +101,8 @@ export async function DELETE(_req: NextRequest, context: RouteContext) {
     // the provider only stops them signing in again.
     await serverFetch<{ data: unknown }>(`/users/${id}`, { method: "DELETE" });
 
-    if (existing.data.asgardeoUserId) {
-      await deleteUser(existing.data.asgardeoUserId).catch(() => {});
+    if (existing.data.providerUserId) {
+      await deleteUser(existing.data.providerUserId).catch(() => {});
     }
 
     return NextResponse.json({ ok: true });

@@ -5,12 +5,12 @@ import type { User } from "../../db/schema/users";
 import logger from "../../utils/logger";
 
 /**
- * Shared Asgardeo access-token verification, used by both the HTTP auth
+ * Shared OIDC access-token verification, used by both the HTTP auth
  * middleware and the Socket.IO handshake. Keeping one implementation means
  * the two transports can never drift apart on who counts as authenticated.
  */
 
-const JWKS = createRemoteJWKSet(new URL(process.env.ASGARDEO_JWKS_URL!));
+const JWKS = createRemoteJWKSet(new URL(process.env.OIDC_JWKS_URL!));
 
 export type AppRole =
   | "super_admin"
@@ -87,7 +87,7 @@ export function collectRolesFromPayload(
 }
 
 /**
- * The Asgardeo sub-organization a token was issued for, if any.
+ * The provider-side organization a token was issued for, if any.
  *
  * B2B tokens carry `org_id`. A token from the root organization does not, and
  * that absence is meaningful: it means this install has not adopted
@@ -124,7 +124,7 @@ export function mapToAppRole(names: string[]): AppRole | null {
 }
 
 /**
- * Verifies an Asgardeo JWT and resolves it to a local user.
+ * Verifies a provider JWT and resolves it to a local user.
  *
  * Throws `AuthError` for anything the caller should reject (bad claims, no
  * role, deactivated account) and lets `jose` errors and database errors
@@ -134,7 +134,7 @@ export async function verifyAccessToken(
   token: string,
 ): Promise<AuthenticatedUser> {
   const { payload } = await jwtVerify(token, JWKS, {
-    issuer: process.env.ASGARDEO_ISSUER!,
+    issuer: process.env.OIDC_ISSUER!,
   });
 
   const sub = payload.sub;
@@ -166,7 +166,7 @@ export async function verifyAccessToken(
   // identity — see drizzle/0032_login_provisioning.sql.
   const provisioned = await unscopedDb.execute<{
     id: number;
-    asgardeo_user_id: string;
+    provider_user_id: string;
     first_name: string;
     last_name: string;
     email: string;
@@ -187,7 +187,7 @@ export async function verifyAccessToken(
   // camelCase, so this mapping is deliberate rather than a spread.
   const user: User = {
     id: row.id,
-    asgardeoUserId: row.asgardeo_user_id,
+    providerUserId: row.provider_user_id,
     firstName: row.first_name,
     lastName: row.last_name,
     email: row.email,
@@ -197,21 +197,21 @@ export async function verifyAccessToken(
     updatedAt: row.updated_at,
   };
 
-  const asgardeoOrg = organizationClaim(payload as Record<string, unknown>);
+  const providerOrg = organizationClaim(payload as Record<string, unknown>);
 
-  if (asgardeoOrg) {
+  if (providerOrg) {
     // The token names its organization, so there is nothing to infer.
     const attached = await unscopedDb.execute<{
-      app_attach_membership_by_asgardeo_org: number | null;
+      app_attach_membership_by_provider_org: number | null;
     }>(
-      sql`SELECT app_attach_membership_by_asgardeo_org(${user.id}, ${asgardeoOrg}, ${tokenRole}::org_role)`,
+      sql`SELECT app_attach_membership_by_provider_org(${user.id}, ${providerOrg}, ${tokenRole}::org_role)`,
     );
 
-    if (!attached.rows[0]?.app_attach_membership_by_asgardeo_org) {
+    if (!attached.rows[0]?.app_attach_membership_by_provider_org) {
       // The sub-organization exists in the identity provider but not here.
       // Inventing a tenant would be worse than refusing.
       logger.warn(
-        `[auth] token for unmapped Asgardeo organization ${asgardeoOrg}`,
+        `[auth] token for unmapped provider organization ${providerOrg}`,
       );
       throw new AuthError(
         403,

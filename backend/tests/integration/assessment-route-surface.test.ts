@@ -31,7 +31,7 @@ beforeAll(async () => {
     const [row] = await db
       .insert(users)
       .values({
-        asgardeoUserId: SUFFIX,
+        providerUserId: SUFFIX,
         firstName: "Staff",
         lastName: "User",
         email: `${SUFFIX}@example.test`,

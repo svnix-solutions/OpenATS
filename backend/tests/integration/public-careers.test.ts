@@ -48,7 +48,7 @@ async function seedTenant(label: string) {
     const [user] = await db
       .insert(users)
       .values({
-        asgardeoUserId: `${SUFFIX}-${label}`,
+        providerUserId: `${SUFFIX}-${label}`,
         firstName: label,
         lastName: "Owner",
         email: `${label}.${SUFFIX}@x.test`,

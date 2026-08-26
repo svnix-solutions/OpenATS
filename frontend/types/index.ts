@@ -44,7 +44,7 @@ export type JobDetail = Job & {
 
 export type CurrentUser = {
   id: number;
-  asgardeoUserId: string;
+  providerUserId: string;
   firstName: string;
   lastName: string;
   email: string;

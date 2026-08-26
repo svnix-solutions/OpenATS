@@ -26,12 +26,12 @@ export const organizations = pgTable("organizations", {
   slug: varchar("slug", { length: 255 }).notNull().unique(),
 
   /**
-   * The Asgardeo sub-organization this tenant corresponds to.
+   * The provider-side organization this tenant corresponds to.
    *
    * Null on an install that has not adopted sub-organizations, which then
    * resolves logins through the single-organization path instead.
    */
-  asgardeoOrgId: varchar("asgardeo_org_id", { length: 255 }),
+  providerOrgId: varchar("provider_org_id", { length: 255 }),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });

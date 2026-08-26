@@ -38,15 +38,15 @@ pnpm lint     # eslint
 - **Express 5** (not 4) with TypeScript compiled to CommonJS (`"module": "commonjs"` in tsconfig). `tsx` handles dev transpilation.
 - **Feature-first layout**: code is organized by feature under `backend/src/modules/<feature>/`, each holding that feature's `*.controller.ts`, `*.service.ts`, and `*.routes.ts` together (e.g. `modules/candidate/candidate.controller.ts`). There are no top-level `controllers/`, `services/`, or per-feature `routes/` directories — put new feature code in its module, not in a layer folder.
 - **Request flow**: `backend/src/server.ts` → `backend/src/app.ts` → `backend/src/routes/index.ts` → each module's routes file → that module's controller → service.
-- **Shared code**: `backend/src/shared/auth/verify-token.ts` is the single Asgardeo JWT verification path, used by both `auth.middleware.ts` and the Socket.IO handshake so the two transports cannot drift on who counts as authenticated; `backend/src/shared/services/` holds services used by 2+ modules (`mail`, `socket`, `r2`, `google-calendar`); `backend/src/shared/integrations/` holds external-provider infra (`connection.service`, `registry`, `crypto`, `google-meet.provider`) — distinct from the `modules/integrations/` feature, which is CRUD for a company's configured integrations. Cross-module imports (e.g. `offer` → `../template/template-engine.service`) are fine; only promote to `shared/` when 2+ unrelated modules need it.
+- **Shared code**: `backend/src/shared/auth/verify-token.ts` is the single OIDC JWT verification path, used by both `auth.middleware.ts` and the Socket.IO handshake so the two transports cannot drift on who counts as authenticated; `backend/src/shared/services/` holds services used by 2+ modules (`mail`, `socket`, `r2`, `google-calendar`); `backend/src/shared/integrations/` holds external-provider infra (`connection.service`, `registry`, `crypto`, `google-meet.provider`) — distinct from the `modules/integrations/` feature, which is CRUD for a company's configured integrations. Cross-module imports (e.g. `offer` → `../template/template-engine.service`) are fine; only promote to `shared/` when 2+ unrelated modules need it.
 - `backend/src/routes/` keeps only `index.ts` (mounts every module router) and `public.routes.ts` (cross-cutting `/public/*` aggregator that spans several modules). `modules/job/job.routes.ts` also mounts the `pipeline`, `hiring-team`, and `custom-question` modules as sub-routes under `/jobs`.
 - Imports are plain relative paths (no `@/` alias — `module: commonjs` + `moduleResolution: node` would emit unresolvable `require("@/…")` into `dist/`). Depth stays at `../../` at most.
-- **Auth middleware** (`backend/src/middlewares/auth.middleware.ts`): verifies WSO2 Asgardeo JWTs, auto-provisions users on first login, resolves the organization, and runs the rest of the request inside it. **The role comes from `organization_members.role`, not the token.** The token's role seeds that column on first attach and is ignored afterwards, so an administrator can change someone's role without an identity-provider round-trip and removing a privilege takes effect on the next request rather than when the token expires. `org_role` and the `AppRole` union hold the same five values on purpose — they were two vocabularies over one concept, and keeping them identical is what stops them drifting.
+- **Auth middleware** (`backend/src/middlewares/auth.middleware.ts`): verifies OIDC access tokens against a JWKS endpoint, auto-provisions users on first login, resolves the organization, and runs the rest of the request inside it. **The role comes from `organization_members.role`, not the token.** The token's role seeds that column on first attach and is ignored afterwards, so an administrator can change someone's role without an identity-provider round-trip and removing a privilege takes effect on the next request rather than when the token expires. `org_role` and the `AppRole` union hold the same five values on purpose — they were two vocabularies over one concept, and keeping them identical is what stops them drifting.
 - **Public routes** (`/public/*`) use origin-based access control, not auth middleware. Each one also passes through `withPublicOrganization`, which resolves the tenant from the resource being addressed — an unresolvable identifier is a 404, since "no such job" and "a job belonging to nobody" must look the same from outside. Assessment endpoints (`/public/assessment/:token`) use token-based auth.
 - **Rate limiting**: `/public/*` has its own IP-keyed limiters in `public.routes.ts`. The authenticated API is limited by `middlewares/rate-limit.middleware.ts`, keyed by **user id** rather than IP so one office behind a NAT does not share a budget — `apiLimiter` is mounted on all of `/api`, and `expensiveLimiter` on uploads. Both are tunable with `RATE_LIMIT_API` / `RATE_LIMIT_EXPENSIVE`.
 - **Per-job authorization**: `middlewares/job-access.middleware.ts` (`requireJobAccess`, `requireCandidateAccess`) gates HTTP routes on hiring-team membership using the same `shared/auth/job-access.ts` rule as the sockets. Job creation adds the creator to the hiring team, and `job.service.getAll` already filters by it, so membership is the app-wide notion of "your jobs".
 - **`req.user`** is available via augmentation in `backend/src/types/express.d.ts`.
-- **Socket.IO** runs on the same HTTP server. Connections require a valid Asgardeo JWT in `handshake.auth.token`, verified by an `io.use()` middleware before any handler runs; the verified user is on `socket.data.user`. Chat handlers take the sender from that user, never from the client payload. Dashboard-wide events go to a **per-organization** staff room, `staff:<orgId>`, resolved from the request context at emit time. A single global `staff` room that every authenticated socket joined read as the safe alternative to `io.emit()` and was the same thing across tenants — every organization received every other one's `candidate_applied`, `offer_changed` and the rest, ids included. With no context the event is dropped rather than widened. CORS is restricted to `FRONTEND_URL`.
+- **Socket.IO** runs on the same HTTP server. Connections require a valid provider JWT in `handshake.auth.token`, verified by an `io.use()` middleware before any handler runs; the verified user is on `socket.data.user`. Chat handlers take the sender from that user, never from the client payload. Dashboard-wide events go to a **per-organization** staff room, `staff:<orgId>`, resolved from the request context at emit time. A single global `staff` room that every authenticated socket joined read as the safe alternative to `io.emit()` and was the same thing across tenants — every organization received every other one's `candidate_applied`, `offer_changed` and the rest, ids included. With no context the event is dropped rather than widened. CORS is restricted to `FRONTEND_URL`.
 - **Socket authorization** is separate from authentication: `join_job` / `join_candidate` are gated by `shared/auth/job-access.ts` (hiring-team membership, with `super_admin` exempt), and the chat write handlers require the socket to already be in that room — so a client cannot skip the join and write to an arbitrary job. Client sockets are created by `frontend/lib/socket.ts`, which re-fetches a token from `/api/socket-token` on every connect attempt so reconnects survive token expiry.
 - Logger is winston with console transport only (file transports commented out).
 - `exactOptionalPropertyTypes: false` in tsconfig — deliberate.
@@ -63,7 +63,7 @@ without thinking about tenancy is not wrong — it simply returns nothing.
   user in an organization, and carries `client_company_id` for client contacts.
   `PUT /api/users/:id/membership` is what sets both it and the role; a client
   role without a company is refused there and at login, rather than falling
-  through to an unscoped view. **Changing a role in Asgardeo alone does
+  through to an unscoped view. **Changing a role in the provider alone does
   nothing** — the token seeds `organization_members.role` at first sign-in and
   is ignored afterwards, so that endpoint is the only thing that changes what
   a person can do.
@@ -117,7 +117,7 @@ justify process-global mutable state is better deleted than parameterised.
 **The deliberate holes.** Seven `SECURITY DEFINER` functions run outside the
 boundary because they answer "which tenant is this" before one is known:
 `app_provision_user`, `app_resolve_membership`,
-`app_attach_membership_by_asgardeo_org`, `app_attach_default_membership`,
+`app_attach_membership_by_provider_org`, `app_attach_default_membership`,
 `app_resolve_org_by_client_slug`, and `app_resolve_public_org`. Each takes an
 identifier and returns ids — never a row of tenant data, which is the rule that
 keeps them from becoming a way around the boundary. `EXECUTE` is revoked from
@@ -150,7 +150,7 @@ bypass RLS, so an app connecting as the owner would ignore every policy
 silently and every isolation test would pass without testing anything.
 
 **Which organization a user belongs to** comes from the `org_id` claim on the
-Asgardeo token (a B2B sub-organization). A token naming an organization with no
+provider token. A token naming an organization with no
 `organizations` row is refused. Installs without sub-organizations fall back to
 "the only organization that exists", and refuse when that is ambiguous.
 
@@ -221,7 +221,7 @@ wrong person, and renaming it is what surfaced that.
 
 ### Frontend
 
-- **Next.js** with `force-dynamic` on the root layout (`frontend/app/layout.tsx`) — the entire app is SSR-disabled because `AsgardeoProvider` requires request context.
+- **Next.js** with `force-dynamic` on the root layout (`frontend/app/layout.tsx`) — the entire app is SSR-disabled because the auth provider requires request context.
 - Heavy components are code-split with `ssr: false` via `frontend/components/dynamic-imports.tsx`.
 - **Tailwind v4** — CSS-first config (`@tailwindcss/postcss`), no `tailwind.config.ts`. Theme defined via `@theme` in CSS globals.
 - **shadcn/ui** with `base-vega` style. Icon library is **hugeicons** (not lucide or heroicons).
@@ -254,8 +254,8 @@ See `docs-draft/TESTING.md` for the full guide. In short:
 
 Two separate `.env` files are required (copy from `.env.example` in each directory):
 
-- `backend/.env` — `DATABASE_URL` (the least-privileged `openats_app` role), `MIGRATION_DATABASE_URL` (the owner, read only by drizzle-kit), `REDIS_URL`, `R2_*`, `RESEND_*`, `ASGARDEO_*`, `GEMINI_API_KEY`, `GOOGLE_SERVICE_ACCOUNT_JSON`, `GOOGLE_CALENDAR_ID`, and optionally `SENTRY_DSN` (error tracking is off without it, which is what development and CI want) and `LOG_LEVEL`
-- `frontend/.env` — `NEXT_PUBLIC_ASGARDEO_*`, `ASGARDEO_*`, `OPENATS_API_URL`, `NEXT_PUBLIC_API_URL`
+- `backend/.env` — `DATABASE_URL` (the least-privileged `openats_app` role), `MIGRATION_DATABASE_URL` (the owner, read only by drizzle-kit), `REDIS_URL`, `R2_*`, `RESEND_*`, `OIDC_JWKS_URL`, `OIDC_ISSUER`, `GEMINI_API_KEY`, `GOOGLE_SERVICE_ACCOUNT_JSON`, `GOOGLE_CALENDAR_ID`, and optionally `SENTRY_DSN` (error tracking is off without it, which is what development and CI want) and `LOG_LEVEL`
+- `frontend/.env` — `NEXT_PUBLIC_AUTHORIZER_URL`, `NEXT_PUBLIC_AUTHORIZER_CLIENT_ID`, `AUTHORIZER_ADMIN_SECRET`, `OPENATS_API_URL`, `NEXT_PUBLIC_API_URL`
 
 ## CI/CD
 
