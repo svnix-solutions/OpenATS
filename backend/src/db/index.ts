@@ -19,6 +19,63 @@ pool.on("error", (err) => {
 
 const rootDb = drizzle(pool, { schema });
 
+/**
+ * Refuses to run as a role that row-level security does not apply to.
+ *
+ * The entire tenancy boundary is policies on tables. Postgres exempts
+ * superusers and any role with BYPASSRLS from them — `FORCE ROW LEVEL
+ * SECURITY` closes the owner loophole but not this one — so a connection made
+ * as such a role reads and writes every tenant's rows while every query,
+ * every test and every log line looks exactly as it should. There is no
+ * symptom until someone sees another company's candidates.
+ *
+ * That is not hypothetical: the E2E suite pointed `DATABASE_URL` at the
+ * database owner, which is a superuser, and ran for months unable to observe
+ * a tenancy failure at all.
+ *
+ * Being the table *owner* is fine — the policies are FORCEd, so they apply.
+ * Only the two exemptions are refused.
+ */
+export type ConnectionRole = {
+  rolname: string;
+  rolsuper: boolean;
+  rolbypassrls: boolean;
+};
+
+/** The complaint about a role, or null when it is one policies apply to. */
+export function rlsExemption(role: ConnectionRole): string | null {
+  if (!role.rolsuper && !role.rolbypassrls) return null;
+
+  const why = role.rolsuper ? "a superuser" : "BYPASSRLS";
+  return (
+    `DATABASE_URL connects as "${role.rolname}", which is ${why}. ` +
+    "Row-level security does not apply to such a role, so every tenancy " +
+    "policy would be silently ignored and organizations would see each " +
+    "other's data. Use the least-privileged application role " +
+    "(openats_app); the owner belongs in MIGRATION_DATABASE_URL only."
+  );
+}
+
+/** Narrow enough for a test to stand in for the pool. */
+type RoleQueryable = {
+  query: <T>(text: string) => Promise<{ rows: T[] }>;
+};
+
+export async function assertTenancyIsEnforceable(
+  queryable: RoleQueryable = pool as unknown as RoleQueryable,
+): Promise<void> {
+  const { rows } = await queryable.query<ConnectionRole>(
+    `SELECT rolname, rolsuper, rolbypassrls
+     FROM pg_roles WHERE rolname = current_user`,
+  );
+
+  const role = rows[0];
+  if (!role) return;
+
+  const complaint = rlsExemption(role);
+  if (complaint) throw new Error(complaint);
+}
+
 type Db = typeof rootDb;
 
 // A client-bound handle differs from the pool-bound one only in `$client`,
