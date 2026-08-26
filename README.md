@@ -192,6 +192,18 @@ Both `.env` files are required, and a first run needs an organization created
 and seeded before the app is usable. See
 [docs-draft/DEPLOYMENT.md](./docs-draft/DEPLOYMENT.md#running-the-whole-thing-in-docker).
 
+## Architecture
+
+**[docs-draft/ARCHITECTURE.md](./docs-draft/ARCHITECTURE.md)** — how the pieces
+fit, why the tenancy boundary is in the database rather than the application,
+and which parts are replaceable.
+
+Identity is one of them. The backend needs an OIDC provider, not Asgardeo
+specifically: **[docs-draft/IDENTITY_PROVIDERS.md](./docs-draft/IDENTITY_PROVIDERS.md)**
+has a verified recipe for running self-hosted
+[authorizer.dev](https://authorizer.dev) instead, and what to check for any
+other provider.
+
 ## Deploying
 
 See **[docs-draft/DEPLOYMENT.md](./docs-draft/DEPLOYMENT.md)** for the full
