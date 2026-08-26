@@ -34,6 +34,29 @@ services:
       retries: 20
     restart: unless-stopped
 
+  # Catches outgoing mail instead of delivering it, so the offer, rejection
+  # and interview emails can be read rather than imagined. Nothing leaves the
+  # machine: Mailpit accepts any SMTP conversation and shows it at :8025.
+  #
+  # This is also how you check what an email actually looks like in a client,
+  # which is the part unit tests cannot tell you.
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: openats-mailpit
+    ports:
+      - "1025:1025"   # SMTP, what the backend talks to
+      - "8025:8025"   # the web inbox
+    environment:
+      MP_MAX_MESSAGES: 500
+      MP_SMTP_AUTH_ACCEPT_ANY: 1
+      MP_SMTP_AUTH_ALLOW_INSECURE: 1
+    healthcheck:
+      test: ["CMD", "/mailpit", "readyz"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
   postgres-test:
     image: postgres:17
     container_name: openats-postgres-test
