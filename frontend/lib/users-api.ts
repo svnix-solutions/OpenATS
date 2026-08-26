@@ -7,6 +7,12 @@ export interface CreateUserPayload {
   email: string;
   password?: string;
   askPassword?: boolean;
+  /**
+   * Required when the role is a client one. Creating a client contact without
+   * it produces an account the backend refuses at sign-in, so the caller
+   * cannot leave it out and fix it later.
+   */
+  clientCompanyId?: number | null;
   role?: "super_admin"
     | "hiring_manager"
     | "interviewer"
