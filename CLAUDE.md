@@ -58,7 +58,17 @@ OpenATS is multi-tenant. A **row-level security policy on every table** filters
 by the organization the current connection is acting for, so a query written
 without thinking about tenancy is not wrong — it simply returns nothing.
 
-- `organizations` is the tenant, one per recruiting agency. `client_companies`
+- `organizations` is the tenant, one per recruiting agency. A fresh install
+  gets one (`Default`, seeded by `drizzle/0028`); further ones are created with
+  `pnpm provision-org --name … --slug … --admin …`, which runs as the migration
+  role. It has to: the policy on `organizations` is `id = app_current_org()`,
+  so its `WITH CHECK` can never pass for a row that does not exist yet, and
+  `super_admin` lives in `organization_members` and is therefore scoped to one
+  organization — an endpoint would need a cross-tenant privilege that does not
+  exist. **Provisioning without `--admin` leaves an unreachable tenant**:
+  `app_attach_default_membership` attaches a new user only when exactly one
+  organization exists, so on a multi-organization install every new sign-in
+  without a matching `org_id` claim is refused. `client_companies`
   are the companies an agency recruits for; `organization_members` places a
   user in an organization, and carries `client_company_id` for client contacts.
   `PUT /api/users/:id/membership` is what sets both it and the role; a client

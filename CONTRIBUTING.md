@@ -14,7 +14,8 @@
   - [Start Postgres and Redis with Docker](#1-start-postgres-and-redis-with-docker)
   - [Setup environment variables](#2-setup-environment-variables)
   - [Start the identity provider](#3-start-the-identity-provider)
-  - [Run database migrations](#5-run-database-migrations)
+  - [Run database migrations](#4-run-database-migrations)
+  - [Add another agency (optional)](#5-add-another-agency-optional)
   - [Seed the database](#6-seed-the-database)
 - [Running the Project](#running-the-project)
   - [Frontend](#frontend)
@@ -225,6 +226,27 @@ OpenATS requires of one.
 ```bash
 make migrate
 ```
+
+### 5. Add another agency (optional)
+
+A fresh install has one organization, and the first person to sign in becomes
+its `super_admin`. That is all a single agency needs.
+
+To run a second agency on the same install:
+
+```bash
+cd backend && pnpm provision-org --name "Acme Recruiting" --slug acme \
+  --admin someone@acme.test
+```
+
+It runs as the migration role, not through the API, and it cannot be otherwise:
+the row-level security policy on `organizations` is `id = app_current_org()`,
+so no request context can create a tenant, and `super_admin` is scoped to one
+organization so there is no role an endpoint could check.
+
+**Pass `--admin`.** Once more than one organization exists, a new user is no
+longer attached automatically — `app_attach_default_membership` declines to
+guess — so an organization with no members cannot be signed in to at all.
 
 ### 6. Seed the database
 

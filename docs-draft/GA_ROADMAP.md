@@ -88,7 +88,7 @@ Not part of the road to v1.0, but decided and written down so it is not invisibl
 
 | Item | Where | Status |
 | --- | --- | --- |
-| Multi-tenancy: agencies, client companies, and applications | [decisions/0001-multi-tenancy.md](decisions/0001-multi-tenancy.md) | 🟡 In progress |
+| Multi-tenancy: agencies, client companies, and applications | [decisions/0001-multi-tenancy.md](decisions/0001-multi-tenancy.md) | 🟡 In progress — everything below is done except the two email items, which are parked |
 
 | Item | Where | Status |
 | --- | --- | --- |
@@ -99,7 +99,7 @@ Not part of the road to v1.0, but decided and written down so it is not invisibl
 | Characterization tests for the services phase 1 rewrites | [0002 §2](decisions/0002-testing-multi-tenancy.md) | 🟢 Done |
 | Generated isolation sweep over the catalog | [0002 §2](decisions/0002-testing-multi-tenancy.md) | 🟢 Done |
 | Organization resolved from the token's `org_id` claim | [0001 §5](decisions/0001-multi-tenancy.md) | 🟢 Done |
-| Sub-organization provisioning in the identity setup script | [0001 §5](decisions/0001-multi-tenancy.md) | 🟢 Done |
+| Provisioning a new agency | `pnpm provision-org` (`backend/src/db/provision-org.ts`). Runs as the migration role: the policy on `organizations` is `id = app_current_org()`, so no request context can create a tenant, and `super_admin` is scoped to one organization so there is no role to authorize an endpoint with | 🟢 Done |
 | Jobs belong to a client company | [0001 §7](decisions/0001-multi-tenancy.md) | 🟢 Done |
 | Client company CRUD (API, settings page, job-form selector) | Found by functional testing: the column and the reads shipped, the writes never did, so no job could be created through the product | 🟢 Done |
 | Split candidates into a person and an application | [0003](decisions/0003-application-split-is-separable.md) | 🟢 Done |
