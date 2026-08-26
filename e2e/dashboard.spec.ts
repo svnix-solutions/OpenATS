@@ -115,6 +115,27 @@ test.describe("the agency dashboard", () => {
     }
   });
 
+  test("the job page links to the public posting, not a dead URL", async ({
+    page,
+  }) => {
+    await signIn(page, operator);
+    await page.goto(`/jobs/${world.jobId}`);
+
+    const link = page.locator('a[href^="/careers/"]').first();
+    await expect(link).toHaveAttribute(
+      "href",
+      `/careers/${world.clientSlug}/${world.jobId}`,
+    );
+
+    // The shape matters less than this: the link pointed at /careers/<job id>
+    // for as long as careers pages have been per-client, so every job page
+    // rendered a link straight to a 404. Following it is what catches that.
+    const response = await page.request.get(
+      `/careers/${world.clientSlug}/${world.jobId}`,
+    );
+    expect(response.status()).toBe(200);
+  });
+
   test("a signed-out visitor is sent to the login page", async ({ page }) => {
     await page.context().clearCookies();
     await page.goto("/jobs");
