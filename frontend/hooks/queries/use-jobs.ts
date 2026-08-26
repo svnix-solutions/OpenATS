@@ -58,16 +58,27 @@ export function useJob(id: number) {
     queryFn: () => serverFetch<{ data: JobDetail }>(`/jobs/${id}`),
     staleTime: 1000 * 60 * 5,
     enabled: !!id,
-    initialData: () => {
+    // placeholderData, not initialData. A row from the list is not the detail
+    // response: it has no hiring team, no pipeline stages and no client slug.
+    // As initialData it was written into the cache and, with the list's
+    // timestamp, counted as fresh for the full staleTime — so opening a job
+    // after visiting the jobs list showed the stand-in for five minutes and
+    // never fetched the real thing. The careers link was simply absent that
+    // whole time. placeholderData renders immediately and always refetches.
+    placeholderData: () => {
       const list = queryClient.getQueryData<{ data: Job[] }>(["jobs"]);
       const match = list?.data?.find((j) => j.id === id);
       if (!match) return undefined;
       return {
-        data: { ...match, pipelineStages: [], hiringTeam: [] } as JobDetail,
+        data: {
+          ...match,
+          pipelineStages: [],
+          hiringTeam: [],
+          clientCompanySlug: null,
+          clientCompanyName: null,
+        } as JobDetail,
       };
     },
-    initialDataUpdatedAt: () =>
-      queryClient.getQueryState(["jobs"])?.dataUpdatedAt,
   });
 }
 

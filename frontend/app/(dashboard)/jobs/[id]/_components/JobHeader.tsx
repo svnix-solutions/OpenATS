@@ -216,6 +216,18 @@ export function JobHeader({
   const [pendingStatus, setPendingStatus] = useState<JobStatus | null>(null);
   const updateJob = useUpdateJob(jobId);
 
+  // The public posting lives under the client's careers page:
+  // /careers/<client slug>/<job id>. This used to point at /careers/<job id>,
+  // which stopped existing when careers pages became per-client — it rendered
+  // a link straight to a 404 on every job.
+  //
+  // Hidden rather than broken when the slug is missing: a job whose client
+  // company has no slug has no public page to link to.
+  const careersPath = job?.clientCompanySlug
+    ? `/careers/${job.clientCompanySlug}/${jobId}`
+    : null;
+  const origin = typeof window !== "undefined" ? window.location.host : "";
+
   const actions = job ? STATUS_ACTIONS[job.status as JobStatus] : undefined;
   const [primaryAction, ...secondaryActions] = actions ?? [];
 
@@ -294,21 +306,21 @@ export function JobHeader({
                       : "Candidates"}
                   </span>
                 </div>
-                <Link
-                  href={`/careers/${jobId}`}
-                  target="_blank"
-                  className="inline-flex items-center gap-2 font-medium hover:text-[var(--theme-color)]"
-                >
-                  <HugeiconsIcon
-                    icon={Link01Icon}
-                    className="size-4 shrink-0 text-slate-400 dark:text-neutral-500"
-                  />
-                  <span className="truncate">
-                    {typeof window !== "undefined"
-                      ? `${window.location.host}/careers/${jobId}`
-                      : `/careers/${jobId}`}
-                  </span>
-                </Link>
+                {careersPath && (
+                  <Link
+                    href={careersPath}
+                    target="_blank"
+                    className="inline-flex items-center gap-2 font-medium hover:text-[var(--theme-color)]"
+                  >
+                    <HugeiconsIcon
+                      icon={Link01Icon}
+                      className="size-4 shrink-0 text-slate-400 dark:text-neutral-500"
+                    />
+                    <span className="truncate">
+                      {origin ? `${origin}${careersPath}` : careersPath}
+                    </span>
+                  </Link>
+                )}
               </div>
             </div>
           </div>

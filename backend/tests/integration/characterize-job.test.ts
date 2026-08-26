@@ -123,12 +123,25 @@ describe("jobService.getPaginated", () => {
 });
 
 describe("jobService.getById", () => {
+  itInOrg("resolves the client company's slug, not only its id", async () => {
+    const job = await jobService.getById(s.jobA.id);
+
+    // /careers/<client slug>/<job id> is the public URL. With only the id,
+    // the dashboard linked to /careers/<job id> — a 404 on every job page.
+    expect(job?.clientCompanySlug).toBe(s.suffix);
+    expect(job?.clientCompanyName).toBeTruthy();
+  });
+
   itInOrg("nests hiringTeam and pipelineStages that the list endpoints omit", async () => {
     const job = await jobService.getById(s.jobA.id);
 
     expect(shape(job)).toEqual([
       "applicationEmailTemplateId",
       "clientCompanyId",
+      // Added deliberately: the careers page is addressed by client slug, and
+      // without it the dashboard cannot link to a job's public posting.
+      "clientCompanyName",
+      "clientCompanySlug",
       "createdAt",
       "createdBy",
       "currency",
