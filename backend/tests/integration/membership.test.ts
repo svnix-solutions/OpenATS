@@ -28,7 +28,7 @@ async function member(tag: string, role: string) {
     const [row] = await db
       .insert(users)
       .values({
-        asgardeoUserId: `${SUFFIX}-${tag}`,
+        providerUserId: `${SUFFIX}-${tag}`,
         firstName: tag,
         lastName: "User",
         email: `${tag}.${SUFFIX}@example.test`,
@@ -121,7 +121,7 @@ describe("membership", () => {
       const [row] = await db
         .insert(users)
         .values({
-          asgardeoUserId: `${SUFFIX}-fresh`,
+          providerUserId: `${SUFFIX}-fresh`,
           firstName: "Fresh",
           lastName: "Account",
           email: `fresh.${SUFFIX}@example.test`,
@@ -151,7 +151,7 @@ describe("membership", () => {
       const [row] = await db
         .insert(users)
         .values({
-          asgardeoUserId: `${SUFFIX}-noRole`,
+          providerUserId: `${SUFFIX}-noRole`,
           firstName: "No",
           lastName: "Role",
           email: `norole.${SUFFIX}@example.test`,

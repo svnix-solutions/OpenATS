@@ -26,7 +26,7 @@ async function seedMember(tag: string, role: string, clientCompanyId: number | n
     const [row] = await db
       .insert(users)
       .values({
-        asgardeoUserId: `${SUFFIX}-${tag}`,
+        providerUserId: `${SUFFIX}-${tag}`,
         firstName: "Test",
         lastName: "User",
         email: `${tag}.${SUFFIX}@example.test`,

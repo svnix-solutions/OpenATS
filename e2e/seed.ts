@@ -84,7 +84,7 @@ export async function seedWorld(tag: string): Promise<SeededWorld> {
       [company.rows[0]!.id, "Engineering"],
     );
     const author = await c.query<{ id: number }>(
-      `INSERT INTO users (asgardeo_user_id, first_name, last_name, email)
+      `INSERT INTO users (provider_user_id, first_name, last_name, email)
        VALUES ($1, 'E2E', 'Author', $2) RETURNING id`,
       [`${suffix}-author`, `author.${suffix}@example.test`],
     );

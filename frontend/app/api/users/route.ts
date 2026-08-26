@@ -16,7 +16,7 @@ export const dynamic = "force-dynamic";
  * never signed in.
  */
 type DbUser = Omit<User, "role"> & {
-  asgardeoUserId: string;
+  providerUserId: string;
   role?: User["role"] | null;
 };
 
@@ -33,13 +33,13 @@ export async function GET() {
 
     const byProviderId = new Map(directory.map((u) => [u.id, u]));
 
-    const users: User[] = dbData.data.map(({ asgardeoUserId, ...u }) => ({
+    const users: User[] = dbData.data.map(({ providerUserId, ...u }) => ({
       ...u,
       // The database role governs; the provider's is the fallback for an
       // account provisioned there but not yet attached here.
       role:
         u.role ??
-        (byProviderId.get(asgardeoUserId)?.roles[0] as User["role"]) ??
+        (byProviderId.get(providerUserId)?.roles[0] as User["role"]) ??
         "interviewer",
     }));
 
@@ -73,7 +73,7 @@ export async function POST(req: Request) {
     await serverFetch<{ data: { id: number } }>("/users", {
       method: "POST",
       body: JSON.stringify({
-        asgardeoUserId: created.id,
+        providerUserId: created.id,
         firstName: body.firstName,
         lastName: body.lastName,
         email: body.email,

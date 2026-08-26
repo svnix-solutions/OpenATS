@@ -90,7 +90,7 @@ Two independent packages - not a monorepo, no shared `package.json` or lockfile.
 | **Data**            | [Drizzle ORM](https://orm.drizzle.team) · PostgreSQL ([Neon](https://neon.tech) in production, any Postgres locally)                                                                         |
 | **Jobs**            | [BullMQ](https://docs.bullmq.io) on Redis - CV analysis runs as its own worker process, not inline with the API                                                                              |
 | **AI**              | [Gemini](https://ai.google.dev) for resume parsing, scoring and candidate summaries                                                                                                          |
-| **Auth**            | [WSO2 Asgardeo](https://wso2.com/asgardeo) - JWKS-verified, role claims mapped to `super_admin` / `hiring_manager` / `interviewer`                                                           |
+| **Auth**            | Any OIDC provider - JWKS-verified, role claims mapped to `super_admin` / `hiring_manager` / `interviewer`. Developed against [authorizer.dev](https://authorizer.dev), self-hosted            |
 | **Storage**         | Cloudflare R2 (or any S3-compatible bucket) for resumes and attachments                                                                                                                      |
 | **Email**           | [Resend](https://resend.com) for candidate and team notifications                                                                                                                            |
 | **Package manager** | pnpm, installed independently per package                                                                                                                                                    |
@@ -116,7 +116,7 @@ git clone https://github.com/chamals3n4/OpenATS.git && cd OpenATS
 
 cd backend
 docker compose up -d          # Postgres on :5432, Redis on :6379
-cp .env.example .env          # fill in ASGARDEO_*, R2_*, RESEND_*, GEMINI_API_KEY
+cp .env.example .env          # fill in OIDC_*, R2_*, RESEND_*, GEMINI_API_KEY
 pnpm install
 pnpm drizzle-kit generate && pnpm drizzle-kit migrate
 pnpm tsx src/db/seed.ts       # required: seeds the 5 default pipeline stages
@@ -134,12 +134,12 @@ In a third terminal:
 
 ```sh
 cd frontend
-cp .env.example .env          # fill in NEXT_PUBLIC_ASGARDEO_*, OPENATS_API_URL
+cp .env.example .env          # fill in NEXT_PUBLIC_AUTHORIZER_*, OPENATS_API_URL
 pnpm install
 pnpm dev                      # app on :3000
 ```
 
-Full walkthrough, including how to set up your own Asgardeo application, is in
+Full walkthrough, including how to start the identity provider, is in
 [CONTRIBUTING.md](./CONTRIBUTING.md).
 
 ## Configuration
@@ -152,7 +152,7 @@ Each package reads its own `.env` - there's no shared root env file.
 | ---------------------------------------------------- | --------------------------------------------------------------- |
 | `DATABASE_URL`                                       | Postgres connection string                                      |
 | `REDIS_URL`                                          | Redis, for the CV analysis job queue                            |
-| `ASGARDEO_JWKS_URL` / `ASGARDEO_ISSUER`              | JWT verification - required for almost every route              |
+| `OIDC_JWKS_URL` / `OIDC_ISSUER`              | JWT verification - required for almost every route              |
 | `ENCRYPTION_KEY`                                     | Encrypts stored integration credentials                         |
 | `FRONTEND_URL`                                       | Used for CORS and links in outbound emails                      |
 | `R2_*`                                               | Cloudflare R2 (or compatible) object storage for uploaded files |
@@ -164,7 +164,7 @@ Each package reads its own `.env` - there's no shared root env file.
 
 | Variable                                  | What it's for                                                  |
 | ----------------------------------------- | -------------------------------------------------------------- |
-| `NEXT_PUBLIC_ASGARDEO_*` / `ASGARDEO_*`   | Sign-in against the same Asgardeo application as the backend   |
+| `NEXT_PUBLIC_AUTHORIZER_*` / `AUTHORIZER_ADMIN_SECRET` | Sign-in and user management against the same provider as the backend |
 | `OPENATS_API_URL` / `NEXT_PUBLIC_API_URL` | Where the backend is reachable from the server and the browser |
 
 Optional too: `MIGRATION_DATABASE_URL` (the owner role, read only by drizzle-kit),
@@ -198,7 +198,7 @@ and seeded before the app is usable. See
 fit, why the tenancy boundary is in the database rather than the application,
 and which parts are replaceable.
 
-Identity is one of them. The backend needs an OIDC provider, not Asgardeo
+Identity is one of them. The backend needs an OIDC provider, not a specific one
 specifically: **[docs-draft/IDENTITY_PROVIDERS.md](./docs-draft/IDENTITY_PROVIDERS.md)**
 has a verified recipe for running self-hosted
 [authorizer.dev](https://authorizer.dev) instead, and what to check for any

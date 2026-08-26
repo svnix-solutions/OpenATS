@@ -163,9 +163,9 @@ paths:
           application/json:
             schema:
               type: object
-              required: [asgardeoUserId, firstName, lastName, email]
+              required: [providerUserId, firstName, lastName, email]
               properties:
-                asgardeoUserId: { type: string }
+                providerUserId: { type: string }
                 firstName: { type: string }
                 lastName: { type: string }
                 email: { type: string, format: email }

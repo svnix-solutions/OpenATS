@@ -1,6 +1,6 @@
 # Running a different identity provider
 
-OpenATS is developed against WSO2 Asgardeo, but the backend only needs an
+OpenATS is developed against a self-hosted authorizer.dev, but the backend only needs an
 OIDC provider — see [ARCHITECTURE.md](./ARCHITECTURE.md#identity-is-a-seam-not-a-dependency).
 This is the verified recipe for one alternative, and what to check for any
 other.
@@ -11,12 +11,12 @@ other.
 | --- | --- |
 | **RS256** (or another asymmetric algorithm) | the backend verifies through a JWKS URL; a shared secret has no public key to publish |
 | `email` **and** `roles` in the **same** token | the backend reads both from the bearer token it is given |
-| A stable `sub` | it becomes `users.asgardeo_user_id` |
+| A stable `sub` | it becomes `users.provider_user_id` |
 | `org_id`, or a single organization | multi-tenant installs map this to an `organizations` row; single-tenant installs attach to the only one |
 
 The second row is the one that bites. OIDC usually puts identity in the id
 token and roles wherever the vendor likes; needing both in one token is an
-assumption OpenATS inherited from Asgardeo.
+assumption OpenATS inherited from its first provider.
 
 ## authorizer.dev — verified
 
@@ -53,8 +53,8 @@ docker run -d --name openats-authorizer \
 Then point the backend at it:
 
 ```
-ASGARDEO_JWKS_URL=http://localhost:8090/.well-known/jwks.json
-ASGARDEO_ISSUER=http://localhost:8090
+OIDC_JWKS_URL=http://localhost:8090/.well-known/jwks.json
+OIDC_ISSUER=http://localhost:8090
 ```
 
 **That is the whole backend change.** With those two variables repointed, the

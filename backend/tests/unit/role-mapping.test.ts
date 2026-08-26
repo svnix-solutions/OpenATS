@@ -5,7 +5,7 @@ import {
 } from "../../src/shared/auth/verify-token";
 
 describe("mapToAppRole", () => {
-  it("maps the role names the asgardeo setup script creates", () => {
+  it("maps the role names the identity provider issues", () => {
     expect(mapToAppRole(["super_admin"])).toBe("super_admin");
     expect(mapToAppRole(["hiring manager"])).toBe("hiring_manager");
     expect(mapToAppRole(["Interviewer"])).toBe("interviewer");

@@ -74,7 +74,7 @@ async function makeUser(
   const [row] = await db
     .insert(users)
     .values({
-      asgardeoUserId: `${SUFFIX}-${tag}`,
+      providerUserId: `${SUFFIX}-${tag}`,
       firstName: tag,
       lastName: "Tester",
       email: `${tag}.${SUFFIX}@example.test`,

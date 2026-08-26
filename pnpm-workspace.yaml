@@ -22,11 +22,11 @@ overrides:
   # postcss (via next) pins <3.3.18, where a custom generator can loop
   # indefinitely. postcss accepts ^3.3.x, so this is in range.
   nanoid: "^3.3.18"
-  # @asgardeo/react pins 3.3.1. Sixteen advisories against it, all sanitizer
+  # A transitive dependency pins 3.3.1. Sixteen advisories against it, all sanitizer
   # bypasses — mutation XSS, FORBID_TAGS bypasses, prototype pollution — which
   # matter more here than the severity label suggests, since this is what
   # sanitizes rich text in an app that handles candidate data.
   dompurify: "^3.4.13"
-  # @asgardeo/node pins 11.1.0. A patch bump within the same major.
+  # A transitive dependency pins 11.1.0. A patch bump within the same major.
   uuid: "^11.1.1"
 

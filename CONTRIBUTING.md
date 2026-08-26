@@ -13,8 +13,7 @@
 - [Database Setup](#database-setup)
   - [Start Postgres and Redis with Docker](#1-start-postgres-and-redis-with-docker)
   - [Setup environment variables](#2-setup-environment-variables)
-  - [Set up your Asgardeo M2M application](#3-set-up-your-asgardeo-m2m-application)
-  - [Run the Asgardeo setup script](#4-run-the-asgardeo-setup-script)
+  - [Start the identity provider](#3-start-the-identity-provider)
   - [Run database migrations](#5-run-database-migrations)
   - [Seed the database](#6-seed-the-database)
 - [Running the Project](#running-the-project)
@@ -66,7 +65,7 @@ make --version
 - PostgreSQL (database)
 - Redis (job queue, via BullMQ)
 - Drizzle ORM (database ORM)
-- WSO2 Asgardeo (authentication)
+- An OIDC identity provider (authentication)
 
 **Package Manager:** pnpm, managed as a single workspace from the repo root
 
@@ -87,7 +86,7 @@ make dev
 2. Copies `backend/.env.example` and `frontend/.env.example` into real `.env` files, if they don't exist yet
 3. Generates a random `ENCRYPTION_KEY` for you, if it's still blank
 4. Starts Postgres and Redis via Docker
-5. Walks you through setting up your own Asgardeo tenant, interactively, and prints the values it configured
+5. Starts a local identity provider and prints the environment it expects
 6. Runs database migrations and seeds the default pipeline stages
 
 `make dev` then starts the backend, frontend, and CV analysis worker together.
@@ -202,23 +201,26 @@ REDIS_URL=redis://localhost:6379
 
 `DATABASE_URL` is what the app runs as; `MIGRATION_DATABASE_URL` is read only by `drizzle-kit`. See the role table above for why they differ.
 
-### 3. Set up your Asgardeo M2M application
+### 3. Start the identity provider
 
-OpenATS uses WSO2 Asgardeo for login and user management. You need your own free tenant.
-
-Follow [docs-draft/IAM_SETUP.md](docs-draft/IAM_SETUP.md) to create the application and get your Base URL, Client ID, and Client Secret. Put them in `frontend/.env` and `backend/.env` as the guide describes.
-
-### 4. Run the Asgardeo setup script
-
-This creates the roles OpenATS expects (`super_admin`, `hiring_manager`, `interviewer`) in your tenant and writes the role IDs into `backend/.env`:
+Sign-in runs against an OIDC provider. Any will do — the backend only verifies
+tokens through JWKS — but the verified local setup is a self-hosted
+[authorizer.dev](https://authorizer.dev) container:
 
 ```bash
-make asgardeo
+make identity
 ```
 
-Or run it directly with `./setup-asgardeo.sh`.
+It creates the roles OpenATS expects (`super_admin`, `hiring_manager`,
+`interviewer`, `client_admin`, `client_reviewer`), then prints the values to
+put in `backend/.env` and `frontend/.env`. Create your first user at
+`http://localhost:8090/app`.
 
-### 5. Run database migrations
+To use a different provider instead, see
+[docs-draft/IDENTITY_PROVIDERS.md](docs-draft/IDENTITY_PROVIDERS.md) for what
+OpenATS requires of one.
+
+### 4. Run database migrations
 
 ```bash
 make migrate

@@ -28,7 +28,7 @@ import {
 import { authMiddleware } from "../../src/middlewares/auth.middleware";
 
 const SUFFIX = `auth-${Date.now()}`;
-const ISSUER = process.env.ASGARDEO_ISSUER!;
+const ISSUER = process.env.OIDC_ISSUER!;
 
 let privateKey: unknown;
 let otherKey: unknown;
@@ -49,7 +49,7 @@ async function seedMember(tag: string) {
     const [row] = await db
       .insert(users)
       .values({
-        asgardeoUserId: `${SUFFIX}-${tag}`,
+        providerUserId: `${SUFFIX}-${tag}`,
         firstName: "Test",
         lastName: "User",
         email: email(tag),
@@ -117,7 +117,7 @@ describe("verifyAccessToken - token validity", () => {
 
     expect(user.email).toBe(email("happy"));
     expect(user.role).toBe("hiring_manager");
-    expect(user.asgardeoUserId).toBe(`${SUFFIX}-happy`);
+    expect(user.providerUserId).toBe(`${SUFFIX}-happy`);
   });
 
   it("rejects an expired token", async () => {
@@ -193,18 +193,18 @@ describe("verifyAccessToken - claims", () => {
   it("seeds the role from the token when there is no membership yet", async () => {
     const tag = "seedrole";
     createdEmails.push(email(tag));
-    const asgardeoOrg = `asg-seedrole-${SUFFIX}`;
+    const providerOrg = `asg-seedrole-${SUFFIX}`;
 
     await runInOrganization(organizationId, () =>
       db.execute(
-        sql`UPDATE organizations SET asgardeo_org_id = ${asgardeoOrg}
+        sql`UPDATE organizations SET provider_org_id = ${providerOrg}
             WHERE id = ${organizationId}`,
       ),
     );
 
     const user = await verifyAccessToken(
       await sign(
-        validClaims(tag, { org_id: asgardeoOrg, roles: ["super admin"] }),
+        validClaims(tag, { org_id: providerOrg, roles: ["super admin"] }),
       ),
     );
 
@@ -212,7 +212,7 @@ describe("verifyAccessToken - claims", () => {
 
     await runInOrganization(organizationId, () =>
       db.execute(
-        sql`UPDATE organizations SET asgardeo_org_id = NULL
+        sql`UPDATE organizations SET provider_org_id = NULL
             WHERE id = ${organizationId}`,
       ),
     );
@@ -255,13 +255,13 @@ describe("verifyAccessToken - user provisioning", () => {
     );
 
     expect(withNewSub.id).toBe(original.id);
-    expect(withNewSub.asgardeoUserId).toBe(`${SUFFIX}-moved-changed`);
+    expect(withNewSub.providerUserId).toBe(`${SUFFIX}-moved-changed`);
   });
 
   it("rejects a deactivated account", async () => {
     createdEmails.push(email("inactive"));
     await db.insert(users).values({
-      asgardeoUserId: `${SUFFIX}-inactive`,
+      providerUserId: `${SUFFIX}-inactive`,
       firstName: "In",
       lastName: "Active",
       email: email("inactive"),
@@ -355,7 +355,7 @@ describe("verifyAccessToken - organization from the token", () => {
   it("attaches to the organization the token names", async () => {
     const tag = "suborg";
     createdEmails.push(email(tag));
-    const asgardeoOrg = `asg-${SUFFIX}`;
+    const providerOrg = `asg-${SUFFIX}`;
 
     // Inside a context: organizations is policy-protected like everything
     // else, so an unscoped UPDATE here would match no rows and say nothing.
@@ -363,13 +363,13 @@ describe("verifyAccessToken - organization from the token", () => {
     // so never picks up the context this wraps it in.
     await runInOrganization(organizationId, () =>
       db.execute(
-        sql`UPDATE organizations SET asgardeo_org_id = ${asgardeoOrg}
+        sql`UPDATE organizations SET provider_org_id = ${providerOrg}
             WHERE id = ${organizationId}`,
       ),
     );
 
     const user = await verifyAccessToken(
-      await sign(validClaims(tag, { org_id: asgardeoOrg })),
+      await sign(validClaims(tag, { org_id: providerOrg })),
     );
 
     // Resolved from the claim, with no inference from how many organizations
@@ -378,7 +378,7 @@ describe("verifyAccessToken - organization from the token", () => {
 
     await runInOrganization(organizationId, () =>
       db.execute(
-        sql`UPDATE organizations SET asgardeo_org_id = NULL
+        sql`UPDATE organizations SET provider_org_id = NULL
             WHERE id = ${organizationId}`,
       ),
     );

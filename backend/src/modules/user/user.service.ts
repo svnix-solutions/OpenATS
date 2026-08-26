@@ -12,7 +12,7 @@ export interface UpdateUserInput {
 }
 
 export interface CreateUserInput {
-  asgardeoUserId: string;
+  providerUserId: string;
   firstName: string;
   lastName: string;
   email: string;
@@ -34,7 +34,7 @@ export const userService = {
     return db
       .select({
         id: users.id,
-        asgardeoUserId: users.asgardeoUserId,
+        providerUserId: users.providerUserId,
         firstName: users.firstName,
         lastName: users.lastName,
         email: users.email,
@@ -59,11 +59,11 @@ export const userService = {
     return user ?? null;
   },
 
-  async getByAsgardeoId(asgardeoUserId: string) {
+  async getByProviderId(providerUserId: string) {
     const [user] = await db
       .select()
       .from(users)
-      .where(eq(users.asgardeoUserId, asgardeoUserId));
+      .where(eq(users.providerUserId, providerUserId));
     return user ?? null;
   },
 
@@ -75,7 +75,7 @@ export const userService = {
       .where(
         or(
           eq(users.email, input.email),
-          eq(users.asgardeoUserId, input.asgardeoUserId),
+          eq(users.providerUserId, input.providerUserId),
         ),
       )
       .limit(1);
@@ -84,7 +84,7 @@ export const userService = {
       const [reactivated] = await db
         .update(users)
         .set({
-          asgardeoUserId: input.asgardeoUserId,
+          providerUserId: input.providerUserId,
           firstName: input.firstName,
           lastName: input.lastName,
           email: input.email,

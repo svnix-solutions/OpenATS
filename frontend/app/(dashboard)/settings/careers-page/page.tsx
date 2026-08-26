@@ -280,7 +280,7 @@ export default function CareersSettingsPage() {
             title="Public HTTP API"
             description={
               <>
-                Proxied by Next.js, no Asgardeo session required. Every
+                Proxied by Next.js, no signed-in session required. Every
                 response is shaped{" "}
                 <code className="font-mono">{'{ "data": Job[] | Job }'}</code>
                 .

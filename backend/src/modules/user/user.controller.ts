@@ -24,7 +24,7 @@ const updateUserSchema = z.object({
 });
 
 const createUserSchema = z.object({
-  asgardeoUserId: z.string().min(1),
+  providerUserId: z.string().min(1),
   firstName: z.string().min(1).max(100),
   lastName: z.string().min(1).max(100),
   email: z.string().email().max(255),
@@ -205,7 +205,7 @@ const membershipSchema = z
  * belong to if they are a contact rather than staff.
  *
  * Role lives here, not in the identity provider: the token seeds this column
- * at first sign-in and is ignored afterwards, so changing a role in Asgardeo
+ * at first sign-in and is ignored afterwards, so changing a role in the provider
  * alone has no effect on what the person can actually do.
  */
 export const updateMembership = async (req: Request, res: Response) => {

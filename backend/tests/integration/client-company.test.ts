@@ -57,7 +57,7 @@ describe("job creation names its client company", () => {
 
       const res = await request(app)
         .post("/api/jobs")
-        .set("Authorization", await bearer({ sub: s.admin.asgardeoUserId, email: s.admin.email }))
+        .set("Authorization", await bearer({ sub: s.admin.providerUserId, email: s.admin.email }))
         .send({
           title: "Globex Engineer",
           departmentId: s.departmentId,

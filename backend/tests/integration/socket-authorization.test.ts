@@ -57,7 +57,7 @@ beforeAll(async () => {
     const [contact] = await db
       .insert(users)
       .values({
-        asgardeoUserId: `${s.suffix}-contact`,
+        providerUserId: `${s.suffix}-contact`,
         firstName: "Client",
         lastName: "Contact",
         email: `contact.${s.suffix}@example.test`,
@@ -82,12 +82,12 @@ beforeAll(async () => {
     });
 
   adminToken = await mint(
-    s.admin.asgardeoUserId,
+    s.admin.providerUserId,
     s.admin.email,
     "super_admin",
   );
   interviewerToken = await mint(
-    s.interviewer.asgardeoUserId,
+    s.interviewer.providerUserId,
     s.interviewer.email,
     "interviewer",
   );
@@ -181,7 +181,7 @@ describe("dashboard broadcasts", () => {
     const other = await createScenario("sock-other");
     try {
       const otherToken = await signToken({
-        sub: other.admin.asgardeoUserId,
+        sub: other.admin.providerUserId,
         email: other.admin.email,
         given_name: "Test",
         family_name: "User",

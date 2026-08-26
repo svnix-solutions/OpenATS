@@ -20,7 +20,7 @@ export async function signToken(
   return new SignJWT(claims)
     .setProtectedHeader({ alg: "RS256" })
     .setIssuedAt()
-    .setIssuer(opts.issuer ?? process.env.ASGARDEO_ISSUER!)
+    .setIssuer(opts.issuer ?? process.env.OIDC_ISSUER!)
     .setExpirationTime(opts.expiresIn ?? "5m")
     .sign((opts.key ?? privateKey) as Parameters<SignJWT["sign"]>[0]);
 }
