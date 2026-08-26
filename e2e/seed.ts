@@ -292,8 +292,16 @@ export async function seedSecondClient(
        VALUES ($1, $2, $3) RETURNING id`,
       [world.organizationId, `Rival ${stamp}`, slug],
     );
+    // The department of this world's own job, not "any department".
+    //
+    // This connection is the owner, which is a superuser, so row-level
+    // security does not scope it — an unqualified LIMIT 1 picked up another
+    // spec's department, and the rival job then held a foreign key into a
+    // world it did not own. That world's teardown failed with a constraint
+    // violation, in a different spec file, long after the cause.
     const department = await c.query<{ id: number }>(
-      "SELECT id FROM departments LIMIT 1",
+      "SELECT department_id AS id FROM jobs WHERE id = $1",
+      [world.jobId],
     );
     const jobTitle = `Rival Engineer ${stamp}`;
     const job = await c.query<{ id: number }>(

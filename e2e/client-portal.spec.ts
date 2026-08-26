@@ -68,9 +68,14 @@ test.describe("client contacts", () => {
 
     // The roles the product offers must be the roles the product has. Three of
     // five were listed, which is what made the portal unreachable.
-    const offered = await page.locator('[role="option"]').allInnerTexts();
-    expect(offered).toContain("Client Admin");
-    expect(offered).toContain("Client Reviewer");
+    //
+    // Waited for, not read once: allInnerTexts() resolves immediately, so on a
+    // slower machine it returned [] before the listbox had rendered and the
+    // assertion failed for want of a frame rather than a role.
+    await expect(page.getByRole("option", { name: "Client Admin" })).toBeVisible();
+    await expect(
+      page.getByRole("option", { name: "Client Reviewer" }),
+    ).toBeVisible();
 
     await page.getByRole("option", { name: "Client Admin" }).click();
 
