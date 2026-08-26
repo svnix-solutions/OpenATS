@@ -32,7 +32,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useSidebar } from "@/components/ui/sidebar";
 import { cn } from "@/lib/utils";
-import { useAsgardeo } from "@asgardeo/nextjs";
+import { useAuthSession } from "@/lib/auth/client";
 
 function initialsFromName(name: string) {
   const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -70,7 +70,7 @@ export function SidebarUserMenu({
   variant = "header",
   accessToken,
 }: SidebarUserMenuProps) {
-  const { signOut, isLoading } = useAsgardeo();
+  const { signOut, isLoading } = useAuthSession();
   const { theme, setTheme } = useTheme();
   const { state } = useSidebar();
   const queryClient = useQueryClient();

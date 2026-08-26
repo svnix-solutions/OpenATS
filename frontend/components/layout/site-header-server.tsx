@@ -1,12 +1,9 @@
-import { asgardeo } from "@asgardeo/nextjs/server";
+import { getAccessToken as readAccessToken } from "@/lib/auth/session";
 import { SiteHeader } from "./site-header";
 
 async function getAccessToken(): Promise<string | undefined> {
   try {
-    const client = await asgardeo();
-    const sessionId = await client.getSessionId();
-    if (!sessionId) return undefined;
-    return await client.getAccessToken(sessionId);
+    return (await readAccessToken()) ?? undefined;
   } catch {
     return undefined;
   }

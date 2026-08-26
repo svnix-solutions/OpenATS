@@ -6,7 +6,7 @@ import { DragDropProvider } from "@/components/dynamic-imports";
 import { PrefetchProvider } from "@/components/providers/prefetch-provider";
 import { CandidateSocketProvider } from "@/components/providers/candidate-socket-provider";
 import { SocketAuthProvider } from "@/components/providers/socket-auth-provider";
-import { asgardeo } from "@asgardeo/nextjs/server";
+import { getAccessToken as readAccessToken } from "@/lib/auth/session";
 import { SetupCompanyGate } from "@/components/guards/setup-company-gate";
 import { ClientRouteGate } from "@/components/guards/client-route-gate";
 import { QueryProvider } from "@/components/providers/query-provider";
@@ -15,10 +15,7 @@ import { DashboardMainLoading } from "@/components/dashboard-main-loading";
 
 async function getAccessToken(): Promise<string | undefined> {
   try {
-    const client = await asgardeo();
-    const sessionId = await client.getSessionId();
-    if (!sessionId) return undefined;
-    return await client.getAccessToken(sessionId);
+    return (await readAccessToken()) ?? undefined;
   } catch {
     return undefined;
   }

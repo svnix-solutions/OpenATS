@@ -164,7 +164,7 @@ export default function UserManagementPage() {
     isLoading: loading,
     refetch: reloadUsers,
   } = useQuery({
-    queryKey: ["asgardeo-users"],
+    queryKey: ["directory-users"],
     queryFn: async () => {
       try {
         return await fetchUsers();
