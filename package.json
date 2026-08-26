@@ -12,14 +12,16 @@
     "lint": "pnpm --filter ./backend lint && pnpm --filter ./frontend lint",
     "test": "pnpm --filter ./backend test:run && pnpm --filter ./frontend test:run",
     "test:watch": "pnpm --filter ./backend test",
-    "test:e2e": "playwright test",
+    "test:e2e": "rm -rf frontend/.next && playwright test",
     "test:coverage": "pnpm --filter ./backend test:coverage",
     "test:frontend": "pnpm --filter ./frontend test:run"
   },
   "devDependencies": {
     "@playwright/test": "^1.62.1",
     "@types/node": "^25.9.5",
+    "@types/pg": "^8.20.3",
     "concurrently": "^9.0.0",
+    "pg": "^8.22.0",
     "typescript": "^5.9.3"
   }
 }

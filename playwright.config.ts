@@ -7,6 +7,11 @@ export default defineConfig({
   testDir: "./e2e",
   use: { baseURL: "http://localhost:3000" },
   webServer: {
+    // `pnpm test:e2e` clears frontend/.next first, and the suite is not
+    // repeatable without it: `next dev` persists route results on disk, so a
+    // /careers/:slug that 404'd on one run — before that run seeded its client
+    // company — kept 404ing on the next, while the same data served fine over
+    // the API. Dev only; every careers route builds as dynamic in production.
     command: "pnpm dev",
     url: "http://localhost:3000",
     // Playwright must own the servers so DATABASE_URL below actually applies.
