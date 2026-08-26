@@ -1,7 +1,23 @@
 import { defineConfig } from "@playwright/test";
+import { readFileSync } from "node:fs";
 
+// The authenticated specs create their user in the identity provider, which
+// needs its URL and admin secret. Those live in frontend/.env, which Playwright
+// does not read on its own — and dotenv is not a dependency of this package,
+// which only exists to hold the E2E suite.
+for (const line of readFileSync("frontend/.env", "utf8").split("\n")) {
+  const match = /^([A-Z0-9_]+)=(.*)$/.exec(line.trim());
+  if (match) process.env[match[1]!] ??= match[2]!.replace(/^["']|["']$/g, "");
+}
+
+// `openats_app`, not `openats`. The owner of this database is a superuser, and
+// a superuser bypasses row-level security even where it is FORCEd — so a
+// backend connected as `openats` serves every tenant's rows to every other
+// one, silently, and any isolation test passes without testing anything.
+// That was the case here until an authenticated spec looked at a second
+// organization's jobs and found them.
 const TEST_DATABASE_URL =
-  "postgresql://openats:openats@localhost:5433/openats_test";
+  "postgresql://openats_app:openats_app@localhost:5433/openats_test";
 
 export default defineConfig({
   testDir: "./e2e",

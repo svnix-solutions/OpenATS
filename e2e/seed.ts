@@ -94,7 +94,10 @@ export async function seedWorld(tag: string): Promise<SeededWorld> {
       [organizationId, `Acme ${suffix}`, suffix],
     );
 
-    const jobTitle = "Senior Platform Engineer";
+    // Unique per world. A shared constant made "the other agency's job is not
+    // visible" unfalsifiable: the string it looked for was also this world's
+    // own job title, so the assertion could only ever pass.
+    const jobTitle = `Senior Platform Engineer ${suffix}`;
     const job = await c.query<{ id: number }>(
       `INSERT INTO jobs (title, slug, client_company_id, department_id,
                          employment_type, status, description, created_by)
@@ -231,6 +234,38 @@ export async function seedTokenPages(
       offerToken,
       assessmentToken,
       interviewToken,
+    };
+  });
+}
+
+/**
+ * Someone who has applied, so the dashboard's candidate list has a row in it.
+ *
+ * A person and an application are two rows on purpose: `candidates` is the
+ * person, `applications` is their submission to one job, and the dashboard
+ * lists the latter.
+ */
+export async function seedApplicant(
+  world: SeededWorld,
+): Promise<{ name: string; applicationId: number }> {
+  const stamp = Date.now();
+  const first = "Grace";
+  const last = `Hopper${stamp % 10000}`;
+
+  return withOwner(world.organizationId, async (c) => {
+    const candidate = await c.query<{ id: number }>(
+      `INSERT INTO candidates (first_name, last_name, email, phone)
+       VALUES ($1, $2, $3, '+15550000010') RETURNING id`,
+      [first, last, `grace.${stamp}@example.test`],
+    );
+    const application = await c.query<{ id: number }>(
+      `INSERT INTO applications (candidate_id, job_id, current_stage_id, status)
+       VALUES ($1, $2, $3, 'active') RETURNING id`,
+      [candidate.rows[0]!.id, world.jobId, world.stageId],
+    );
+    return {
+      name: `${first} ${last}`,
+      applicationId: application.rows[0]!.id,
     };
   });
 }

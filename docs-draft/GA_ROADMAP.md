@@ -77,6 +77,8 @@ The "do it properly" phase. None of this is urgent, all of it is what separates 
 | Staging environment | Every change still goes straight to production, but the app now runs entirely in Docker (`docker compose --profile app up`), so a staging host is a compose file and a second `.env` rather than a bespoke build. | 🟡 In progress |
 | Error tracking | Sentry on both the backend and the worker, off unless `SENTRY_DSN` is set. Events carry the `organizationId`; PII is deliberately not sent. | 🟢 Done |
 | Structured logging | One JSON object per line when `NODE_ENV=production`, readable otherwise; errors keep their stack in a named field, and every line carries the `organizationId` it came from. Console only — pm2 already writes and rotates stdout. | 🟢 Done |
+| Fixed E2E running as a superuser | `playwright.config.ts` pointed the backend at the database owner, which bypasses row-level security even where FORCEd. Every E2E run had been unable to observe a tenancy failure | 🟢 Done |
+| End-to-end tests in CI | The Playwright suite ran nowhere, so nothing it covered was guarded on a pull request. CI now starts the identity provider and runs it, including authenticated dashboard specs | 🟢 Done |
 | Security review | Uploads, raw SQL, token generation, secret logging and CORS reviewed; the tenancy boundary was covered separately in #39. Found the `/public/*` origin check silently disabled. Socket.IO payloads, assessment execution and the dependency surface all reviewed since. | 🟡 In progress |
 | Complete documentation | [DEPLOYMENT.md](DEPLOYMENT.md), [CONFIGURATION.md](CONFIGURATION.md), [UPGRADING.md](UPGRADING.md). Writing them found five frontend and one backend env var read by code but absent from `.env.example`. | 🟢 Done |
 
