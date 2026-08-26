@@ -50,6 +50,12 @@ company and published job straight into the database as the owner, setting
 to it too. Each spec file gets its **own** organization so parallel workers
 cannot reach each other's rows, and teardown is a single cascade.
 
+`seedTokenPages` adds the records behind the three pages a candidate reaches
+by link rather than login — a sent offer, an assessment invite and an
+interview with proposed slots. Seeded rather than driven through the
+dashboard, because creating any of them needs an authenticated agency session
+and those specs are about what the candidate sees.
+
 Run it with `pnpm test:e2e`, which clears `frontend/.next` first. Without that
 the suite is not repeatable: `next dev` persists route results, so a
 `/careers/:slug` that 404'd before its company existed keeps 404ing on the next
