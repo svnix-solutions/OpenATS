@@ -13,6 +13,7 @@
     "test": "vitest",
     "test:run": "vitest run",
     "lint": "eslint .",
+    "provision-org": "tsx src/db/provision-org.ts",
     "test:coverage": "vitest run --coverage"
   },
   "keywords": [],
