@@ -11,7 +11,76 @@ so the history lives in the repository. See
 
 ## [Unreleased]
 
-Nothing yet.
+OpenATS became multi-tenant. An organization is a recruiting agency, the
+companies it recruits for are client companies, and contacts at those companies
+can sign in to see their own roles. Everything below follows from that, and
+most of the fixes are places where the tenancy boundary did not reach.
+
+### Added
+
+- Multi-tenancy: every table carries an `organization_id` under a forced
+  row-level security policy, so a query written without thinking about tenancy
+  returns nothing rather than the wrong thing. The application connects as a
+  least-privileged role, because owners and superusers bypass those policies.
+- Client companies, with CRUD and a settings screen. Jobs belong to one, and
+  each has its own careers page at `/careers/:slug`.
+- A client portal: contacts see their own company's jobs and candidates, with
+  the agency's working view withheld — contact details, CV scoring, internal
+  rejection notes.
+- `candidates` is now a person and `applications` is one person's submission to
+  one job, so the same person applying twice is two submissions.
+- Roles and client-company assignment are set from Settings → User Management
+  and read from the database, not the token.
+- Per-agency email branding, structured JSON logging, and Sentry error
+  reporting — all three stamped with the organization they came from.
+- The whole application runs in Docker: `docker compose --profile app up`.
+- Rollback: deploys keep their build tarball, and `scripts/rollback.sh` puts a
+  previous one back without a rebuild.
+- Deployment, configuration and upgrade guides in `docs-draft/`.
+
+### Security
+
+- Dashboard socket events went to a single global room that every
+  authenticated socket joined, so every organization received every other
+  organization's activity — job and candidate ids included. Rooms are now
+  per-organization.
+- One organization's departments were cached under a global key and served to
+  every other organization for five minutes.
+- Candidate contact details reached client contacts through the offers,
+  interviews and assessment-results endpoints, which bypassed the redaction
+  applied to the candidate endpoints.
+- A client role with no client company fell through every scoping rule and saw
+  the agency's whole book of business. It is refused at sign-in.
+- The origin check on `/public/*` was mounted before the tenant was resolved,
+  read an empty list, treated that as "not configured" and allowed everything.
+- Candidate-facing assessment and interview routes were also mounted under
+  `/api`, where they ran as whichever staff member was signed in, without rate
+  limiting or the client check.
+- The login page shipped hardcoded demo credentials; they are now opt-in
+  through environment variables.
+- Socket chat payloads are validated: an unbounded `text` column previously
+  accepted anything up to Socket.IO's 1 MB frame.
+- Every high-severity dependency advisory cleared (16 → 0).
+
+### Fixed
+
+- Client companies could not be created at all, so no job could be created
+  through the product on a fresh install.
+- Job creation silently discarded the client company it was given, so an
+  agency with more than one client could not create a job.
+- Assessment time limits are minutes, but the candidate's timer read them as
+  seconds — a two-hour assessment gave two minutes and then submitted itself.
+- The Google OAuth callback ran outside any tenancy context, so the connection
+  it wrote was always refused and Google Meet could not be connected.
+- Sending an offer marked it sent before the email went out, leaving the row
+  and the API disagreeing when sending failed.
+- Client contacts landed on a candidate section hidden from them.
+
+### Changed
+
+- CI builds the backend once and the deploy ships that exact artifact; the
+  production VM no longer compiles.
+- `next` 16.1.6 → 16.3.2.
 
 ## [0.5.0] - 2026-08-13
 
