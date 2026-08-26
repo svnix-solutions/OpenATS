@@ -105,6 +105,30 @@ export const SECTIONS = [
   },
 ];
 
+/**
+ * Sections a client contact is not shown.
+ *
+ * Job Fit is the agency's CV scoring and Rejection carries its internal note —
+ * both are redacted to nothing for a client, so the panel would open empty.
+ * Send Email composes as the agency to an address the client is not given.
+ *
+ * Lives here rather than in the tab bar because the page needs it too: the
+ * tabs were filtered while the panels were not, and the default section was
+ * `job-fit`, so a client landed on a hidden panel with no tab selected.
+ */
+const CLIENT_HIDDEN_SECTIONS: SectionId[] = ["job-fit", "rejection", "email"];
+
+export function sectionsFor(isClient: boolean) {
+  return isClient
+    ? SECTIONS.filter((s) => !CLIENT_HIDDEN_SECTIONS.includes(s.id))
+    : SECTIONS;
+}
+
+/** Whether this viewer may open this section at all. */
+export function canSeeSection(sectionId: SectionId, isClient: boolean) {
+  return !isClient || !CLIENT_HIDDEN_SECTIONS.includes(sectionId);
+}
+
 export type SentEmail = {
   id: number;
   subject: string;

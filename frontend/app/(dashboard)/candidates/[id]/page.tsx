@@ -24,7 +24,12 @@ import { useDeleteInterview } from "@/hooks/queries/use-interviews";
 import { useTemplates } from "@/hooks/queries/use-templates";
 import { InterviewSchedulerDialog } from "@/app/(dashboard)/interviews/_components/interview-scheduler-dialog";
 
-import { type SectionId, OFFER_STATUS_STYLES } from "./_components/constants";
+import {
+  type SectionId,
+  OFFER_STATUS_STYLES,
+  sectionsFor,
+  canSeeSection,
+} from "./_components/constants";
 import { CandidateHeader } from "./_components/candidate-header";
 import { SectionTabs } from "./_components/section-tabs";
 import { useCurrentUser } from "@/hooks/queries/use-user";
@@ -79,7 +84,20 @@ export default function CandidateDetailPage({
   const deleteMutation = useDeleteCandidate();
   const updateMutation = useUpdateCandidateBasicDetails();
 
-  const [activeSection, setActiveSection] = useState<SectionId>("job-fit");
+  // Not a fixed "job-fit": that section is hidden from a client contact, so
+  // they landed on a panel whose tab was not in the bar. The default is the
+  // first section this viewer can actually open.
+  const [activeSection, setActiveSection] = useState<SectionId | null>(null);
+
+  // The section actually rendered. A client contact who has not chosen one
+  // gets the first they may open, and a section they may not open never
+  // renders even if it somehow became active — the tab bar hiding a tab is
+  // not the same as the panel refusing to draw.
+  const visibleSections = sectionsFor(isClient);
+  const shownSection: SectionId =
+    activeSection && canSeeSection(activeSection, isClient)
+      ? activeSection
+      : (visibleSections[0]?.id ?? "answers");
   const [deleteTarget, setDeleteTarget] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [editFirstName, setEditFirstName] = useState("");
@@ -237,7 +255,7 @@ export default function CandidateDetailPage({
           <main className="min-w-0">
             <SectionTabs
               isClient={isClient}
-              activeSection={activeSection}
+              activeSection={shownSection}
               onSectionChange={setActiveSection}
               cvAnalysis={cvAnalysis}
               hasOffer={!!offer}
@@ -249,19 +267,19 @@ export default function CandidateDetailPage({
             />
 
             <div className="rounded-md border border-slate-200 bg-white shadow-sm dark:border-neutral-800 dark:bg-neutral-950">
-              {activeSection === "job-fit" && (
+              {shownSection === "job-fit" && (
                 <JobFitSection
                   resumeUrl={candidate.resumeUrl}
                   cvAnalysis={cvAnalysis}
                 />
               )}
-              {activeSection === "answers" && (
+              {shownSection === "answers" && (
                 <AnswersSection candidate={candidate} />
               )}
-              {activeSection === "history" && (
+              {shownSection === "history" && (
                 <HistorySection candidate={candidate} stageMap={stageMap} />
               )}
-              {activeSection === "offer" && (
+              {shownSection === "offer" && (
                 <OfferSection
                   candidate={candidate}
                   candidateId={candidateId}
@@ -271,7 +289,7 @@ export default function CandidateDetailPage({
                   jobId={candidate.jobId}
                 />
               )}
-              {activeSection === "interviews" && (
+              {shownSection === "interviews" && (
                 <InterviewsSection
                   candidate={candidate}
                   stageMap={stageMap}
@@ -279,7 +297,7 @@ export default function CandidateDetailPage({
                   onSchedule={() => setShowSchedulerDialog(true)}
                 />
               )}
-              {activeSection === "rejection" && (
+              {shownSection === "rejection" && (
                 <RejectionSection
                   candidate={candidate}
                   candidateId={candidateId}
@@ -287,10 +305,10 @@ export default function CandidateDetailPage({
                   onReject={() => setIsRejectDialogOpen(true)}
                 />
               )}
-              {activeSection === "email" && (
+              {shownSection === "email" && (
                 <EmailSection candidate={candidate} />
               )}
-              {activeSection === "scores" && (
+              {shownSection === "scores" && (
                 <ScoresSection
                   assessmentsData={assessmentsData}
                   onViewAttempt={setViewAttemptId}
