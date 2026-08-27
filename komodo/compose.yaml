@@ -1,0 +1,194 @@
+# OpenATS, as Komodo deploys it.
+#
+# Separate from the docker-compose.yml at the repo root, which is a developer's
+# machine: it exposes Postgres on 5432, ships fixed passwords, and carries a
+# second database and a mail catcher for the test suite. None of that belongs
+# on a server.
+#
+# What Komodo does with this file: clones the repo onto the target server,
+# writes the Stack's `environment` to a file, and runs `docker compose up -d`
+# against it. So every value below comes from that environment, images are
+# built on the server from this checkout, and nothing here holds a secret.
+#
+# Required variables use `${VAR:?…}` on purpose. A missing one stops
+# `docker compose` before anything starts, with the name of the variable — far
+# better than a container that comes up and fails to authenticate later.
+
+services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-openats}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set a password for the database owner}
+      POSTGRES_DB: ${POSTGRES_DB:-openats}
+      # Read by the init script below, not by Postgres itself.
+      APP_DATABASE_PASSWORD: ${APP_DATABASE_PASSWORD:?set a password for the openats_app role}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      # Creates the least-privileged role the application connects as, then
+      # gives it the password this deployment chose. Both run once, on a
+      # container with an empty data directory.
+      - ../docker/init-app-role.sql:/docker-entrypoint-initdb.d/10-app-role.sql:ro
+      - ../docker/set-app-role-password.sh:/docker-entrypoint-initdb.d/20-app-role-password.sh:ro
+    healthcheck:
+      test:
+        ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-openats} -d ${POSTGRES_DB:-openats}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      # On a first boot Postgres runs the init scripts against a temporary
+      # server, then restarts. `pg_isready` answers during that window and then
+      # stops answering, so without a start period the flap is counted as
+      # failures and everything that waits on `service_healthy` gives up —
+      # which is exactly what happened the first time this stack was run.
+      start_period: 60s
+    # Deliberately no `ports`. The only things that need the database are on
+    # this network. Publishing 5432 puts it on the internet.
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  # Runs to completion before the backend or the worker start, and never
+  # restarts. Migrations connect as the owner: they create and alter, which
+  # the application role cannot do and should not be able to.
+  migrate:
+    build:
+      context: ..
+      dockerfile: backend/Dockerfile
+      target: migrate
+    environment:
+      MIGRATION_DATABASE_URL: postgresql://${POSTGRES_USER:-openats}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-openats}
+      DATABASE_URL: postgresql://openats_app:${APP_DATABASE_PASSWORD}@postgres:5432/${POSTGRES_DB:-openats}
+    depends_on:
+      postgres: { condition: service_healthy }
+    restart: "no"
+
+  backend:
+    build:
+      context: ..
+      dockerfile: backend/Dockerfile
+      target: runtime
+    environment:
+      # openats_app, never the owner. Postgres exempts superusers and the
+      # table owner from row-level security, so a backend connected as either
+      # would serve every tenant's rows to every other one while every query
+      # still looked correct. The server refuses to start on such a role —
+      # see assertTenancyIsEnforceable in backend/src/db/index.ts.
+      DATABASE_URL: postgresql://openats_app:${APP_DATABASE_PASSWORD}@postgres:5432/${POSTGRES_DB:-openats}
+      REDIS_URL: redis://redis:6379
+      PORT: 8080
+      FRONTEND_URL: ${NEXT_PUBLIC_APP_URL:?the public URL of the frontend}
+
+      # Identity. Any OIDC provider that publishes a JWKS endpoint; see
+      # docs-draft/IDENTITY_PROVIDERS.md for what OpenATS requires of one.
+      OIDC_JWKS_URL: ${OIDC_JWKS_URL:?the provider's JWKS endpoint}
+      OIDC_ISSUER: ${OIDC_ISSUER:?the provider's issuer}
+
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:?a base64 32-byte key; see make encryption-key}
+
+      # Mail. Leave SMTP_HOST unset to send through Resend instead.
+      RESEND_API_KEY: ${RESEND_API_KEY:?}
+      RESEND_FROM_EMAIL: ${RESEND_FROM_EMAIL:?an address on a domain verified in Resend}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_SECURE: ${SMTP_SECURE:-true}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+
+      R2_ENDPOINT: ${R2_ENDPOINT:?}
+      R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID:?}
+      R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY:?}
+      R2_BUCKET_NAME: ${R2_BUCKET_NAME:?}
+      R2_PUBLIC_URL: ${R2_PUBLIC_URL:?}
+
+      GEMINI_API_KEY: ${GEMINI_API_KEY:?}
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    ports:
+      - "${BACKEND_PORT:-8080}:8080"
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      migrate: { condition: service_completed_successfully }
+    restart: unless-stopped
+
+  # The same image as the backend, running the queue consumer instead of the
+  # server. Without it, uploaded CVs queue for analysis and are never picked
+  # up — and nothing reports an error, because nothing has failed.
+  worker:
+    build:
+      context: ..
+      dockerfile: backend/Dockerfile
+      target: runtime
+    command: ["node", "dist/src/worker.js"]
+    environment:
+      DATABASE_URL: postgresql://openats_app:${APP_DATABASE_PASSWORD}@postgres:5432/${POSTGRES_DB:-openats}
+      REDIS_URL: redis://redis:6379
+      FRONTEND_URL: ${NEXT_PUBLIC_APP_URL}
+      OIDC_JWKS_URL: ${OIDC_JWKS_URL}
+      OIDC_ISSUER: ${OIDC_ISSUER}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+      RESEND_API_KEY: ${RESEND_API_KEY}
+      RESEND_FROM_EMAIL: ${RESEND_FROM_EMAIL}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_SECURE: ${SMTP_SECURE:-true}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      R2_ENDPOINT: ${R2_ENDPOINT}
+      R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID}
+      R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY}
+      R2_BUCKET_NAME: ${R2_BUCKET_NAME}
+      R2_PUBLIC_URL: ${R2_PUBLIC_URL}
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      migrate: { condition: service_completed_successfully }
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ..
+      dockerfile: frontend/Dockerfile
+      args:
+        # NEXT_PUBLIC_* are inlined into the JavaScript at build time, not read
+        # at runtime, so they are build args. Changing one needs a rebuild —
+        # in Komodo, a Deploy with the image rebuilt, not a Restart.
+        #
+        # Bare origins, with no /api: lib/api.ts appends /api itself and the
+        # public pages append /public. Including it here double-prefixes the
+        # dashboard and 404s every candidate-facing page.
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:?the public URL of the backend}
+        NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL}
+        NEXT_PUBLIC_AUTHORIZER_URL: ${NEXT_PUBLIC_AUTHORIZER_URL:?the public URL of the identity provider}
+        NEXT_PUBLIC_AUTHORIZER_CLIENT_ID: ${NEXT_PUBLIC_AUTHORIZER_CLIENT_ID:?}
+    environment:
+      # Server-side rendering talks to the backend container directly; the
+      # browser uses NEXT_PUBLIC_API_URL, baked in above.
+      OPENATS_API_URL: http://backend:8080
+      NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL}
+      # Server-side only. Grants full access to the provider's user directory,
+      # which is why it must never be prefixed NEXT_PUBLIC_ — that would ship
+      # it to every browser.
+      AUTHORIZER_ADMIN_SECRET: ${AUTHORIZER_ADMIN_SECRET:?}
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  postgres-data:
+  redis-data:

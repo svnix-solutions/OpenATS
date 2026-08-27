@@ -25,7 +25,17 @@ const envSchema = z.object({
 
   // Optional on purpose: without it error tracking is simply off, which is
   // what development, CI and the test suite want. Required nowhere.
-  SENTRY_DSN: z.string().url("SENTRY_DSN must be a valid URL").optional(),
+  //
+  // Empty counts as absent. `.env.example` ships `SENTRY_DSN=` with no value
+  // and `make setup` copies that file verbatim, so an optional variable that
+  // rejected the empty string meant a fresh checkout refused to boot —
+  // "SENTRY_DSN must be a valid URL" — before anyone had opted into Sentry at
+  // all. The same applies to any deployment template, which writes every
+  // variable it knows about whether or not it has a value.
+  SENTRY_DSN: z.preprocess(
+    (value) => (value === "" ? undefined : value),
+    z.string().url("SENTRY_DSN must be a valid URL").optional(),
+  ),
 });
 
 export type Env = z.infer<typeof envSchema>;

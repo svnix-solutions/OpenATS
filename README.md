@@ -210,6 +210,12 @@ See **[docs-draft/DEPLOYMENT.md](./docs-draft/DEPLOYMENT.md)** for the full
 guide, and **[docs-draft/UPGRADING.md](./docs-draft/UPGRADING.md)** for moving
 an existing install forward.
 
+To run the whole thing as containers on a server you own, including the
+database and the queue worker, see
+**[docs-draft/DEPLOY_KOMODO.md](./docs-draft/DEPLOY_KOMODO.md)** — a
+[Komodo](https://komo.do) Stack, with the compose file and the resource
+declaration in [`komodo/`](./komodo).
+
 In short: pushing to `main` deploys the backend to an Azure VM, but only if the
 test suite passes. CI builds `backend/dist` and ships that exact tarball — the
 VM does not compile, because compiling there produced an artifact from whatever

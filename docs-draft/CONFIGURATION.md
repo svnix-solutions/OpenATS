@@ -97,3 +97,11 @@ pass on pull requests from forks — GitHub never gives secrets to those.
 It points at a **separate Postgres on port 5433**, never the development
 database on 5432, and `backend/tests/setup.ts` loads it with `override: true`
 to make sure of it.
+
+---
+
+## Deploying with these
+
+`komodo/.env.example` is this table as a file: the same variables, arranged as
+a deployment supplies them rather than as a developer sets them. See
+[DEPLOY_KOMODO.md](./DEPLOY_KOMODO.md).
