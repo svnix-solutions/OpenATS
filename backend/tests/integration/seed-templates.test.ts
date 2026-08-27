@@ -49,7 +49,7 @@ describe("seeding the default email templates", () => {
     for (const row of rows) expect(row.createdBy).toBeNull();
   });
 
-  itInOrg("carries the link a candidate can actually open", async () => {
+  itInOrg("does not link the review page from the letter on it", async () => {
     await seedEmailTemplates();
 
     const [offerTemplate] = await db
@@ -58,9 +58,12 @@ describe("seeding the default email templates", () => {
       .where(eq(templates.name, "Offer Letter"));
 
     const body = String(offerTemplate!.bodyJson);
-    expect(body).toContain("{{offer_review_url}}");
-    // /offers is the agency's list and needs a login. A default template that
-    // shipped the plural would put every candidate on a login page.
+    // This template renders `offers.offer_letter_html`, which is displayed on
+    // the review page itself. A link to that page inside it points the reader
+    // at where they already are; the email that brings them there carries the
+    // link, and is built separately.
+    expect(body).not.toContain("{{offer_review_url}}");
+    // And no default may ever ship the dashboard plural, which needs a login.
     expect(body).not.toContain("/offers/");
   });
 
