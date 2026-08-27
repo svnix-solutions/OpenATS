@@ -215,7 +215,7 @@ submission to one job, and carries `status` and `current_stage_id`.
 dashboard lists and links to, and what `canReadCandidate` and the socket rooms
 authorise. Ids are opaque to the frontend, so nothing in the UI says so.
 
-The two share a number space, which has produced five bugs — an id from one
+The two share a number space, which has produced six bugs — an id from one
 side is a valid, silently wrong id on the other. Which side a column takes:
 
 | Holds an application id | Holds a person id |
@@ -223,7 +223,12 @@ side is a valid, silently wrong id on the other. Which side a column takes:
 | `candidate_stage_history`, `candidate_custom_answers`, `candidate_custom_answer_selections`, `candidate_assessment_attempts`, `candidate_chat_messages` | `offers`, `candidate_interviews`, `candidate_cv_analysis`, `candidate_rejections`, `candidate_activities`, `email_messages` |
 
 The right-hand tables all carry `job_id` too, which is what identifies the
-submission — that is why they did not need repointing.
+submission — that is why they did not need repointing. **But carrying it is not
+using it.** `candidate_cv_analysis` is unique on `(candidate_id, job_id)`, and
+every write in `cv-analysis.service` keyed on the person alone: one failure
+marked every application that person had as failed, and a score computed
+against one role's requirements was written onto every other analysis they
+had. A right-hand table needs both halves in the `WHERE`, every time.
 
 When a parameter carries an application id, call it `applicationId`. The one
 place that still said `candidateId` was an offer being written against the
@@ -234,7 +239,8 @@ wrong person, and renaming it is what surfaced that.
 - PostgreSQL via **Drizzle ORM**. Schema files live in `backend/src/db/schema/` (one file per domain + `relations.ts`).
 - DB connection: `backend/src/db/index.ts` — pg Pool with Neon scale-to-zero handling. It also exports `runInOrganization`, the `db` proxy, `currentOrganizationId()`, and `unscopedDb` (which bypasses the proxy and is for migrations, seeding and tests only — it is still subject to RLS).
 - When changing the schema: run `pnpm drizzle-kit generate` in `backend/`, then **commit the generated `drizzle/*.sql` files**.
-- The seed (`backend/src/db/seed.ts`) creates 5 default pipeline stages (Applied, Screening, Interviewed, Offer, Rejected) - required for the app to function.
+- The seed (`backend/src/db/seed.ts`) creates the default pipeline stages and the two email templates — both required for the app to function: without stages there is nowhere to put an applicant, and without templates an offer can be drafted and never sent.
+- **The seed runs as the migration role, not the application one.** It has to find which organization to seed into, and reads `organizations` — which the application role correctly cannot see outside a request, because row-level security is doing its job. `make seed` failed with "No organization exists to seed into" on every install until that was fixed.
 - **Local Postgres + Redis**: `docker-compose.yml` at the repo root runs both as containers (`openats`/`openats`/`openats` for user/password/db on Postgres; Redis with no auth). Not required — Neon/hosted Redis work too — but this is the fastest path for local dev. See `CONTRIBUTING.md` for the full setup flow.
 
 ### Frontend
@@ -280,4 +286,6 @@ Two separate `.env` files are required (copy from `.env.example` in each directo
 - ⚠️ The deploy workflow currently fails on this fork with `missing server host`: `SSH_HOST` and friends are repository secrets, and GitHub does not copy secrets to forks. Nothing is being deployed from here.
 - `.github/workflows/deploy.yml` deploys the **backend only** to an Azure VM on push to `main` (when `backend/**` changes): SSH → git reset → pnpm install → unpack the `dist` built by CI → migrate → pm2 restart. **The VM does not compile.** `test.yml` builds `backend/dist`, tars it and uploads it as the `backend-dist` artifact; the deploy job downloads that exact tarball. Compiling on the VM produced the artifact from whatever toolchain that box happened to have, which is how it drifted from what CI had tested.
 - CI runs lint for both packages, migrations, unit and integration tests, two type-check passes, and a build of both packages on every pull request (`.github/workflows/test.yml`). The frontend build is not redundant with lint: Next resolves routes at build time, so ambiguous dynamic segments and invalid page signatures surface only there. It creates the `openats_app` role before migrating, because service containers start before checkout and cannot mount the init script.
+- CI also runs the Playwright suite, with the identity provider started as a step and Mailpit as a service container. It did not until recently, so nothing the E2E specs covered was actually guarded on a pull request.
 - Both packages have ESLint, and both are linted in CI.
+- **There are two deployment paths.** `deploy.yml` ships the backend only, to an Azure VM, and is what the ⚠️ above refers to. `komodo/` deploys the whole application — database, identity provider, API, queue worker, frontend — as a [Komodo](https://komo.do) Stack; see `docs-draft/DEPLOY_KOMODO.md`. The Komodo path is the one that has been run end to end.
