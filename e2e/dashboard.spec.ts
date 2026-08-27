@@ -179,6 +179,70 @@ test.describe("the agency dashboard", () => {
     });
   });
 
+  test("every link on the dashboard goes somewhere", async ({ page }) => {
+    await signIn(page, operator);
+
+    // Crawled rather than listed: the three dead links found so far were all
+    // in places nobody thought to check — a job's careers link, the offer link
+    // inside every template, and this settings back button. Enumerating the
+    // hrefs the pages actually render is what finds the next one.
+    const pages = [
+      "/",
+      "/jobs",
+      "/candidates",
+      "/interviews",
+      "/assessments",
+      "/offers",
+      "/templates",
+      "/settings/general",
+      "/settings/client-companies",
+      "/settings/user-management",
+      "/settings/careers-page",
+      "/settings/careers-page/preview",
+      "/settings/integrations",
+      "/settings/profile",
+    ];
+
+    const links = new Set<string>();
+    for (const path of pages) {
+      await page.goto(path);
+      // These pages render their content client-side, so reading the DOM
+      // straight after goto() sees only the sidebar — which is how the first
+      // version of this passed while a dead link sat on one of them.
+      await page.waitForLoadState("networkidle");
+      for (const href of await page
+        .locator("a[href^='/']")
+        .evaluateAll((els) =>
+          els.map((e) => e.getAttribute("href")).filter((h): h is string => !!h),
+        )) {
+        links.add(href);
+      }
+    }
+
+    // Proof the crawl saw rendered pages rather than empty ones — an empty
+    // set would make the assertion below vacuously true. Named links rather
+    // than a count, because the count depends on how much the fixture seeds.
+    for (const expected of [
+      "/jobs",
+      "/candidates",
+      "/settings/profile",
+      // A page-level link, not just the sidebar: without one of these the
+      // crawl is only checking navigation it was given.
+      "/settings/careers-page",
+    ]) {
+      expect([...links]).toContain(expected);
+    }
+
+    const broken: string[] = [];
+    for (const href of links) {
+      const response = await page.goto(href);
+      if ((response?.status() ?? 0) >= 400) {
+        broken.push(`${href} → ${response?.status()}`);
+      }
+    }
+    expect(broken).toEqual([]);
+  });
+
   test("a signed-out visitor is sent to the login page", async ({ page }) => {
     await page.context().clearCookies();
     await page.goto("/jobs");
