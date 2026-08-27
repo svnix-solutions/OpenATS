@@ -19,15 +19,30 @@ const baseQuestionSchema = z.object({
   options: z.array(optionSchema).optional(),
 });
 
-const questionSchema = baseQuestionSchema.refine(
-  (data) => {
-    if (data.questionType === "multiple_choice") {
-      return data.options && data.options.length >= 2;
-    }
-    return true;
-  },
-  { message: "Multiple choice questions must have at least 2 options" },
-);
+const questionSchema = baseQuestionSchema
+  .refine(
+    (data) => {
+      if (data.questionType === "multiple_choice") {
+        return data.options && data.options.length >= 2;
+      }
+      return true;
+    },
+    { message: "Multiple choice questions must have at least 2 options" },
+  )
+  .refine(
+    (data) => {
+      if (data.questionType !== "multiple_choice") return true;
+      return (data.options ?? []).some((option) => option.isCorrect);
+    },
+    {
+      // Without one, scoring awards nothing: `pointsEarned` stays 0 for every
+      // candidate no matter what they choose, and the question drags the whole
+      // assessment percentage down for ever. It saved silently, and the author
+      // had no way to know — the assessment simply never scored anyone.
+      path: ["options"],
+      message: "Mark one option as the correct answer",
+    },
+  );
 
 const createAssessmentSchema = z.object({
   title: z.string().min(1, "Title is required").max(255),
