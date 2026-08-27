@@ -1,6 +1,6 @@
 import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { GoogleGenAI } from "@google/genai";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { candidateCvAnalysis, db } from "../../db";
 import { jobSkills, jobs } from "../../db";
 import logger from "../../utils/logger";
@@ -613,9 +613,14 @@ export const cvAnalysisService = {
       .insert(candidateCvAnalysis)
       .values({ candidateId, jobId, status: "pending" })
       .onConflictDoUpdate({
-        target: candidateCvAnalysis.candidateId,
+        // Both columns: the only unique constraint on this table is
+        // (candidate_id, job_id). Naming candidate_id alone matched no index,
+        // and Postgres rejects a conflict target it cannot resolve — so this
+        // threw on every call and CV analysis never ran at all. Both callers
+        // swallow the error into a log line, so an application still returned
+        // 201 with nothing behind it.
+        target: [candidateCvAnalysis.candidateId, candidateCvAnalysis.jobId],
         set: {
-          jobId,
           status: "pending",
           matchScore: null,
           matchedSkills: null,
@@ -634,7 +639,18 @@ export const cvAnalysisService = {
   },
 
   // Marks the row failed (called by the worker after retries are exhausted)
-  async markFailed(candidateId: number, message: string): Promise<void> {
+  /**
+   * One person can be up for several roles, and their CV is scored against
+   * each separately — the table is unique on (candidate_id, job_id) and a new
+   * CV enqueues one job per open application. So a failure belongs to one of
+   * them. Keyed on the person alone, one refusal from the model marked every
+   * application that person had as failed.
+   */
+  async markFailed(
+    candidateId: number,
+    jobId: number,
+    message: string,
+  ): Promise<void> {
     await db
       .update(candidateCvAnalysis)
       .set({
@@ -642,7 +658,12 @@ export const cvAnalysisService = {
         errorMessage: message ?? "Unknown error during CV analysis",
         updatedAt: new Date(),
       })
-      .where(eq(candidateCvAnalysis.candidateId, candidateId));
+      .where(
+        and(
+          eq(candidateCvAnalysis.candidateId, candidateId),
+          eq(candidateCvAnalysis.jobId, jobId),
+        ),
+      );
   },
 
   // Runs inside the BullMQ worker.
@@ -724,7 +745,15 @@ export const cvAnalysisService = {
         aiSummary,
         updatedAt: new Date(),
       })
-      .where(eq(candidateCvAnalysis.candidateId, candidateId));
+      // The job as well as the person. Without it, a score computed against
+      // one role's requirements — with its matched skills, its gaps and its
+      // AI summary — was written onto every other analysis that person had.
+      .where(
+        and(
+          eq(candidateCvAnalysis.candidateId, candidateId),
+          eq(candidateCvAnalysis.jobId, jobId),
+        ),
+      );
 
     logger.info(
       `[CV Analysis] Done for candidate ${candidateId} — score: ${matchScore}`,

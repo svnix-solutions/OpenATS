@@ -60,7 +60,11 @@ export function startCvAnalysisWorker(): Worker<CvAnalysisJobData> {
       });
 
       await runInOrganization(job.data.organizationId, () =>
-        cvAnalysisService.markFailed(job.data.candidateId, err.message),
+        cvAnalysisService.markFailed(
+          job.data.candidateId,
+          job.data.jobId,
+          err.message,
+        ),
       );
       await publishCvAnalysisEvent({
         candidateId: job.data.candidateId,
