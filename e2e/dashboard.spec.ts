@@ -136,6 +136,49 @@ test.describe("the agency dashboard", () => {
     expect(response.status()).toBe(200);
   });
 
+  test("opens a candidate in the side panel without leaving the list", async ({
+    page,
+  }) => {
+    await signIn(page, operator);
+    await page.goto("/candidates");
+    await expect(page.getByText(applicant.name).first()).toBeVisible();
+
+    await page.locator("tbody tr").first().click();
+
+    const panel = page.locator('[data-slot="sheet-content"]');
+    await expect(panel).toBeVisible();
+    await expect(panel.getByText(applicant.name).first()).toBeVisible();
+    // Still on the list: a panel, not a navigation.
+    await expect(page).toHaveURL(/\/candidates$/);
+  });
+
+  test("the panel's email form actually sends", async ({ page }) => {
+    await signIn(page, operator);
+    await page.goto("/candidates");
+    // Wait for the row before clicking: an empty tbody makes the click a
+    // no-op and the panel never opens.
+    await expect(page.getByText(applicant.name).first()).toBeVisible();
+    await page.locator("tbody tr").first().click();
+
+    const panel = page.locator('[data-slot="sheet-content"]');
+    await expect(panel).toBeVisible();
+    await panel.getByRole("button", { name: "Send Email" }).click();
+
+    const subject = `Panel send ${Date.now()}`;
+    await page
+      .getByPlaceholder("e.g. Interview Invitation - Software Engineer")
+      .fill(subject);
+    await page.getByPlaceholder("Write your message here...").fill("Hello.");
+    await page.getByRole("button", { name: /^Send Email$/ }).last().click();
+
+    // The history comes from the server, so its appearing is what proves a
+    // request happened. This button had no onClick at all while the panel was
+    // a separate copy of the page — it did nothing whatsoever.
+    await expect(panel.getByText(subject).first()).toBeVisible({
+      timeout: 15_000,
+    });
+  });
+
   test("a signed-out visitor is sent to the login page", async ({ page }) => {
     await page.context().clearCookies();
     await page.goto("/jobs");

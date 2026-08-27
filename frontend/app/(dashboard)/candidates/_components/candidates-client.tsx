@@ -14,6 +14,7 @@ import { CandidateFilters } from "./candidate-filters";
 import { CandidatesTable } from "./candidates-table";
 import { CandidateEditDialog } from "./candidate-edit-dialog";
 import { CandidateDeleteDialog } from "./candidate-delete-dialog";
+import { CandidateSidePanel } from "../[id]/_components/candidate-side-panel";
 import {
   createEmptyFormData,
   candidateToFormData,
@@ -28,6 +29,8 @@ export default function CandidatesPageClient() {
 
   // ── Filter State ───────────────────────────────────────────
   const [selectedJobId, setSelectedJobId] = useState<number | undefined>();
+  // Null until a row is opened: the panel fetches nothing before that.
+  const [panelCandidateId, setPanelCandidateId] = useState<number | null>(null);
   const [selectedStatus, setSelectedStatus] =
     useState<CandidateStatusFilter>("all");
   const [search, setSearch] = useState("");
@@ -133,12 +136,13 @@ export default function CandidatesPageClient() {
     );
   }, [editTarget, editForm, updateMutation]);
 
-  const handleRowClick = useCallback(
-    (candidate: Candidate) => {
-      router.push(`/candidates/${candidate.id}?from=candidates`);
-    },
-    [router],
-  );
+  // Opens the slide-over rather than navigating away, which is what the panel
+  // was built for. The full page is unchanged and still reachable at
+  // /candidates/:id — both render the same component, so there is nothing to
+  // keep in step.
+  const handleRowClick = useCallback((candidate: Candidate) => {
+    setPanelCandidateId(candidate.id);
+  }, []);
 
   const handleClearFilters = useCallback(() => {
     setSearch("");
@@ -209,6 +213,14 @@ export default function CandidatesPageClient() {
         onConfirm={handleConfirmDelete}
         isPending={deleteMutation.isPending}
       />
+      <CandidateSidePanel
+        candidateId={panelCandidateId}
+        open={panelCandidateId !== null}
+        onOpenChange={(open) => {
+          if (!open) setPanelCandidateId(null);
+        }}
+      />
+
     </div>
   );
 }
