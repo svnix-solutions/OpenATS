@@ -113,6 +113,8 @@ Not part of the road to v1.0, but decided and written down so it is not invisibl
 | Client portal: the client-facing UI | [0001 §6](decisions/0001-multi-tenancy.md) | 🟢 Done |
 | Per-client careers pages | [0001 §7](decisions/0001-multi-tenancy.md) | 🟢 Done |
 | Per-agency email branding | [0001 §7](decisions/0001-multi-tenancy.md) | 🟢 Done |
+| Default email templates on a fresh install | An offer needs a template to render its letter and the rejection dialog refuses to send without one, so neither candidate email could be sent out of the box. `templates.created_by` was `NOT NULL`, which meant no template could exist before a user did | 🟢 Done |
+| Fixed `make seed` failing on every install | It read `organizations` as the application role, which row-level security correctly filters to nothing outside a request — so seeding, and therefore `make setup`, refused with "No organization exists to seed into" | 🟢 Done |
 | Per-agency sending domains in Resend | [0001 §7](decisions/0001-multi-tenancy.md) | 🔴 Planned |
 | `Reply-To` on outgoing email, and `RESEND_FROM_EMAIL` guidance | `Reply-To` from `company.email`; the sending name from `company.name` rather than `organizations.name`, which nothing in the product can edit; a startup warning when the Resend sandbox sender is configured, since it drops mail with no bounce | 🟢 Done |
 
