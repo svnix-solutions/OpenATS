@@ -118,9 +118,13 @@ export const DEFAULT_EMAIL_TEMPLATES = [
       "<li><strong>Reporting to:</strong> {{reporting_manager}}</li>",
       "<li><strong>Benefits:</strong> {{benefits}}</li>",
       "</ul>",
-      // The candidate's own page, not the agency's list. Getting this wrong
-      // sent every candidate to a login screen — see shared/links.ts.
-      '<p><a href="{{offer_review_url}}">Review and respond to your offer</a></p>',
+      // No review link here. This template renders `offers.offer_letter_html`,
+      // which is the letter shown *on* the review page — a link back to the
+      // page the reader is already looking at. The email that carries the
+      // candidate there is built separately in offer.service and already has
+      // it. `{{offer_review_url}}` is still available to anyone who wants it
+      // in a template of their own.
+      "<p>You can accept or decline using the buttons on this page.</p>",
       "<p>We are looking forward to hearing from you.</p>",
       "<p>{{company_name}}</p>",
     ].join("\n"),
