@@ -5,6 +5,8 @@ import {
   getCandidates,
   getCandidateById,
   moveCandidateStage,
+  sendCandidateEmail,
+  getCandidateEmails,
   deleteCandidate,
   bulkDeleteCandidates,
   updateCandidateBasicDetails,
@@ -41,6 +43,11 @@ router.get("/jobs/:jobId", getCandidates);
 router.get("/:id", requireCandidateRead("id"), getCandidateById);
 router.patch("/:id", requireManager, upload.single("resume"), updateCandidateBasicDetails);
 router.put("/:id/stage", requireManager, moveCandidateStage);
+// Correspondence with a candidate: readable by anyone who may read the
+// candidate, writable only by a manager — the same split the rest of the
+// module uses.
+router.get("/:id/emails", requireCandidateRead("id"), getCandidateEmails);
+router.post("/:id/emails", requireManager, requireCandidateRead("id"), sendCandidateEmail);
 router.delete("/bulk", requireManager, bulkDeleteCandidates);
 router.delete("/:id", requireManager, deleteCandidate);
 

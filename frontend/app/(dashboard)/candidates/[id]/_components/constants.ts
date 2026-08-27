@@ -129,9 +129,3 @@ export function canSeeSection(sectionId: SectionId, isClient: boolean) {
   return !isClient || !CLIENT_HIDDEN_SECTIONS.includes(sectionId);
 }
 
-export type SentEmail = {
-  id: number;
-  subject: string;
-  body: string;
-  sentAt: string;
-};

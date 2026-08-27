@@ -1,12 +1,17 @@
 "use client";
 
 import { useState } from "react";
+import { toast } from "sonner";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { SentIcon } from "@hugeicons/core-free-icons";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { timeAgo, type SentEmail } from "../constants";
+import { timeAgo } from "../constants";
+import {
+  useCandidateEmails,
+  useSendCandidateEmail,
+} from "@/hooks/queries/use-candidates";
 import type { CandidateDetail } from "@/types";
 
 interface EmailSectionProps {
@@ -16,24 +21,31 @@ interface EmailSectionProps {
 export function EmailSection({ candidate }: EmailSectionProps) {
   const [emailSubject, setEmailSubject] = useState("");
   const [emailBody, setEmailBody] = useState("");
-  const [sentEmails, setSentEmails] = useState<SentEmail[]>([]);
 
-  const sendEmail = () => {
+  // `candidate.id` is the application id, which is what every candidate route
+  // takes. This panel used to keep its "sent" list in a useState and call
+  // nothing at all: the recruiter saw the message appear under "Sent Emails"
+  // and no email was ever sent, to anyone, ever. It also vanished on refresh.
+  const applicationId = candidate.id;
+  const { data: history } = useCandidateEmails(applicationId);
+  const sentEmails = history?.data ?? [];
+  const send = useSendCandidateEmail(applicationId);
+
+  const sendEmail = async () => {
     const subject = emailSubject.trim();
     const body = emailBody.trim();
     if (!subject || !body) return;
 
-    setSentEmails((emails) => [
-      {
-        id: Date.now(),
-        subject,
-        body,
-        sentAt: new Date().toISOString(),
-      },
-      ...emails,
-    ]);
-    setEmailSubject("");
-    setEmailBody("");
+    try {
+      await send.mutateAsync({ subject, body });
+      // Cleared only after the send resolves, so a failure leaves the message
+      // in the box to retry rather than discarding what they typed.
+      setEmailSubject("");
+      setEmailBody("");
+      toast.success(`Email sent to ${candidate.email}`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to send email");
+    }
   };
 
   return (
@@ -90,8 +102,10 @@ export function EmailSection({ candidate }: EmailSectionProps) {
               </span>
               <Button
                 type="button"
-                onClick={sendEmail}
-                disabled={!emailSubject.trim() || !emailBody.trim()}
+                onClick={() => void sendEmail()}
+                disabled={
+                  send.isPending || !emailSubject.trim() || !emailBody.trim()
+                }
                 className="h-7 rounded-md border-none bg-[var(--theme-color)] px-2.5 text-sm font-semibold text-white shadow-none hover:bg-[var(--theme-color-hover)] disabled:bg-neutral-700 disabled:text-neutral-400 disabled:opacity-70"
               >
                 <HugeiconsIcon
@@ -99,7 +113,7 @@ export function EmailSection({ candidate }: EmailSectionProps) {
                   className="size-4 rotate-[-45deg]"
                   strokeWidth={2.5}
                 />
-                Send Email
+                {send.isPending ? "Sending…" : "Send Email"}
               </Button>
             </div>
           </div>
@@ -145,8 +159,12 @@ export function EmailSection({ candidate }: EmailSectionProps) {
                       {timeAgo(email.sentAt)}
                     </span>
                   </div>
-                  <p className="mt-2 line-clamp-4 whitespace-pre-line text-xs leading-relaxed text-slate-500 dark:text-neutral-400">
-                    {email.body}
+                  <p className="mt-2 line-clamp-4 text-xs leading-relaxed text-slate-500 dark:text-neutral-400">
+                    {/* Stored as HTML because that is what was sent. Rendered
+                        back as text here: the body is escaped on the way in,
+                        so injecting it would show entities, and trusting it
+                        would be an XSS hole in the agency's own dashboard. */}
+                    {email.bodyHtml.replaceAll("<br />", " ")}
                   </p>
                 </div>
               ))}
