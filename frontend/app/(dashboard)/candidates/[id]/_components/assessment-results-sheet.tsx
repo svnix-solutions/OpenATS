@@ -1,6 +1,14 @@
 "use client";
 
-import { useAttemptResults } from "@/hooks/queries/use-assessments";
+import { useState } from "react";
+import { toast } from "sonner";
+import {
+  useAttemptResults,
+  useScoreWrittenAnswer,
+} from "@/hooks/queries/use-assessments";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { useIsManager } from "@/hooks/use-role";
 
 export function AssessmentResultsSheetContent({
   attemptId,
@@ -99,6 +107,14 @@ export function AssessmentResultsSheetContent({
                       </span>
                     )}
                   </p>
+                  {q.answer && (
+                    <WrittenAnswerScore
+                      attemptId={attemptId}
+                      answerId={q.answer.id}
+                      pointsEarned={q.answer.pointsEarned}
+                      maxPoints={q.points}
+                    />
+                  )}
                 </div>
               ) : (
                 <div className="space-y-2">
@@ -165,6 +181,88 @@ export function AssessmentResultsSheetContent({
           );
         })}
       </div>
+    </div>
+  );
+}
+
+/**
+ * The mark a reviewer gives a written answer.
+ *
+ * Nothing can grade prose automatically, so these score 0 while still counting
+ * toward the assessment's total — which meant a candidate who answered
+ * perfectly still read as having failed that part, and the builder's promise
+ * that written questions are "reviewed manually by the hiring team" had
+ * nothing behind it.
+ *
+ * Read-only for anyone who is not a manager: a client contact sees the result
+ * rather than deciding it.
+ */
+function WrittenAnswerScore({
+  attemptId,
+  answerId,
+  pointsEarned,
+  maxPoints,
+}: {
+  attemptId: number;
+  answerId: number;
+  pointsEarned: number | null;
+  maxPoints: number;
+}) {
+  const isManager = useIsManager();
+  const score = useScoreWrittenAnswer(attemptId);
+  const [value, setValue] = useState(
+    pointsEarned === null ? "" : String(pointsEarned),
+  );
+
+  if (!isManager) {
+    return (
+      <p className="pt-2 text-xs font-medium text-slate-500 dark:text-neutral-400">
+        {pointsEarned === null
+          ? "Not yet reviewed"
+          : `Scored ${pointsEarned} of ${maxPoints}`}
+      </p>
+    );
+  }
+
+  const save = async () => {
+    const points = Number(value);
+    if (value.trim() === "" || Number.isNaN(points)) {
+      return toast.warning("Enter a mark for this answer.");
+    }
+    if (points < 0 || points > maxPoints) {
+      return toast.warning(`This question is worth ${maxPoints} points.`);
+    }
+    try {
+      await score.mutateAsync({ answerId, pointsEarned: points });
+      toast.success("Answer scored");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not score the answer");
+    }
+  };
+
+  return (
+    <div className="flex items-center gap-2 pt-2">
+      <span className="text-xs font-bold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
+        Score
+      </span>
+      <Input
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        inputMode="decimal"
+        aria-label="Points for this answer"
+        className="h-8 w-20 border-slate-200 bg-white text-xs shadow-none dark:border-neutral-700 dark:bg-neutral-900"
+      />
+      <span className="text-xs text-slate-400 dark:text-neutral-500">
+        of {maxPoints}
+      </span>
+      <Button
+        type="button"
+        onClick={() => void save()}
+        disabled={score.isPending}
+        className="h-8 rounded-md border-none bg-[var(--theme-color)] px-3 text-xs font-semibold text-white shadow-none hover:bg-[var(--theme-color-hover)]"
+      >
+        {score.isPending ? "Saving…" : "Save"}
+      </Button>
     </div>
   );
 }

@@ -284,3 +284,67 @@ export const getAttemptResults = async (req: Request, res: Response) => {
     res.status(500).json({ error: "Failed to fetch attempt results" });
   }
 };
+
+const scoreWrittenAnswerSchema = z.object({
+  // Not negative, and the service refuses more than the question is worth.
+  pointsEarned: z.number().min(0),
+});
+
+/**
+ * Records what a written answer was worth.
+ *
+ * The builder tells whoever writes a short-answer question that it is
+ * "reviewed manually by the hiring team". This is that review. Before it, the
+ * reviewer could read the answer and had nowhere to put a judgement, so every
+ * written answer scored 0 and dragged the assessment's percentage down with it.
+ */
+export const scoreWrittenAnswer = async (req: Request, res: Response) => {
+  try {
+    const attemptId = parseInt((req.params.attemptId ?? "").toString());
+    const answerId = parseInt((req.params.answerId ?? "").toString());
+    if (isNaN(attemptId) || isNaN(answerId)) {
+      res.status(400).json({ error: "Invalid attempt or answer ID" });
+      return;
+    }
+
+    const parsed = scoreWrittenAnswerSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({
+        error: "Validation failed",
+        details: parsed.error.flatten().fieldErrors,
+      });
+      return;
+    }
+
+    const result = await assessmentExecutionService.scoreWrittenAnswer(
+      attemptId,
+      answerId,
+      parsed.data.pointsEarned,
+    );
+
+    if ("error" in result) {
+      if (result.error === "not_found") {
+        res.status(404).json({ error: "Answer not found for this attempt" });
+        return;
+      }
+      if (result.error === "not_written") {
+        res.status(400).json({
+          error:
+            "Only written answers are scored by hand; choice questions are scored from the options marked correct",
+        });
+        return;
+      }
+      res.status(400).json({
+        error: `That question is worth ${result.max} points`,
+      });
+      return;
+    }
+
+    res.status(200).json({ data: result.attempt });
+  } catch (error) {
+    logger.error(
+      `Failed to score answer ${req.params.answerId}: ${getErrorMessage(error)}`,
+    );
+    res.status(500).json({ error: "Failed to score the answer" });
+  }
+};
