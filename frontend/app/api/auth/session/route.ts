@@ -1,13 +1,8 @@
 import { NextResponse } from "next/server";
-import { createRemoteJWKSet, jwtVerify } from "jose";
-import { authorizerConfig } from "@/lib/auth/config";
-import { SESSION_COOKIE } from "@/lib/auth/session";
+import { jwtVerify } from "jose";
+import { JWKS, SESSION_COOKIE, TOKEN_ISSUER } from "@/lib/auth/session";
 
 export const dynamic = "force-dynamic";
-
-const JWKS = createRemoteJWKSet(
-  new URL(`${authorizerConfig.authorizerURL}/.well-known/jwks.json`),
-);
 
 /**
  * Exchanges a token the provider issued for this app's own session cookie.
@@ -28,7 +23,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    await jwtVerify(token, JWKS, { issuer: authorizerConfig.authorizerURL });
+    await jwtVerify(token, JWKS, { issuer: TOKEN_ISSUER });
   } catch {
     return NextResponse.json({ error: "Invalid token" }, { status: 401 });
   }

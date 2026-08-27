@@ -7,7 +7,7 @@ Everything needed is in `komodo/`:
 
 | File | What it is |
 | --- | --- |
-| `komodo/compose.yaml` | The stack Komodo runs: Postgres, Redis, migrations, API, queue worker, frontend |
+| `komodo/compose.yaml` | The stack Komodo runs: Postgres, Redis, the identity provider, migrations, API, queue worker, frontend |
 | `komodo/openats.toml` | The Stack declared as a Komodo resource, for sync |
 | `komodo/.env.example` | Every variable the stack needs, and why |
 
@@ -30,13 +30,8 @@ between — and no way for what runs to differ from what is committed.
 
 You need a Komodo Server (a machine running Periphery) and, separately:
 
-- **An OIDC identity provider.** OpenATS verifies tokens against a JWKS
-  endpoint and does not care whose. `docs-draft/IDENTITY_PROVIDERS.md` sets out
-  what it requires of one and gives the verified recipe for self-hosting
-  authorizer.dev. **It is not part of this stack**, deliberately: authorizer
-  takes its configuration as command-line flags including an RSA private key,
-  which does not belong in a compose file next to the application it
-  authenticates.
+- **Three DNS names** — one each for the frontend, the API and the identity
+  provider. The stack runs its own provider; see below.
 - **Cloudflare R2** (or any S3-compatible bucket) for CVs and logos.
 - **Resend**, with a verified sending domain.
 - **A Gemini API key** for CV analysis.
@@ -87,14 +82,64 @@ later for reasons nobody can see.
 Press **Deploy**. The first run builds three images and initialises the
 database, so give it a few minutes. In order:
 
-1. `postgres` starts and, because its data directory is empty, runs
-   `docker/init-app-role.sql` to create the least-privileged `openats_app`
-   role, then `docker/set-app-role-password.sh` to give it the password you set.
-2. `migrate` runs to completion as the database **owner** and exits.
-3. `backend` and `worker` start as `openats_app`.
-4. `frontend` starts once the backend is up.
+1. `postgres` starts and, because its data directory is empty, creates the
+   least-privileged `openats_app` role, gives it the password you chose, and
+   creates a separate `authorizer` database.
+2. `authorizer-keys` generates the RS256 keypair into a volume and exits.
+3. `authorizer` starts with that key.
+4. `migrate` runs to completion as the database **owner** and exits.
+5. `backend` and `worker` start as `openats_app`.
+6. `frontend` starts once the backend is up.
 
-### 4. Seed, and create the first user
+## The identity provider
+
+The stack runs [authorizer.dev](https://authorizer.dev), so a deployment stands
+up on its own. To use a provider you already run, delete the `authorizer` and
+`authorizer-keys` services and point `OIDC_JWKS_URL`, `OIDC_ISSUER` and
+`NEXT_PUBLIC_AUTHORIZER_URL` at it — OpenATS wants an issuer and a JWKS
+endpoint and nothing else.
+
+Three things about it are not obvious, and all three cost time to find:
+
+**The signing key is generated for you.** Authorizer takes the key as a flag
+value rather than a path, and will not make one itself: started with RS256 and
+no key it exits with `missing jwt private key`. `authorizer-keys` generates a
+keypair into a volume on first run. That volume is the deployment's identity —
+delete it and every token ever issued becomes invalid.
+
+**Signup cannot be turned off.** OpenATS creates users through the provider's
+`signup` mutation with the admin secret, because authorizer has no admin-side
+create — and `--enable-signup=false` refuses that call exactly as it refuses a
+stranger's. So anyone who can reach the provider can create an account. What
+protects you is `AUTHORIZER_DEFAULT_ROLES`, left at `interviewer`: a
+self-registered account lands on the least privilege and can do nothing an
+administrator has not granted it.
+
+**The `roles` claim is the default roles, not the user's.** Authorizer puts the
+roles a session is *acting as* in `roles`, and the ones the user *may hold* in
+`allowed_roles`. OpenATS seeds the membership from `roles`, so with a
+least-privileged default every first sign-in attaches as an interviewer
+whatever the account was created with. That is harmless — the token seeds
+`organization_members.role` once and is ignored afterwards, and Settings → User
+Management is what changes it — but it means the first administrator has to be
+promoted by hand, once.
+
+### 4. Bootstrap the first administrator
+
+Sign in once through the frontend, which creates the account locally. Then, on
+the server:
+
+```bash
+docker compose -f komodo/compose.yaml exec postgres \
+  psql -U openats -d openats -c \
+  "UPDATE organization_members SET role='super_admin'
+   WHERE user_id=(SELECT id FROM users WHERE email='you@example.com');"
+```
+
+Once one administrator exists everybody else is managed from Settings → User
+Management, and this is never needed again.
+
+### 5. Seed
 
 Once the stack is up, from the repo checkout on the server:
 
@@ -111,10 +156,6 @@ should not.
 That creates the default pipeline stages and the two email templates. Without
 it there is no pipeline to put an applicant in, and no template to render an
 offer letter from — an offer can be drafted and never sent.
-
-Then create your first user in the identity provider. On a single-organization
-install the first person to sign in is attached to the `Default` organization
-automatically and becomes its `super_admin`.
 
 To run more than one agency on the install, see `pnpm provision-org` in
 `CONTRIBUTING.md`. **Pass `--admin`**: once a second organization exists,

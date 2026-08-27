@@ -23,9 +23,31 @@ import { authorizerConfig } from "./config";
  */
 export const SESSION_COOKIE = "openats_session";
 
-const JWKS = createRemoteJWKSet(
-  new URL(`${authorizerConfig.authorizerURL}/.well-known/jwks.json`),
+/**
+ * Where the public keys are fetched from, which is not always where a browser
+ * reaches the provider.
+ *
+ * This runs on the server. In a container deployment the browser-facing URL
+ * is a public hostname that the container itself may not resolve — split
+ * horizon DNS, or a router that will not hairpin — and then every sign-in
+ * fails with a 401 from this route while the provider is plainly up. Setting
+ * AUTHORIZER_INTERNAL_URL to the address the server can reach fixes that; the
+ * issuer below stays the public one either way, because that is what the
+ * provider stamps on the token.
+ *
+ * Unset, it is the public URL, which is right for anything not in a container.
+ */
+export const JWKS = createRemoteJWKSet(
+  new URL(
+    `${process.env.AUTHORIZER_INTERNAL_URL || authorizerConfig.authorizerURL}/.well-known/jwks.json`,
+  ),
 );
+
+/**
+ * What the provider stamps on a token, and therefore what a token is checked
+ * against. Always the public URL, even when the keys come from elsewhere.
+ */
+export const TOKEN_ISSUER = authorizerConfig.authorizerURL;
 
 export type ServerSession = {
   accessToken: string;
@@ -43,9 +65,7 @@ export const getServerSession = cache(async (): Promise<ServerSession | null> =>
   if (!token) return null;
 
   try {
-    const { payload } = await jwtVerify(token, JWKS, {
-      issuer: authorizerConfig.authorizerURL,
-    });
+    const { payload } = await jwtVerify(token, JWKS, { issuer: TOKEN_ISSUER });
 
     const roles = payload.roles;
 
