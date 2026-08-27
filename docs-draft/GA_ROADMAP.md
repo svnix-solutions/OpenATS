@@ -114,15 +114,17 @@ Not part of the road to v1.0, but decided and written down so it is not invisibl
 | Per-client careers pages | [0001 §7](decisions/0001-multi-tenancy.md) | 🟢 Done |
 | Per-agency email branding | [0001 §7](decisions/0001-multi-tenancy.md) | 🟢 Done |
 | Per-agency sending domains in Resend | [0001 §7](decisions/0001-multi-tenancy.md) | 🔴 Planned |
-| `Reply-To` on outgoing email, and `RESEND_FROM_EMAIL` guidance | Parked deliberately until the product is built and tested | 🔴 Planned |
+| `Reply-To` on outgoing email, and `RESEND_FROM_EMAIL` guidance | `Reply-To` from `company.email`; the sending name from `company.name` rather than `organizations.name`, which nothing in the product can edit; a startup warning when the Resend sandbox sender is configured, since it drops mail with no bounce | 🟢 Done |
 
-**Email sending is deliberately parked.** Nothing sets `Reply-To`, so a
-candidate who replies writes to `RESEND_FROM_EMAIL` — which defaults to
-`onboarding@resend.dev`, Resend's sandbox sender, and only delivers to the
-account owner's own verified address. On a fresh deploy that means candidate
-replies go nowhere. The fix is small (`company.email` is already
-organization-scoped, so no migration) and is held until the product is built
-and tested, not forgotten. A single shared sending domain is otherwise fine:
+**Email sending, now unparked.** `Reply-To` is set from `company.email` and
+the sending name comes from `company.name`, both organization-scoped, so no
+migration was needed — as predicted. Two corrections to what was written here
+before: `RESEND_FROM_EMAIL` does not *default* to the sandbox sender, because
+`config/env.ts` requires it, so a deploy cannot come up without one; and the
+brand was being read from `organizations.name`, which the product cannot edit,
+so every migrated install branded its mail "Default". Setting the sandbox
+address explicitly is still possible and still drops mail silently, so the
+server warns about it at startup. A single shared sending domain remains fine:
 SPF/DKIM/DMARC all align on a domain you control, and per-agency domains are
 worse until each agency completes its DNS setup. The argument for splitting
 them is pooled reputation between tenants, which only bites at volume.

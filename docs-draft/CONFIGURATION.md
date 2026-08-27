@@ -25,7 +25,7 @@ Optional variables are not validated, so a typo in one is silent.
 | `SMTP_HOST` | Send over SMTP instead of Resend. Unset in production; set to `localhost` with `docker compose up -d mailpit` to read outgoing mail at http://localhost:8025 |
 | `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASSWORD` | Only when `SMTP_HOST` points at something other than the local catcher |
 | `RESEND_API_KEY` | Transactional email |
-| `RESEND_FROM_EMAIL` | The address email is sent from. The *display name* is the agency's own name, per organization; only the address is shared |
+| `RESEND_FROM_EMAIL` | The address mail is sent *from*. Must be on a domain verified in Resend — the sandbox sender `onboarding@resend.dev` delivers only to the Resend account owner and drops everything else silently. Replies do not come here; they go to the agency's own address |
 | `GEMINI_API_KEY` | CV parsing, scoring and summaries |
 
 ### Optional

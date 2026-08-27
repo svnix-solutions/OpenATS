@@ -14,6 +14,7 @@ import app from "./app";
 import { socketService } from "./shared/services/socket.service";
 import { subscribeToCvAnalysisEvents } from "./queues/cv-analysis/events";
 import { runInOrganization, assertTenancyIsEnforceable } from "./db";
+import { warnAboutSenderAddress } from "./shared/services/mail.service";
 import logger from "./utils/logger";
 
 const PORT = env.PORT;
@@ -36,6 +37,7 @@ subscribeToCvAnalysisEvents((event) => {
 // while someone reads the logs.
 assertTenancyIsEnforceable()
   .then(() => {
+    warnAboutSenderAddress();
     server.listen(PORT, () => {
       logger.info(`OpenATS Backend running on port ${PORT}`);
       logger.info(`Socket.io initialized and listening on the same port.`);

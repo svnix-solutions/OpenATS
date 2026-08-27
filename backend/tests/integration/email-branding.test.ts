@@ -15,6 +15,7 @@ vi.mock("resend", () => ({
 
 import { db, runInOrganization } from "../../src/db";
 import { organizations } from "../../src/db/schema/organizations";
+import { company } from "../../src/db/schema/company";
 import { mailService } from "../../src/shared/services/mail.service";
 import {
   createTestOrganization,
@@ -25,9 +26,31 @@ const SUFFIX = `brand-${Date.now()}`;
 let organizationId: number;
 
 /** The single argument Resend was called with, for the last send. */
-function lastPayload(): { from: string; subject: string; html: string } {
+function lastPayload(): {
+  from: string;
+  subject: string;
+  html: string;
+  replyTo?: string;
+} {
   const call = send.mock.calls.at(-1);
-  return call![0] as { from: string; subject: string; html: string };
+  return call![0] as {
+    from: string;
+    subject: string;
+    html: string;
+    replyTo?: string;
+  };
+}
+
+/** The agency's own profile — the row Settings → General edits. */
+async function setCompanyProfile(name: string, email: string) {
+  await runInOrganization(organizationId, async () => {
+    await db.delete(company);
+    await db.insert(company).values({ name, email });
+  });
+}
+
+async function clearCompanyProfile() {
+  await runInOrganization(organizationId, () => db.delete(company));
 }
 
 async function renameOrganization(name: string) {
@@ -79,7 +102,67 @@ describe("per-agency email branding", () => {
     expect(lastPayload().html).toBe("<p>OpenATS</p>");
   });
 
+  it("prefers the agency's own name over the organization's", async () => {
+    // `organizations.name` is written by the tenancy migration as "Default"
+    // and by provision-org; nothing in the product can change it. `company` is
+    // what Settings → General edits. Reading the wrong one meant every email
+    // on a migrated install was branded "Default" with no way to fix it.
+    await renameOrganization("Default");
+    await setCompanyProfile("Northwind Talent", "hello@northwind.test");
+
+    await runInOrganization(organizationId, () =>
+      mailService.sendEmail({
+        to: "candidate@example.test",
+        subject: "Your application to {{brand}}",
+        html: "<p>{{brand}}</p>",
+      }),
+    );
+
+    const { from, subject } = lastPayload();
+    expect(from).toContain("Northwind Talent");
+    expect(from).not.toContain("Default");
+    expect(subject).toBe("Your application to Northwind Talent");
+  });
+
+  it("points replies at the agency, not the sending address", async () => {
+    await setCompanyProfile("Northwind Talent", "hello@northwind.test");
+
+    await runInOrganization(organizationId, () =>
+      mailService.sendEmail({
+        to: "candidate@example.test",
+        subject: "Your offer",
+        html: "<p>x</p>",
+      }),
+    );
+
+    // Without this a candidate replying to an offer writes to
+    // RESEND_FROM_EMAIL — a no-reply address, and by default Resend's sandbox
+    // sender, which does not accept mail at all. The reply went nowhere.
+    expect(lastPayload().replyTo).toBe("hello@northwind.test");
+  });
+
+  it("omits Reply-To when the agency has no profile yet", async () => {
+    await clearCompanyProfile();
+    await renameOrganization(`Org ${SUFFIX}`);
+
+    await runInOrganization(organizationId, () =>
+      mailService.sendEmail({
+        to: "candidate@example.test",
+        subject: "Still sends",
+        html: "<p>{{brand}}</p>",
+      }),
+    );
+
+    // Sent, not failed: a tenant that has not filled in its profile still
+    // needs its offers to go out. And absent rather than empty — some clients
+    // read a blank Reply-To as "reply to nobody" instead of falling back.
+    const { from, replyTo } = lastPayload();
+    expect(replyTo).toBeUndefined();
+    expect(from).toContain(`Org ${SUFFIX}`);
+  });
+
   it("escapes the organization name in the body", async () => {
+    await clearCompanyProfile();
     await renameOrganization("Acme <b>Recruiting</b> & Co");
 
     await runInOrganization(organizationId, () =>
@@ -98,6 +181,7 @@ describe("per-agency email branding", () => {
   });
 
   it("keeps a newline in the name out of the From header", async () => {
+    await clearCompanyProfile();
     await renameOrganization("Evil\r\nBcc: victim@example.test");
 
     await runInOrganization(organizationId, () =>
