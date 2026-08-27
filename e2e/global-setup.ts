@@ -14,6 +14,18 @@ import { Client } from "pg";
  * by it — and only ever against the test database on 5433.
  */
 export default async function globalSetup(): Promise<void> {
+  // One spec sends a real email and asserts the history the server returns.
+  // Without a catcher the send fails, nothing is recorded — correctly, since a
+  // history entry claims somebody was contacted — and the spec fails looking
+  // like a broken feature rather than a missing container. Say which it is.
+  if (!process.env.SMTP_HOST) {
+    console.warn(
+      "[e2e] SMTP_HOST is unset, so mail cannot be sent and the email specs " +
+        "will fail. Run `docker compose up -d mailpit` and set " +
+        "SMTP_HOST=localhost in backend/.env.",
+    );
+  }
+
   const client = new Client({
     connectionString:
       process.env.MIGRATION_DATABASE_URL ??

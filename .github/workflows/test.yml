@@ -173,9 +173,16 @@ jobs:
           REDIS_URL=redis://localhost:6379
           ENCRYPTION_KEY=BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc=
           FRONTEND_URL=http://localhost:3000
+          # Send through the Mailpit service rather than at Resend, which has
+          # only a dummy key here. Without this a spec that sends mail fails on
+          # the send — correctly, since nothing records a message that did not
+          # leave — and looks like a bug in the feature rather than a gap in
+          # the environment. That is exactly how it failed the first time.
+          SMTP_HOST=localhost
+          SMTP_PORT=1025
           # Dummy values. The server validates these at boot, and CI
-          # deliberately has no secrets — nothing the E2E specs touch calls
-          # out to any of them.
+          # deliberately has no secrets — nothing the E2E specs touch reaches
+          # any of them; mail goes to Mailpit above.
           R2_ENDPOINT=http://localhost:9000
           R2_ACCESS_KEY_ID=ci
           R2_SECRET_ACCESS_KEY=ci
