@@ -122,7 +122,10 @@ describe("the worker", () => {
       await wait(100);
 
     expect(markFailed).toHaveBeenCalledTimes(1);
-    expect(markFailed).toHaveBeenCalledWith(21, "gemini exploded");
+    // The job as well as the person: one CV is scored once per role, so a
+    // failure belongs to one of them. Without the job id this marked every
+    // application that candidate had as failed.
+    expect(markFailed).toHaveBeenCalledWith(21, 23, "gemini exploded");
     // Two attempts were made before it gave up.
     expect(runAnalysis.mock.calls.length).toBeGreaterThanOrEqual(2);
   });
