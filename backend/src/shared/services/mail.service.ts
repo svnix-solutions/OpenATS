@@ -4,12 +4,39 @@ import dotenv from "dotenv";
 import { eq } from "drizzle-orm";
 import { db, currentOrganizationId } from "../../db";
 import { organizations } from "../../db/schema/organizations";
+import { company } from "../../db/schema/company";
 import logger from "../../utils/logger";
 
 dotenv.config();
 
 const resend = new Resend(process.env.RESEND_API_KEY);
-const FROM_EMAIL = process.env.RESEND_FROM_EMAIL || "onboarding@resend.dev";
+
+/**
+ * Resend's sandbox sender. It delivers only to the address that owns the
+ * Resend account, so on any other install every candidate email is accepted
+ * and then quietly dropped — no bounce, no error, nothing in the logs.
+ */
+const SANDBOX_SENDER = "onboarding@resend.dev";
+const FROM_EMAIL = process.env.RESEND_FROM_EMAIL || SANDBOX_SENDER;
+
+/**
+ * Says so at startup rather than leaving it to be discovered by a candidate
+ * who never got their offer. Not fatal: it is exactly right for a local
+ * install pointed at the Mailpit catcher, which does not care what the
+ * address is.
+ */
+export function warnAboutSenderAddress(): void {
+  if (process.env.SMTP_HOST) return;
+  if (FROM_EMAIL !== SANDBOX_SENDER) return;
+
+  logger.warn(
+    `[mail] sending from ${SANDBOX_SENDER}, Resend's sandbox sender. It ` +
+      "delivers only to the address that owns the Resend account; every other " +
+      "recipient is accepted and dropped, with no bounce and nothing in the " +
+      "logs. Set RESEND_FROM_EMAIL to an address on a domain verified in " +
+      "Resend, or set SMTP_HOST to read mail locally instead.",
+  );
+}
 
 /**
  * Where mail goes.
@@ -83,23 +110,57 @@ export interface SendEmailOptions {
  */
 const DEFAULT_BRAND = "OpenATS";
 
-async function currentBrand(): Promise<string> {
+type Sender = { brand: string; replyTo: string | null };
+
+/**
+ * Who an email says it is from, and where a reply to it goes.
+ *
+ * The name comes from `company`, not `organizations`. Both are
+ * organization-scoped, but `company` is the one Settings → General edits and
+ * the one that holds the agency's real name; `organizations.name` is written
+ * by the tenancy migration as "Default" and by `provision-org`, and nothing in
+ * the product can change it. Reading it meant every email on a migrated
+ * install was branded "Default" with no screen to fix that.
+ *
+ * `company.email` becomes `Reply-To`. Without it a candidate replying to an
+ * offer or a rejection writes to `RESEND_FROM_EMAIL` — a no-reply sending
+ * address nobody reads, and by default Resend's sandbox sender, which does not
+ * even accept mail. The reply simply went nowhere.
+ */
+async function currentSender(): Promise<Sender> {
   const organizationId = currentOrganizationId();
-  if (organizationId === null) return DEFAULT_BRAND;
+  if (organizationId === null) return { brand: DEFAULT_BRAND, replyTo: null };
 
   try {
-    // Policy-filtered to this organization already; the id is belt and braces.
+    // Policy-filtered to this organization already.
+    const [profile] = await db
+      .select({ name: company.name, email: company.email })
+      .from(company)
+      .limit(1);
+
+    if (profile?.name?.trim()) {
+      return {
+        brand: profile.name.trim(),
+        replyTo: profile.email?.trim() || null,
+      };
+    }
+
+    // No company profile yet — a tenant provisioned but not set up. The
+    // organization's own name is the next best thing it could be called.
     const [org] = await db
       .select({ name: organizations.name })
       .from(organizations)
       .where(eq(organizations.id, organizationId))
       .limit(1);
 
-    return org?.name?.trim() || DEFAULT_BRAND;
+    return {
+      brand: org?.name?.trim() || DEFAULT_BRAND,
+      replyTo: profile?.email?.trim() || null,
+    };
   } catch (err) {
     // Branding is not worth failing an offer email over.
-    logger.warn("[mail] could not resolve organization brand:", err);
-    return DEFAULT_BRAND;
+    logger.warn("[mail] could not resolve the sending organization:", err);
+    return { brand: DEFAULT_BRAND, replyTo: null };
   }
 }
 
@@ -193,7 +254,7 @@ function formatEmailTime(d: Date): string {
 export const mailService = {
   async sendEmail({ to, subject, html }: SendEmailOptions) {
     try {
-      const brand = await currentBrand();
+      const { brand, replyTo } = await currentSender();
 
       const from = `${headerSafe(brand) || DEFAULT_BRAND} <${FROM_EMAIL}>`;
       const renderedSubject = subject.replaceAll(
@@ -202,6 +263,11 @@ export const mailService = {
       );
       const renderedHtml = html.replaceAll("{{brand}}", escapeHtml(brand));
 
+      // Omitted rather than sent empty when the agency has no address on
+      // file: a blank Reply-To is worse than none, because some clients treat
+      // it as "reply to nobody" instead of falling back to From.
+      const replyToHeader = replyTo ? { replyTo } : {};
+
       const smtp = transport();
       if (smtp) {
         const sent = await smtp.sendMail({
@@ -209,6 +275,7 @@ export const mailService = {
           to,
           subject: renderedSubject,
           html: renderedHtml,
+          ...replyToHeader,
         });
         logger.info(`[mail] sent over SMTP to ${to} (${sent.messageId})`);
         return { id: sent.messageId };
@@ -219,6 +286,7 @@ export const mailService = {
         to: [to],
         subject: renderedSubject,
         html: renderedHtml,
+        ...replyToHeader,
       });
 
       if (error) {
