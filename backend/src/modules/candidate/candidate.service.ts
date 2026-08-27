@@ -19,6 +19,7 @@ import {
   candidateRejections,
   candidateInterviews,
   clientCompanies,
+  emailMessages,
 } from "../../db/schema";
 import { assessmentExecutionService } from "../assessment-execution/assessment-execution.service";
 import { candidateActivityService } from "./candidate-activity.service";
@@ -759,6 +760,87 @@ export const candidateService = {
       });
 
     return deleted;
+  },
+
+  /**
+   * Sends an ad-hoc message to a candidate and records that it happened.
+   *
+   * `applicationId`, because that is what a candidate route's `:id` is — but
+   * `email_messages.candidate_id` holds the *person*, so the two have to be
+   * resolved apart here. Getting that wrong writes the correspondence against
+   * whoever happens to share the number.
+   *
+   * The row is written after the send, not before: a message that failed to
+   * leave should not appear in the history as though it had. The reverse
+   * order is what makes a product claim to have contacted someone it never
+   * contacted, which is exactly what this screen used to do — the whole
+   * feature was local state and sent nothing at all.
+   */
+  async sendCandidateEmail(
+    applicationId: number,
+    input: { subject: string; body: string },
+    sentBy: number,
+  ) {
+    const [row] = await db
+      .select({
+        candidateId: candidates.id,
+        email: candidates.email,
+        firstName: candidates.firstName,
+      })
+      .from(applications)
+      .innerJoin(candidates, eq(applications.candidateId, candidates.id))
+      .where(eq(applications.id, applicationId))
+      .limit(1);
+
+    if (!row) return null;
+
+    // Plain text from a recruiter, rendered as HTML: escape it, then keep the
+    // line breaks they typed. Without the escape a stray `<` silently eats the
+    // rest of the message, and a pasted tag would be live markup.
+    const bodyHtml = escapeHtml(input.body).replaceAll("\n", "<br />");
+
+    await mailService.sendEmail({
+      to: row.email,
+      subject: input.subject,
+      html: bodyHtml,
+    });
+
+    const [saved] = await db
+      .insert(emailMessages)
+      .values({
+        candidateId: row.candidateId,
+        sentBy,
+        subject: input.subject,
+        bodyHtml,
+        recipientEmail: row.email,
+      })
+      .returning();
+
+    return saved ?? null;
+  },
+
+  /** What has been sent to this application's candidate, newest first. */
+  async listCandidateEmails(applicationId: number) {
+    const [row] = await db
+      .select({ candidateId: candidates.id })
+      .from(applications)
+      .innerJoin(candidates, eq(applications.candidateId, candidates.id))
+      .where(eq(applications.id, applicationId))
+      .limit(1);
+
+    if (!row) return null;
+
+    return db
+      .select({
+        id: emailMessages.id,
+        subject: emailMessages.subject,
+        bodyHtml: emailMessages.bodyHtml,
+        recipientEmail: emailMessages.recipientEmail,
+        sentAt: emailMessages.sentAt,
+      })
+      .from(emailMessages)
+      .where(eq(emailMessages.candidateId, row.candidateId))
+      .orderBy(desc(emailMessages.sentAt));
   },
 };
 

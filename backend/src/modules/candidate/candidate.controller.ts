@@ -451,3 +451,63 @@ export const updateCandidateBasicDetails = async (
       .json({ error: getErrorMessage(error) || "Failed to update candidate details" });
   }
 };
+
+const candidateEmailSchema = z.object({
+  subject: z.string().trim().min(1).max(500),
+  body: z.string().trim().min(1).max(20000),
+});
+
+export const sendCandidateEmail = async (req: Request, res: Response) => {
+  try {
+    const id = parseInt((req.params.id ?? "").toString());
+    if (isNaN(id)) {
+      res.status(400).json({ error: "Invalid candidate ID" });
+      return;
+    }
+
+    const parsed = candidateEmailSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({
+        error: "Validation failed",
+        details: parsed.error.flatten().fieldErrors,
+      });
+      return;
+    }
+
+    const sent = await candidateService.sendCandidateEmail(
+      id,
+      parsed.data,
+      req.user.id,
+    );
+    if (!sent) {
+      res.status(404).json({ error: "Candidate not found" });
+      return;
+    }
+
+    res.status(201).json({ data: sent });
+  } catch (error) {
+    logger.error(`Failed to send candidate email: ${getErrorMessage(error)}`);
+    res.status(500).json({ error: "Failed to send email" });
+  }
+};
+
+export const getCandidateEmails = async (req: Request, res: Response) => {
+  try {
+    const id = parseInt((req.params.id ?? "").toString());
+    if (isNaN(id)) {
+      res.status(400).json({ error: "Invalid candidate ID" });
+      return;
+    }
+
+    const emails = await candidateService.listCandidateEmails(id);
+    if (!emails) {
+      res.status(404).json({ error: "Candidate not found" });
+      return;
+    }
+
+    res.status(200).json({ data: emails });
+  } catch (error) {
+    logger.error(`Failed to list candidate emails: ${getErrorMessage(error)}`);
+    res.status(500).json({ error: "Failed to list emails" });
+  }
+};

@@ -317,3 +317,39 @@ export function useUpdateInterview() {
     },
   });
 }
+
+export type CandidateEmail = {
+  id: number;
+  subject: string;
+  bodyHtml: string;
+  recipientEmail: string;
+  sentAt: string;
+};
+
+/**
+ * Correspondence with a candidate. `id` is an application id, like every other
+ * candidate route.
+ */
+export function useCandidateEmails(id: number) {
+  return useQuery({
+    queryKey: ["candidates", id, "emails"],
+    queryFn: () =>
+      serverFetch<{ data: CandidateEmail[] }>(`/candidates/${id}/emails`),
+    enabled: !!id,
+    staleTime: 1000 * 30,
+  });
+}
+
+export function useSendCandidateEmail(id: number) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { subject: string; body: string }) =>
+      serverFetch<{ data: CandidateEmail }>(`/candidates/${id}/emails`, {
+        method: "POST",
+        body: JSON.stringify(input),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["candidates", id, "emails"] });
+    },
+  });
+}
