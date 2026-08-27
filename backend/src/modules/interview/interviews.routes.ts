@@ -28,6 +28,7 @@ import logger from "../../utils/logger";
 import { integrationConnectionService } from "../../shared/integrations/connection.service";
 import { getErrorMessage} from "../../utils/error.utils";
 import { presentAttempt } from "../../shared/auth/present";
+import { interviewUrl } from "../../shared/links";
 
 const router: Router = Router();
 
@@ -312,7 +313,7 @@ router.post("/candidates/:id/schedule", requireManager, async (req, res) => {
       candidateId: candidate.id,
     });
 
-    const publicUrl = `${process.env.FRONTEND_URL || "http://localhost:3000"}/interview/${token}`;
+    const publicUrl = interviewUrl(token);
 
     mailService
       .sendInterviewSlotEmail(

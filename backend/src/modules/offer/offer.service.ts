@@ -14,6 +14,7 @@ import {
 import { cleanObject as clean } from "../../utils/object.utils";
 import { variableService } from "../template/variable.service";
 import { templateEngineService } from "../template/template-engine.service";
+import { offerReviewUrl } from "../../shared/links";
 import { mailService } from "../../shared/services/mail.service";
 import { candidateActivityService } from "../candidate/candidate-activity.service";
 import { offerRepository } from "./offer.repository";
@@ -434,10 +435,7 @@ export const offerService = {
     validateSendRequirements(offer, offerLetterHtml);
 
     const reviewToken = offer.reviewToken ?? generateReviewToken();
-    const frontendBase = (
-      process.env.FRONTEND_URL ?? "http://localhost:3000"
-    ).replace(/\/$/, "");
-    const reviewUrl = `${frontendBase}/offer/${reviewToken}`;
+    const reviewUrl = offerReviewUrl(reviewToken);
 
     const subject = `Offer for ${job.title}`;
     const mailHtml = [

@@ -13,6 +13,7 @@ import {
 } from "../../db/schema";
 
 import { mailService } from "../../shared/services/mail.service";
+import { assessmentUrl } from "../../shared/links";
 
 export interface SubmitAnswerInput {
   questionId: number;
@@ -91,8 +92,7 @@ export const assessmentExecutionService = {
         .where(eq(assessments.id, assessmentId));
 
       if (candidate && assessment) {
-        const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
-        const inviteUrl = `${frontendUrl}/assessment/${token}`;
+        const inviteUrl = assessmentUrl(token);
 
         const subject = `Assessment Invitation: ${assessment.title}`;
         const html = `

@@ -2,6 +2,7 @@ import { eq } from "drizzle-orm";
 import { db } from "../../db";
 import { applications, candidates, jobs, departments, company } from "../../db/schema";
 import { TemplateContext } from "./template-engine.service";
+import { offerReviewUrl } from "../../shared/links";
 
 export const variableService = {
   async getContextForCandidate(candidateId: number): Promise<TemplateContext> {
@@ -48,11 +49,6 @@ export const variableService = {
   ): Promise<TemplateContext> {
     const baseContext = await this.getContextForCandidate(candidateId);
 
-    const frontendBase = (process.env.FRONTEND_URL ?? "http://localhost:3000").replace(
-      /\/$/,
-      "",
-    );
-
     return {
       ...baseContext,
       salary: offerData.salary ?? "TBD",
@@ -62,7 +58,7 @@ export const variableService = {
       reporting_manager: offerData.reportingManager ?? "TBD",
       benefits: offerData.benefits ?? "TBD",
       offer_review_url: offerData.reviewToken
-        ? `${frontendBase}/offers/${offerData.reviewToken}`
+        ? offerReviewUrl(offerData.reviewToken)
         : "",
     };
   },
