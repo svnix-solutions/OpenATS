@@ -54,6 +54,10 @@ describe("provisioning a new organization", () => {
         "SELECT count(*) FROM pipeline_stage_templates WHERE organization_id = $1",
         [id],
       );
+      const emailTemplates = await c.query<{ count: string }>(
+        "SELECT count(*) FROM templates WHERE organization_id = $1 AND type = 'email'",
+        [id],
+      );
       const member = await c.query<{ role: string; email: string }>(
         `SELECT m.role, u.email FROM organization_members m
          JOIN users u ON u.id = m.user_id WHERE m.organization_id = $1`,
@@ -62,6 +66,7 @@ describe("provisioning a new organization", () => {
       return {
         id,
         stages: Number(stages.rows[0]!.count),
+        emailTemplates: Number(emailTemplates.rows[0]!.count),
         member: member.rows[0],
       };
     });
@@ -69,6 +74,9 @@ describe("provisioning a new organization", () => {
     // Without stages the pipeline has nowhere to put an applicant, and without
     // a member nobody can sign in: either one alone is not a usable tenant.
     expect(state.stages).toBe(7);
+    // Nor is one that cannot email a candidate: an offer needs a template to
+    // render its letter, and the rejection dialog refuses to send without one.
+    expect(state.emailTemplates).toBe(2);
     expect(state.member).toEqual({ role: "super_admin", email: ADMIN });
   });
 

@@ -1,6 +1,6 @@
 import "dotenv/config";
 import { Client } from "pg";
-import { DEFAULT_STAGE_TEMPLATES } from "./seed";
+import { DEFAULT_EMAIL_TEMPLATES, DEFAULT_STAGE_TEMPLATES } from "./seed";
 import logger from "../utils/logger";
 
 /**
@@ -122,6 +122,23 @@ export async function provision(args: Args): Promise<void> {
       );
     }
 
+    // The same two the seed gives the first organization. Without them this
+    // tenant can draft an offer and never send it, and its rejection dialog's
+    // email switch can never be satisfied.
+    for (const template of DEFAULT_EMAIL_TEMPLATES) {
+      await client.query(
+        `INSERT INTO templates (organization_id, name, type, subject, body_json)
+         VALUES ($1, $2, $3, $4, $5::jsonb)`,
+        [
+          id,
+          template.name,
+          template.type,
+          template.subject,
+          JSON.stringify(template.bodyJson),
+        ],
+      );
+    }
+
     if (args.admin) {
       await attachAdmin(client, id, args.admin, args.slug);
     }
@@ -130,7 +147,8 @@ export async function provision(args: Args): Promise<void> {
 
   logger.info(
     `Organization "${args.name}" created (id ${organizationId}, slug ${args.slug}) ` +
-      `with ${DEFAULT_STAGE_TEMPLATES.length} pipeline stages.`,
+      `with ${DEFAULT_STAGE_TEMPLATES.length} pipeline stages and ` +
+      `${DEFAULT_EMAIL_TEMPLATES.length} email templates.`,
   );
   if (!args.admin) {
     logger.warn(

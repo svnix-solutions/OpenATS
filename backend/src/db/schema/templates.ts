@@ -33,9 +33,11 @@ export const templates = pgTable("templates", {
   type: templateType("type").notNull(),
   subject: varchar("subject", { length: 500 }).notNull(),
   bodyJson: jsonb("body_json").$type<TemplateBody>().notNull().default([]),
-  createdBy: integer("created_by")
-    .notNull()
-    .references(() => users.id),
+  // Null for the templates an installation seeds: nobody wrote them, and
+  // attributing them to whoever signed in first would be a lie. The NOT NULL
+  // was what made a fresh install unable to send any candidate email at all —
+  // templates could not exist before a user did. See drizzle/0046.
+  createdBy: integer("created_by").references(() => users.id),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
