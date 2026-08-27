@@ -46,6 +46,21 @@ export default function CreateAssessmentPageClient() {
       return toast.warning("Assessment title is required.");
     }
 
+    // Said here rather than left to the API, which answers "Validation
+    // failed" and names no question. Without a correct option, scoring awards
+    // nothing: every candidate gets zero for that question however they
+    // answer, and it still counts toward the total. It used to save in
+    // silence — a quiz built this way scored a candidate 0% for the right
+    // answer, with nothing to explain it.
+    const unmarked = questions.findIndex(
+      (q) => q.type !== "Short Answer" && !q.options.some((o) => o.isCorrect),
+    );
+    if (unmarked !== -1) {
+      return toast.warning(
+        `Question ${unmarked + 1} has no correct answer. Click a circle to mark one.`,
+      );
+    }
+
     const payload = {
       title: assessmentTitle,
       description: assessmentDesc || null,
