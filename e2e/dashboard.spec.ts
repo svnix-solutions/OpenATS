@@ -243,6 +243,48 @@ test.describe("the agency dashboard", () => {
     expect(broken).toEqual([]);
   });
 
+  test("creates a job through the form", async ({ page }) => {
+    await signIn(page, operator);
+    await page.goto("/jobs/new");
+    await page.waitForLoadState("networkidle");
+
+    // Every job belongs to a client company and the column is NOT NULL, so a
+    // form without this field cannot create one. The route rendered an older
+    // copy that had no such field for as long as client companies have
+    // existed: every submission failed with a 500 and showed nothing at all.
+    await expect(page.getByText("Client Company")).toBeVisible();
+
+    const title = `E2E job ${Date.now()}`;
+    await page
+      .getByPlaceholder("Senior Software Engineer - Backend")
+      .fill(title);
+
+    const selects = page.locator('[role="combobox"]');
+    for (const [index, option] of [
+      [0, null], // client company
+      [1, null], // department
+      [2, "Full Time"], // employment type
+    ] as const) {
+      await selects.nth(index).click();
+      // The listbox opens in a portal with an inert overlay that swallows
+      // clicks until its animation settles, so wait for the option to be
+      // ready rather than racing it.
+      const choice = option
+        ? page.getByRole("option", { name: option })
+        : page.getByRole("option").first();
+      await expect(choice).toBeVisible();
+      await choice.click();
+      await expect(choice).toBeHidden();
+    }
+
+    await page.getByRole("button", { name: /Save Job/ }).click();
+
+    // Landing on the new job is the proof it was created: the old form stayed
+    // put, which is exactly what made the failure invisible.
+    await expect(page).toHaveURL(/\/jobs\/\d+$/, { timeout: 20_000 });
+    await expect(page.getByText(title).first()).toBeVisible();
+  });
+
   test("a signed-out visitor is sent to the login page", async ({ page }) => {
     await page.context().clearCookies();
     await page.goto("/jobs");

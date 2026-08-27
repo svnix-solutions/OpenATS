@@ -2,6 +2,7 @@
 
 import { useState, KeyboardEvent } from "react";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCreateJob } from "@/hooks/queries/use-jobs";
 import { useDepartments } from "@/hooks/queries/use-company";
@@ -80,6 +81,14 @@ export default function CreateJobPageClient() {
     });
 
     createJob.mutate(payload, {
+      // Said out loud, not swallowed. The form this replaced failed with a
+      // 500 on every submission and showed nothing at all — the page simply
+      // sat there, which is why nobody noticed jobs could not be created.
+      onError: (error) => {
+        toast.error(
+          error instanceof Error ? error.message : "Could not create the job",
+        );
+      },
       onSuccess: (res) => {
         const jobId = res.data.id;
 
