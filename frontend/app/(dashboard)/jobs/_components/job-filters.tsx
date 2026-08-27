@@ -157,6 +157,7 @@ export function JobFilters({
         <div className="ml-auto">
           <Button
             render={<Link href="/jobs/new" prefetch />}
+            nativeButton={false}
             className="h-8 rounded-md border-none bg-[var(--theme-color)] px-4 text-sm font-semibold leading-none text-white shadow-none hover:bg-[var(--theme-color-hover)] cursor-pointer"
           >
             <HugeiconsIcon

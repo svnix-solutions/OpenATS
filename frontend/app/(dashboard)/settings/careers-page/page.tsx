@@ -171,6 +171,7 @@ export default function CareersSettingsPage() {
         <Button
           className="h-9 px-4 shrink-0 bg-theme hover:bg-theme-hover text-white rounded-md border border-theme shadow-none text-sm font-semibold cursor-pointer"
           render={<Link href="/settings/careers-page/preview" prefetch />}
+          nativeButton={false}
         >
           Open listing preview
         </Button>
