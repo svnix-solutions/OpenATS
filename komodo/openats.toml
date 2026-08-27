@@ -1,0 +1,49 @@
+# OpenATS as a Komodo resource.
+#
+# Point a ResourceSync at this file and Komodo creates and maintains the Stack
+# from it, rather than from someone clicking through the UI and nobody knowing
+# afterwards what was set. Sync is one-way: what is here wins.
+#
+# Secrets are deliberately not in this file. Set them on the Stack under
+# Config → Environment — komodo/.env.example lists what is needed — or leave
+# `[[variable]]` entries in Komodo and reference them as [[VARIABLE_NAME]].
+# This file is committed; that box is not.
+#
+#   Docs: https://komo.do/docs/automate/sync-resources
+
+[[stack]]
+name = "openats"
+description = "OpenATS — self-hosted applicant tracking. Postgres, Redis, API, queue worker, Next.js frontend."
+# Deploy on sync. Turn this off if you would rather review the change in the
+# UI and press Deploy yourself — worth doing on the first sync, when the
+# environment has not been filled in yet.
+deploy = true
+tags = ["openats"]
+
+[stack.config]
+# The Komodo Server (a machine running Periphery) this runs on. Rename to
+# match yours; sync resolves it by name.
+server = "server-prod"
+
+# Source. Komodo clones this onto the server and builds the images there, so
+# there is no registry to push to and no CI step in between.
+git_provider = "github.com"
+git_account = "svnix-solutions"
+repo = "svnix-solutions/OpenATS"
+branch = "main"
+
+# `docker compose up -d` runs from here, which is what makes the relative
+# paths in compose.yaml resolve: `..` for the build contexts, `../docker` for
+# the database init scripts.
+run_directory = "komodo"
+file_paths = ["compose.yaml"]
+
+# Redeploy when the repo changes. Komodo exposes a webhook URL for the Stack —
+# add it to the repository's webhooks to make a push to main deploy.
+webhook_enabled = true
+
+# Left off on purpose. `auto_update` redeploys whenever a newer image is found
+# upstream, which for postgres:17 means a database engine upgrading itself
+# without anyone watching. Update deliberately.
+auto_update = false
+poll_for_updates = false

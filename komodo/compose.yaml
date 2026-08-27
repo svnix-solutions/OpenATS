@@ -1,0 +1,267 @@
+# OpenATS, as Komodo deploys it.
+#
+# Separate from the docker-compose.yml at the repo root, which is a developer's
+# machine: it exposes Postgres on 5432, ships fixed passwords, and carries a
+# second database and a mail catcher for the test suite. None of that belongs
+# on a server.
+#
+# What Komodo does with this file: clones the repo onto the target server,
+# writes the Stack's `environment` to a file, and runs `docker compose up -d`
+# against it. So every value below comes from that environment, images are
+# built on the server from this checkout, and nothing here holds a secret.
+#
+# Required variables use `${VAR:?…}` on purpose. A missing one stops
+# `docker compose` before anything starts, with the name of the variable — far
+# better than a container that comes up and fails to authenticate later.
+
+services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-openats}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set a password for the database owner}
+      POSTGRES_DB: ${POSTGRES_DB:-openats}
+      # Read by the init script below, not by Postgres itself.
+      APP_DATABASE_PASSWORD: ${APP_DATABASE_PASSWORD:?set a password for the openats_app role}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      # Creates the least-privileged role the application connects as, then
+      # gives it the password this deployment chose. Both run once, on a
+      # container with an empty data directory.
+      - ../docker/init-app-role.sql:/docker-entrypoint-initdb.d/10-app-role.sql:ro
+      - ../docker/set-app-role-password.sh:/docker-entrypoint-initdb.d/20-app-role-password.sh:ro
+      - ../docker/create-authorizer-db.sh:/docker-entrypoint-initdb.d/30-authorizer-db.sh:ro
+    healthcheck:
+      test:
+        ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-openats} -d ${POSTGRES_DB:-openats}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      # On a first boot Postgres runs the init scripts against a temporary
+      # server, then restarts. `pg_isready` answers during that window and then
+      # stops answering, so without a start period the flap is counted as
+      # failures and everything that waits on `service_healthy` gives up —
+      # which is exactly what happened the first time this stack was run.
+      start_period: 60s
+    # Deliberately no `ports`. The only things that need the database are on
+    # this network. Publishing 5432 puts it on the internet.
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  # Generates the RS256 keypair the provider signs with, once, into a volume.
+  # Authorizer takes the key by value and will not make one itself, and a PEM
+  # does not survive an env file — so it is made here rather than by hand.
+  #
+  # postgres:17 because it is already pulled and has openssl; the authorizer
+  # image has neither openssl nor a way to generate a key.
+  authorizer-keys:
+    image: postgres:17
+    entrypoint: ["/keys-init/authorizer-keys.sh"]
+    volumes:
+      - authorizer-keys:/keys
+      - ../docker/authorizer-keys.sh:/keys-init/authorizer-keys.sh:ro
+    restart: "no"
+
+  # The identity provider. OpenATS needs an OIDC issuer with a JWKS endpoint
+  # and nothing more, so this can be replaced by one you already run: drop
+  # these two services and point OIDC_* and NEXT_PUBLIC_AUTHORIZER_URL at it.
+  authorizer:
+    image: lakhansamani/authorizer:latest
+    entrypoint: ["/entrypoint/authorizer-entrypoint.sh"]
+    environment:
+      # Its own address, and the `iss` claim it stamps on every token. It
+      # refuses to start without one rather than deriving a host from request
+      # headers, which would be host-header-injection account takeover.
+      AUTHORIZER_URL: ${NEXT_PUBLIC_AUTHORIZER_URL:?the public URL of the identity provider}
+      AUTHORIZER_DATABASE_URL: postgresql://${POSTGRES_USER:-openats}:${POSTGRES_PASSWORD}@postgres:5432/authorizer?sslmode=disable
+      AUTHORIZER_CLIENT_ID: ${NEXT_PUBLIC_AUTHORIZER_CLIENT_ID:?}
+      AUTHORIZER_CLIENT_SECRET: ${AUTHORIZER_CLIENT_SECRET:?}
+      AUTHORIZER_ADMIN_SECRET: ${AUTHORIZER_ADMIN_SECRET:?}
+      AUTHORIZER_ENCRYPTION_KEY: ${AUTHORIZER_ENCRYPTION_KEY:?}
+      # The apps allowed to talk to it, and the exact redirect it may return
+      # to. Not the same thing as AUTHORIZER_URL, which is its own address.
+      AUTHORIZER_ALLOWED_ORIGINS: ${NEXT_PUBLIC_APP_URL}
+      AUTHORIZER_REDIRECT_URIS: ${NEXT_PUBLIC_APP_URL}/api/auth/callback
+      # Signup cannot be turned off: OpenATS creates users through the same
+      # mutation, with the admin secret, and disabling it refuses both alike.
+      # So the protection is the role a self-signup lands on — the least
+      # privileged one. An administrator raises it in Settings → User
+      # Management, which writes organization_members.role, and that is what
+      # governs from then on.
+      AUTHORIZER_DEFAULT_ROLES: ${AUTHORIZER_DEFAULT_ROLES:-interviewer}
+      AUTHORIZER_COOKIE_SECURE: ${AUTHORIZER_COOKIE_SECURE:-true}
+      AUTHORIZER_COOKIE_SAME_SITE: ${AUTHORIZER_COOKIE_SAME_SITE:-lax}
+    volumes:
+      - authorizer-keys:/keys:ro
+      - ../docker/authorizer-entrypoint.sh:/entrypoint/authorizer-entrypoint.sh:ro
+    ports:
+      - "${AUTHORIZER_PORT:-8090}:8080"
+    depends_on:
+      postgres: { condition: service_healthy }
+      authorizer-keys: { condition: service_completed_successfully }
+    restart: unless-stopped
+
+  # Runs to completion before the backend or the worker start, and never
+  # restarts. Migrations connect as the owner: they create and alter, which
+  # the application role cannot do and should not be able to.
+  migrate:
+    build:
+      context: ..
+      dockerfile: backend/Dockerfile
+      target: migrate
+    environment:
+      MIGRATION_DATABASE_URL: postgresql://${POSTGRES_USER:-openats}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-openats}
+      DATABASE_URL: postgresql://openats_app:${APP_DATABASE_PASSWORD}@postgres:5432/${POSTGRES_DB:-openats}
+    depends_on:
+      postgres: { condition: service_healthy }
+    restart: "no"
+
+  backend:
+    build:
+      context: ..
+      dockerfile: backend/Dockerfile
+      target: runtime
+    environment:
+      # openats_app, never the owner. Postgres exempts superusers and the
+      # table owner from row-level security, so a backend connected as either
+      # would serve every tenant's rows to every other one while every query
+      # still looked correct. The server refuses to start on such a role —
+      # see assertTenancyIsEnforceable in backend/src/db/index.ts.
+      DATABASE_URL: postgresql://openats_app:${APP_DATABASE_PASSWORD}@postgres:5432/${POSTGRES_DB:-openats}
+      REDIS_URL: redis://redis:6379
+      PORT: 8080
+      FRONTEND_URL: ${NEXT_PUBLIC_APP_URL:?the public URL of the frontend}
+
+      # Keys are fetched container to container; the issuer is the public URL,
+      # because that is what the provider stamps on the token. Splitting them
+      # means the backend never has to reach its own public hostname, which a
+      # host behind NAT often cannot.
+      OIDC_JWKS_URL: ${OIDC_JWKS_URL:-http://authorizer:8080/.well-known/jwks.json}
+      OIDC_ISSUER: ${OIDC_ISSUER:-${NEXT_PUBLIC_AUTHORIZER_URL}}
+
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:?a base64 32-byte key; see make encryption-key}
+
+      # Mail. Leave SMTP_HOST unset to send through Resend instead.
+      RESEND_API_KEY: ${RESEND_API_KEY:?}
+      RESEND_FROM_EMAIL: ${RESEND_FROM_EMAIL:?an address on a domain verified in Resend}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_SECURE: ${SMTP_SECURE:-true}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+
+      R2_ENDPOINT: ${R2_ENDPOINT:?}
+      R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID:?}
+      R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY:?}
+      R2_BUCKET_NAME: ${R2_BUCKET_NAME:?}
+      R2_PUBLIC_URL: ${R2_PUBLIC_URL:?}
+
+      GEMINI_API_KEY: ${GEMINI_API_KEY:?}
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    ports:
+      - "${BACKEND_PORT:-8080}:8080"
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      migrate: { condition: service_completed_successfully }
+      authorizer: { condition: service_started }
+    restart: unless-stopped
+
+  # The same image as the backend, running the queue consumer instead of the
+  # server. Without it, uploaded CVs queue for analysis and are never picked
+  # up — and nothing reports an error, because nothing has failed.
+  worker:
+    build:
+      context: ..
+      dockerfile: backend/Dockerfile
+      target: runtime
+    command: ["node", "dist/src/worker.js"]
+    environment:
+      DATABASE_URL: postgresql://openats_app:${APP_DATABASE_PASSWORD}@postgres:5432/${POSTGRES_DB:-openats}
+      REDIS_URL: redis://redis:6379
+      FRONTEND_URL: ${NEXT_PUBLIC_APP_URL}
+      OIDC_JWKS_URL: ${OIDC_JWKS_URL:-http://authorizer:8080/.well-known/jwks.json}
+      OIDC_ISSUER: ${OIDC_ISSUER:-${NEXT_PUBLIC_AUTHORIZER_URL}}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+      RESEND_API_KEY: ${RESEND_API_KEY}
+      RESEND_FROM_EMAIL: ${RESEND_FROM_EMAIL}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_SECURE: ${SMTP_SECURE:-true}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      R2_ENDPOINT: ${R2_ENDPOINT}
+      R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID}
+      R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY}
+      R2_BUCKET_NAME: ${R2_BUCKET_NAME}
+      R2_PUBLIC_URL: ${R2_PUBLIC_URL}
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      migrate: { condition: service_completed_successfully }
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ..
+      dockerfile: frontend/Dockerfile
+      args:
+        # NEXT_PUBLIC_* are inlined into the JavaScript at build time, not read
+        # at runtime, so they are build args. Changing one needs a rebuild —
+        # in Komodo, a Deploy with the image rebuilt, not a Restart.
+        #
+        # Bare origins, with no /api: lib/api.ts appends /api itself and the
+        # public pages append /public. Including it here double-prefixes the
+        # dashboard and 404s every candidate-facing page.
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:?the public URL of the backend}
+        NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL}
+        NEXT_PUBLIC_AUTHORIZER_URL: ${NEXT_PUBLIC_AUTHORIZER_URL:?the public URL of the identity provider}
+        NEXT_PUBLIC_AUTHORIZER_CLIENT_ID: ${NEXT_PUBLIC_AUTHORIZER_CLIENT_ID:?}
+    environment:
+      # Server-side rendering talks to the backend container directly; the
+      # browser uses NEXT_PUBLIC_API_URL, baked in above.
+      OPENATS_API_URL: http://backend:8080
+      # Also at runtime, not only as build args above. Next inlines these into
+      # the browser bundle at build time, but the server reads them from the
+      # environment — and the session cookie is verified on the server. Left
+      # out, `authorizerConfig` silently falls back to localhost:8090 and every
+      # sign-in returns 401 from /api/auth/session while the provider is fine.
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+      NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL}
+      NEXT_PUBLIC_AUTHORIZER_URL: ${NEXT_PUBLIC_AUTHORIZER_URL}
+      NEXT_PUBLIC_AUTHORIZER_CLIENT_ID: ${NEXT_PUBLIC_AUTHORIZER_CLIENT_ID}
+      # Verifying the session cookie happens on the server, so the keys are
+      # fetched container to container. The browser still uses the public URL
+      # baked in above, and the issuer checked against the token is that
+      # public URL — this is only where the keys come from.
+      AUTHORIZER_INTERNAL_URL: ${AUTHORIZER_INTERNAL_URL:-http://authorizer:8080}
+      # Server-side only. Grants full access to the provider's user directory,
+      # which is why it must never be prefixed NEXT_PUBLIC_ — that would ship
+      # it to every browser.
+      AUTHORIZER_ADMIN_SECRET: ${AUTHORIZER_ADMIN_SECRET:?}
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  postgres-data:
+  redis-data:
+  # The signing keypair. Losing it invalidates every token ever issued, so it
+  # outlives the containers on purpose.
+  authorizer-keys:
