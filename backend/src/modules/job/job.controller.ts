@@ -164,10 +164,16 @@ export const listPublicClientCompanies = async (
   res: Response,
 ) => {
   try {
+    // Enough for an agency's own site to render the companies it recruits
+    // for, which is what this endpoint is for beyond picking a careers page.
+    // Deliberately nothing else: the description is written for a careers
+    // page, and anything about the relationship is the agency's business.
     const rows = await db
       .select({
         name: clientCompanies.name,
         slug: clientCompanies.slug,
+        logoUrl: clientCompanies.logoUrl,
+        website: clientCompanies.website,
       })
       .from(clientCompanies)
       .orderBy(clientCompanies.name);

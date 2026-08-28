@@ -1,13 +1,16 @@
 "use client";
 
 import { useState } from "react";
+import { useUploadLogo } from "@/hooks/queries/use-company";
 import { toast } from "sonner";
+import type { ClientCompany } from "@/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   useClientCompanies,
   useCreateClientCompany,
+  useUpdateClientCompany,
   useDeleteClientCompany,
   slugify,
 } from "@/hooks/queries/use-client-companies";
@@ -125,13 +128,18 @@ export default function ClientCompaniesPage() {
           companies.map((c) => (
             <div
               key={c.id}
-              className="flex items-center justify-between rounded-md border border-slate-200 px-4 py-3 dark:border-neutral-800"
+              className="flex items-center justify-between gap-4 rounded-md border border-slate-200 px-4 py-3 dark:border-neutral-800"
             >
-              <div>
-                <p className="text-sm font-semibold text-slate-800 dark:text-neutral-200">
-                  {c.name}
-                </p>
-                <p className="text-xs text-slate-400">/careers/{c.slug}</p>
+              <div className="flex min-w-0 items-center gap-3">
+                <ClientLogo company={c} />
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold text-slate-800 dark:text-neutral-200">
+                    {c.name}
+                  </p>
+                  <p className="truncate text-xs text-slate-400">
+                    /careers/{c.slug}
+                  </p>
+                </div>
               </div>
               <Button
                 variant="ghost"
@@ -145,5 +153,79 @@ export default function ClientCompaniesPage() {
         )}
       </div>
     </div>
+  );
+}
+
+/**
+ * The client's brand mark, and how it is set.
+ *
+ * Shown on that company's careers page and returned by `/public/clients`, so
+ * an agency's own website can render the companies it recruits for. The
+ * column and the careers page have supported a logo all along; there was
+ * simply nowhere to put one.
+ *
+ * Uploaded then saved in two steps, because they fail differently: the upload
+ * can be refused for size or type before anything is written, and only a URL
+ * that exists is stored against the company.
+ */
+function ClientLogo({
+  company,
+}: {
+  company: ClientCompany;
+}) {
+  const upload = useUploadLogo();
+  const update = useUpdateClientCompany();
+  const busy = upload.isPending || update.isPending;
+
+  const pick = async (file: File | undefined) => {
+    if (!file) return;
+    try {
+      const { url } = await upload.mutateAsync(file);
+      // Every field goes back, not just the logo. PUT replaces the row —
+      // anything left out is written as null, so sending the logo alone would
+      // clear the website and description on the way past.
+      await update.mutateAsync({
+        id: company.id,
+        name: company.name,
+        slug: company.slug,
+        website: company.website,
+        description: company.description,
+        logoUrl: url,
+      });
+      toast.success(`Logo set for ${company.name}`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not set the logo");
+    }
+  };
+
+  return (
+    <label
+      className="group relative size-11 shrink-0 cursor-pointer overflow-hidden rounded-md border border-slate-200 bg-slate-50 dark:border-neutral-700 dark:bg-neutral-900"
+      title={company.logoUrl ? "Replace logo" : "Add a logo"}
+    >
+      {company.logoUrl ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={company.logoUrl}
+          alt={`${company.name} logo`}
+          className="size-full object-contain"
+        />
+      ) : (
+        <span className="flex size-full items-center justify-center text-sm font-semibold text-slate-400 dark:text-neutral-500">
+          {company.name.slice(0, 1).toUpperCase()}
+        </span>
+      )}
+      <span className="absolute inset-0 hidden items-center justify-center bg-black/50 text-[10px] font-semibold text-white group-hover:flex">
+        {busy ? "…" : "Change"}
+      </span>
+      <input
+        type="file"
+        accept="image/*"
+        aria-label={`${company.logoUrl ? "Replace" : "Add"} the logo for ${company.name}`}
+        className="sr-only"
+        disabled={busy}
+        onChange={(e) => void pick(e.target.files?.[0])}
+      />
+    </label>
   );
 }

@@ -118,7 +118,6 @@ router.get(
   withPublicOrganization("client_slug", "clientSlug"),
   checkOrigins,
   listCareersJobsForClient,
-  listPublicClientCompanies,
 );
 
 router.get("/company", withPublicOrganization("only"), checkOrigins, getPublicCompany);

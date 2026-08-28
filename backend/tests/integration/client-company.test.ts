@@ -135,6 +135,26 @@ describe("client companies", () => {
     expect(updated?.website).toBe("https://acme.test");
   });
 
+  it("replaces the row rather than merging into it", async () => {
+    // PUT semantics, and the trap in them: a caller that sends only the field
+    // it means to change writes null over every field it left out. The logo
+    // picker in Settings sends all of them for exactly this reason.
+    const [row] = await runInOrganization(organizationId, () =>
+      clientCompanyService.getAll(),
+    );
+
+    const updated = await runInOrganization(organizationId, () =>
+      clientCompanyService.update(row!.id, {
+        name: row!.name,
+        slug: row!.slug,
+        logoUrl: "https://cdn.example.test/acme.png",
+      }),
+    );
+
+    expect(updated?.logoUrl).toBe("https://cdn.example.test/acme.png");
+    expect(updated?.website).toBeNull();
+  });
+
   it("refuses to delete one that still has jobs", async () => {
     // createScenario builds a client company that already has two jobs on it,
     // which is exactly the state this refuses. jobs.client_company_id is
