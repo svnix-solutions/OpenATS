@@ -13,7 +13,7 @@ Backblaze B2, MinIO, DigitalOcean Spaces and S3 itself all work.
 | `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` | Application key with read/write on the bucket |
 | `R2_BUCKET_NAME` | The bucket |
 | `R2_PUBLIC_URL` | The base a **browser** fetches from — see below, this is the important one |
-| `R2_REGION` | Only away from R2 |
+| `R2_REGION` | Only where the provider checks it — not R2, not B2 |
 
 ## Keep the bucket private
 
@@ -73,27 +73,36 @@ Then turn off public access on the bucket, and check a CV still opens.
 browsers read from another. Get it wrong and uploads succeed while every avatar
 and CV 404s.
 
-**The region is part of the signature.** R2 ignores it and signs everything as
-`us-east-1`, which is why it was hardcoded. B2 and MinIO check it against the
-endpoint's region, and a mismatch surfaces as `SignatureDoesNotMatch` rather
-than anything naming the region. Set `R2_REGION` to match the endpoint. Leave
-it blank on R2.
+**The region is part of the signature — for some providers.** R2 ignores it and
+signs everything as `us-east-1`, which is why it was hardcoded, and **Backblaze
+B2 ignores it too**: verified against a live bucket, where `PutObject`,
+`GetObject` and a presigned read all succeed with the region set to `us-east-1`
+against a `eu-central-003` endpoint. AWS S3 does check it, and MinIO checks when
+one is configured; there a mismatch surfaces as `SignatureDoesNotMatch` or
+`AuthorizationHeaderMalformed`, neither of which names the region, so it reads
+as bad credentials. Set `R2_REGION` to match the endpoint on those; leave it
+blank on R2 and B2.
 
 ## Backblaze B2
 
 Create a **private** bucket, then an Application Key scoped to it.
 
 ```
-R2_ENDPOINT=https://s3.us-west-004.backblazeb2.com
-R2_REGION=us-west-004
+R2_ENDPOINT=https://s3.eu-central-003.backblazeb2.com
 R2_ACCESS_KEY_ID=<keyID>
 R2_SECRET_ACCESS_KEY=<applicationKey>
 R2_BUCKET_NAME=openats-uploads
 R2_PUBLIC_URL=https://app.example.com/api/files
 ```
 
-Both `004`s come from your account and must match each other — B2 hands you the
-endpoint when the key is created.
+The endpoint is whatever B2 shows when the key is created; the region in its
+hostname is not something you have to repeat in `R2_REGION`, because B2 does not
+check it. Setting it anyway is harmless.
+
+Verified against a live B2 bucket: upload, download, presigned read, delete, and
+`Content-Disposition` surviving the round trip both on `GetObject` and over HTTP
+— so the inline/attachment split that stops an uploaded `.svg` executing in your
+origin does hold on B2. An unsigned read of a private bucket returns `401`.
 
 ## MinIO / DigitalOcean Spaces
 

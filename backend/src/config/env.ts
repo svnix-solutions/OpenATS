@@ -15,10 +15,13 @@ const envSchema = z.object({
   R2_SECRET_ACCESS_KEY: z.string().min(1, "R2_SECRET_ACCESS_KEY is required"),
   R2_BUCKET_NAME: z.string().min(1, "R2_BUCKET_NAME is required"),
   R2_PUBLIC_URL: z.string().min(1, "R2_PUBLIC_URL is required"),
-  // R2 ignores the region and signs everything as us-east-1. Other
-  // S3-compatible providers do not: Backblaze B2 and MinIO check it against
-  // the region in the endpoint, and a mismatch is a signature error rather
-  // than a helpful one. Optional, so an R2 install needs no change.
+  // Which region the request is signed for. R2 ignores it and signs everything
+  // as us-east-1, which is why it was hardcoded — and Backblaze B2 ignores it
+  // too, verified against a live bucket where put, get and a presigned read all
+  // succeed with us-east-1 against a eu-central-003 endpoint. AWS S3 does check
+  // it, and MinIO checks when one is configured; there a mismatch is a
+  // signature error that never mentions the region. Optional, so the providers
+  // that do not care need no setting at all.
   // Blank counts as absent, the same way SENTRY_DSN does below — `.env.example`
   // ships it empty and `make setup` copies that file verbatim.
   R2_REGION: z.preprocess(
