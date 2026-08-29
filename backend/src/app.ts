@@ -4,6 +4,7 @@ import morgan from "morgan";
 import helmet from "helmet";
 import router from "./routes";
 import publicRouter from "./routes/public.routes";
+import fileRouter from "./modules/file/file.routes";
 import oauthRouter from "./modules/integrations/oauth.routes";
 import { errorMiddleware } from "./middlewares/error.middleware";
 import { swaggerUi, swaggerDocument } from "./config/swagger";
@@ -100,6 +101,10 @@ app.get("/health", async (req, res) => {
   });
 });
 
+// Not under /api: logos are read by anonymous visitors on careers pages, so
+// the auth boundary is inside this router, per folder, rather than in front of
+// it. See modules/file/file.routes.ts.
+app.use("/files", fileRouter);
 app.use("/public", publicRouter);
 app.use("/oauth", oauthRouter);
 

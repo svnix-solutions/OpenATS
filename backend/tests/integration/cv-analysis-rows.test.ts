@@ -150,7 +150,10 @@ describe("recording a CV analysis", () => {
     await cvAnalysisService.runAnalysis(
       s.personA1,
       s.jobA.id,
-      "https://example.test/bucket/cv.pdf",
+      // A real key shape. The service reads the object key off the end of
+      // this, and refuses a URL that holds none rather than asking the bucket
+      // for an object named after the whole URL.
+      "https://example.test/bucket/resumes/11111111-1111-4111-8111-111111111111.pdf",
     );
 
     const rows = await rowsFor(s.personA1);
