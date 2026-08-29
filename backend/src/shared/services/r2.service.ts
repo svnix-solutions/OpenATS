@@ -10,6 +10,10 @@ import logger from "../../utils/logger";
 
 // Any S3-compatible object store, not only R2 — the SDK, the endpoint and the
 // public URL base are all provider-agnostic. See `docs-draft/STORAGE.md`.
+//
+// us-east-1 is the fallback because R2 and B2 both ignore the region and this
+// is what R2 signs as regardless. Providers that do check — S3, MinIO with a
+// region configured — need R2_REGION set to match their endpoint.
 const r2Client = new S3Client({
   region: process.env.R2_REGION ?? "us-east-1",
   endpoint: process.env.R2_ENDPOINT!,
