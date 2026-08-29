@@ -170,6 +170,9 @@ services:
       GEMINI_API_KEY: ${GEMINI_API_KEY:?}
       SENTRY_DSN: ${SENTRY_DSN:-}
       LOG_LEVEL: ${LOG_LEVEL:-info}
+      # How many proxies are in front. Without it every request looks like it
+      # came from the proxy and the IP-keyed limiters share one bucket.
+      TRUST_PROXY: ${TRUST_PROXY:-0}
     ports:
       - "${BACKEND_PORT:-8080}:8080"
     depends_on:

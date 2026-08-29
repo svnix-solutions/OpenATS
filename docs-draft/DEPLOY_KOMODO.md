@@ -186,6 +186,59 @@ repository's webhooks and a push to `main` redeploys.
 newer image is found upstream, which for `postgres:17` means a database engine
 upgrading itself with nobody watching. Update deliberately.
 
+## Behind a Cloudflare Tunnel
+
+A tunnel is the easiest way to put this on the internet from a box with no
+inbound ports open: `cloudflared` dials out to Cloudflare, TLS terminates at
+the edge, and nothing on the server listens publicly.
+
+**Bind the stack to loopback.** The tunnel is then the only way in, whatever
+the firewall says:
+
+```
+BACKEND_PORT=127.0.0.1:8080
+FRONTEND_PORT=127.0.0.1:3000
+AUTHORIZER_PORT=127.0.0.1:8090
+```
+
+**Three public hostnames**, one per service. All three must be reachable from
+a browser — the frontend calls the API from the browser as well as
+server-side, the Socket.IO connection goes direct, and the identity provider
+is where people sign in:
+
+| Public hostname | Service |
+| --- | --- |
+| `ats.example.com` | `http://localhost:3000` |
+| `api.example.com` | `http://localhost:8080` |
+| `auth.example.com` | `http://localhost:8090` |
+
+`localhost` works when `cloudflared` runs on the host. **If it runs as a
+container, `localhost` is the container** — attach it to the stack's network
+and use service names instead (`http://frontend:3000`, `http://backend:8080`,
+`http://authorizer:8080` — the container port, not the published one), or give
+it `network_mode: host`.
+
+**Set `TRUST_PROXY=1`.** This is the one that is easy to miss, because nothing
+breaks visibly without it. Express reads the client address off the socket
+unless told otherwise, so behind the tunnel every request appears to come from
+`cloudflared`. The IP-keyed limiters on `/public/*` and `/files/logos` then
+share a single bucket across the entire internet, and one bot exhausts the
+application form for every real candidate. A count and never `true`: a client
+writes `X-Forwarded-For` itself, so trusting the whole chain lets anyone claim
+a fresh address per request and never be limited at all.
+
+Two Cloudflare settings worth checking once it is up:
+
+- **WebSockets on** (Network settings). Off, the dashboard loads and then never
+  updates: chat, pipeline moves and new applications all arrive over Socket.IO.
+- **Rocket Loader and Auto Minify off** for these hostnames. Both rewrite
+  JavaScript in flight and break Next.js hydration in ways that look like
+  application bugs.
+
+Caching needs no special rules. The API sends `private, no-store` on an
+authorized CV redirect and `public, max-age=300` on a logo, which is what you
+want cached and what you do not.
+
 ## Reverse proxy
 
 The stack publishes the backend on `BACKEND_PORT` and the frontend on

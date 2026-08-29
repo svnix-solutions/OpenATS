@@ -21,6 +21,31 @@ const healthRedis = createRedisConnection();
 
 const app: Express = express();
 
+/**
+ * How many proxies sit in front of this process.
+ *
+ * Express reads the client address off the socket unless told otherwise, so
+ * behind any proxy — Cloudflare Tunnel, Traefik, nginx — every request appears
+ * to come from that proxy. Nothing breaks loudly: the IP-keyed limiters on
+ * `/public/*` and `/files/logos` simply collapse into one bucket shared by the
+ * entire internet, and one bot exhausts the application form for every real
+ * candidate.
+ *
+ * A count rather than `true`. `true` trusts the whole `X-Forwarded-For` chain,
+ * which a client writes freely — so every request could claim a fresh address
+ * and IP rate limiting would stop meaning anything at all. A count makes
+ * Express take the entry that many hops from the right, which is the one the
+ * nearest proxy wrote and a client cannot forge past.
+ *
+ * Default 0: a process reachable directly must not trust the header. Set it to
+ * the number of proxies you actually run — 1 behind a single tunnel or reverse
+ * proxy.
+ */
+const trustProxy = Number(process.env.TRUST_PROXY ?? 0);
+if (Number.isInteger(trustProxy) && trustProxy > 0) {
+  app.set("trust proxy", trustProxy);
+}
+
 app.use(helmet());
 
 function normalizeOrigin(origin: string): string {
