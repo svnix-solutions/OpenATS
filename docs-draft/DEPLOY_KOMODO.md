@@ -7,9 +7,15 @@ Everything needed is in `komodo/`:
 
 | File | What it is |
 | --- | --- |
-| `komodo/compose.yaml` | The stack Komodo runs: Postgres, Redis, the identity provider, migrations, API, queue worker, frontend |
+| `komodo/compose.yaml` | The stack Komodo runs: Postgres, Redis, the identity provider, migrations, API, queue worker, frontend. Publishes no ports |
+| `komodo/compose.tunnel.yaml` | Joins a proxy's existing Docker network — a Cloudflare Tunnel, Traefik. Reached by container name |
+| `komodo/compose.ports.yaml` | Publishes to loopback instead, for a proxy running on the host |
 | `komodo/openats.toml` | The Stack declared as a Komodo resource, for sync |
 | `komodo/.env.example` | Every variable the stack needs, and why |
+
+You need `compose.yaml` and **one** of the two overlays. Which one is the only
+deployment decision this file really asks you to make; see [Reverse
+proxy](#reverse-proxy).
 
 ## Why not the compose file at the repo root
 
@@ -52,7 +58,7 @@ git_account = "svnix-solutions"
 repo = "svnix-solutions/OpenATS"
 branch = "main"
 run_directory = "komodo"        # what makes ../ resolve to the repo root
-file_paths = ["compose.yaml"]
+file_paths = ["compose.yaml", "compose.tunnel.yaml"]
 ```
 
 `run_directory` matters more than it looks: `compose.yaml` builds from `..` and
@@ -186,18 +192,95 @@ repository's webhooks and a push to `main` redeploys.
 newer image is found upstream, which for `postgres:17` means a database engine
 upgrading itself with nobody watching. Update deliberately.
 
+## Behind a Cloudflare Tunnel
+
+A tunnel is the easiest way to put this on the internet from a box with no
+inbound ports open: `cloudflared` dials out to Cloudflare, TLS terminates at
+the edge, and nothing on the server listens publicly.
+
+**Publish nothing.** `cloudflared` runs as a container on its own Docker
+network, so the services it fronts join that network and are reached over it
+by name. No host port is involved at any point — not even a loopback one.
+
+Add the overlay to the Stack's `file_paths` and name the network:
+
+```toml
+file_paths = ["compose.yaml", "compose.tunnel.yaml"]
+```
+
+```
+PROXY_NETWORK=cloudflared
+```
+
+That attaches the frontend, the API and the identity provider to it, and
+nothing else: Postgres, Redis, the worker and the migration job have no reason
+to be addressable from a proxy, and a shared network is shared with every other
+stack on it.
+
+**Three public hostnames**, one per service. All three must be reachable from a
+browser — the frontend calls the API from the browser as well as server-side,
+the Socket.IO connection goes direct, and the identity provider is where people
+sign in:
+
+| Public hostname | Tunnel service |
+| --- | --- |
+| `ats.example.com` | `http://openats-frontend:3000` |
+| `api.example.com` | `http://openats-api:8080` |
+| `auth.example.com` | `http://openats-auth:8080` |
+
+Three things about that table are easy to get wrong:
+
+- **The container port, not the published one.** The identity provider is
+  `8080` here. `8090` was only ever the host side of a mapping that no longer
+  exists.
+- **`localhost` is the `cloudflared` container**, not the server. It is the
+  right answer only when `cloudflared` runs on the host under systemd — in
+  which case use `compose.ports.yaml` instead, which publishes to loopback.
+- **The names are aliases, not service names.** `frontend` and `backend` are
+  names another stack on the same shared network is entirely likely to have
+  too, and whichever answers first wins.
+
+**Set `TRUST_PROXY=1`.** This is the one that is easy to miss, because nothing
+breaks visibly without it. Express reads the client address off the socket
+unless told otherwise, so behind the tunnel every request appears to come from
+`cloudflared`. The IP-keyed limiters on `/public/*` and `/files/logos` then
+share a single bucket across the entire internet, and one bot exhausts the
+application form for every real candidate. A count and never `true`: a client
+writes `X-Forwarded-For` itself, so trusting the whole chain lets anyone claim
+a fresh address per request and never be limited at all.
+
+Two Cloudflare settings worth checking once it is up:
+
+- **WebSockets on** (Network settings). Off, the dashboard loads and then never
+  updates: chat, pipeline moves and new applications all arrive over Socket.IO.
+- **Rocket Loader and Auto Minify off** for these hostnames. Both rewrite
+  JavaScript in flight and break Next.js hydration in ways that look like
+  application bugs.
+
+Caching needs no special rules. The API sends `private, no-store` on an
+authorized CV redirect and `public, max-age=300` on a logo, which is what you
+want cached and what you do not.
+
 ## Reverse proxy
 
-The stack publishes the backend on `BACKEND_PORT` and the frontend on
-`FRONTEND_PORT`, both `0.0.0.0` by default. Behind a proxy, bind them to
-loopback instead:
+`compose.yaml` publishes nothing at all. Which second file you add to
+`file_paths` is what decides how the stack is reached, and the two answers are
+not interchangeable:
 
-```
-BACKEND_PORT=127.0.0.1:8080
-FRONTEND_PORT=127.0.0.1:3000
-```
+| Your proxy | Add | How it reaches the stack |
+| --- | --- | --- |
+| A container on its own Docker network (Cloudflare Tunnel, Traefik) | `compose.tunnel.yaml` | Joins that network. No host port exists. |
+| On the host, under systemd (nginx, Caddy) | `compose.ports.yaml` | Publishes to `127.0.0.1` only. |
 
-Both need to be reachable from a browser, not only from the proxy host: the
+Prefer the first where you can. A published port is reachable from wherever the
+firewall allows and stays reachable after the proxy in front of it has been
+reconfigured, moved or removed — and nothing about the running stack looks any
+different once that has happened.
+
+If you do publish, keep the loopback prefix. `BACKEND_PORT=8080` binds
+`0.0.0.0`.
+
+All three hostnames need to be reachable from a browser, not only from the proxy host: the
 frontend calls the backend from the browser as well as server-side, and the
 Socket.IO connection goes direct. `NEXT_PUBLIC_API_URL` must be the URL a
 browser can reach, with **no `/api` suffix** — the client appends the path

@@ -1,0 +1,53 @@
+# Reaching OpenATS through a proxy that already runs in Docker.
+#
+# Use with compose.yaml when a Cloudflare Tunnel, Traefik or similar sits on
+# its own Docker network:
+#
+#   file_paths = ["compose.yaml", "compose.tunnel.yaml"]
+#
+# The three services that face the internet join that network and are reached
+# over it by name. No host port is published — not even on loopback — so there
+# is nothing on the server's interfaces to find, and nothing left listening if
+# the proxy is later reconfigured or removed.
+#
+# Postgres, Redis, the worker and the migration job deliberately do not join
+# it. They have no reason to be addressable from a proxy, and a shared network
+# is shared with every other stack on it.
+#
+# Point the proxy's ingress at the **container** port, which is not what the
+# old published ports said:
+#
+#   ats.example.com   →  http://openats-frontend:3000
+#   api.example.com   →  http://openats-api:8080
+#   auth.example.com  →  http://openats-auth:8080     (8080, not 8090)
+#
+# Those names are aliases set below rather than service names. `frontend` and
+# `backend` are names another stack on the same shared network is entirely
+# likely to have too, and whichever answers first wins.
+
+networks:
+  proxy:
+    external: true
+    # The network the proxy is already on. Compose will not create it: if the
+    # name is wrong the stack refuses to start, which is the right failure —
+    # the alternative is an empty network nobody is listening on.
+    name: ${PROXY_NETWORK:-cloudflared}
+
+services:
+  authorizer:
+    networks:
+      default:
+      proxy:
+        aliases: [openats-auth]
+
+  backend:
+    networks:
+      default:
+      proxy:
+        aliases: [openats-api]
+
+  frontend:
+    networks:
+      default:
+      proxy:
+        aliases: [openats-frontend]

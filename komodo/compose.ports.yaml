@@ -1,0 +1,23 @@
+# Publishing ports on the host, for a reverse proxy that runs on the host
+# itself rather than in Docker — nginx or Caddy under systemd.
+#
+#   file_paths = ["compose.yaml", "compose.ports.yaml"]
+#
+# If your proxy runs in Docker, use compose.tunnel.yaml instead. It needs no
+# host port at all, which is strictly less to get wrong.
+#
+# Keep the loopback prefix. `BACKEND_PORT=8080` binds 0.0.0.0 and publishes the
+# API to anything the firewall allows, which outlives whatever proxy was in
+# front of it when the decision was made.
+services:
+  authorizer:
+    ports:
+      - "${AUTHORIZER_PORT:-127.0.0.1:8090}:8080"
+
+  backend:
+    ports:
+      - "${BACKEND_PORT:-127.0.0.1:8080}:8080"
+
+  frontend:
+    ports:
+      - "${FRONTEND_PORT:-127.0.0.1:3000}:3000"
