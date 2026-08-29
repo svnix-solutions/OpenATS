@@ -15,6 +15,16 @@ const envSchema = z.object({
   R2_SECRET_ACCESS_KEY: z.string().min(1, "R2_SECRET_ACCESS_KEY is required"),
   R2_BUCKET_NAME: z.string().min(1, "R2_BUCKET_NAME is required"),
   R2_PUBLIC_URL: z.string().min(1, "R2_PUBLIC_URL is required"),
+  // R2 ignores the region and signs everything as us-east-1. Other
+  // S3-compatible providers do not: Backblaze B2 and MinIO check it against
+  // the region in the endpoint, and a mismatch is a signature error rather
+  // than a helpful one. Optional, so an R2 install needs no change.
+  // Blank counts as absent, the same way SENTRY_DSN does below — `.env.example`
+  // ships it empty and `make setup` copies that file verbatim.
+  R2_REGION: z.preprocess(
+    (v) => (v === "" ? undefined : v),
+    z.string().min(1).optional(),
+  ),
 
   RESEND_API_KEY: z.string().min(1, "RESEND_API_KEY is required"),
   RESEND_FROM_EMAIL: z.string().min(1, "RESEND_FROM_EMAIL is required"),

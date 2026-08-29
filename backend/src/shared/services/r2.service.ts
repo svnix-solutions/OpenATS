@@ -6,8 +6,10 @@ import {
 import crypto from "crypto";
 import logger from "../../utils/logger";
 
+// Any S3-compatible object store, not only R2 — the SDK, the endpoint and the
+// public URL base are all provider-agnostic. See `docs-draft/STORAGE.md`.
 const r2Client = new S3Client({
-  region: "us-east-1",
+  region: process.env.R2_REGION ?? "us-east-1",
   endpoint: process.env.R2_ENDPOINT!,
   credentials: {
     accessKeyId: process.env.R2_ACCESS_KEY_ID!,
