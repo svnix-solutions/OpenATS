@@ -3,13 +3,14 @@ import {
   inviteCandidateToAssessment,
   getCandidateAttempts,
   getAttemptResults,
+  scoreWrittenAnswer,
 } from "./assessment-execution.controller";
 import {
   requireAttemptRead,
   requireCandidateRead,
 } from "../../middlewares/job-access.middleware";
 
-import { denyClients } from "../../middlewares/role.middleware";
+import { denyClients, requireManager } from "../../middlewares/role.middleware";
 
 const router: Router = Router();
 
@@ -23,6 +24,17 @@ router.get(
   "/attempts/:attemptId/results",
   requireAttemptRead(),
   getAttemptResults,
+);
+
+// Recording what a written answer was worth. A manager, and never a client
+// contact: the score decides how a candidate is read, and a client sees the
+// result rather than setting it.
+router.patch(
+  "/attempts/:attemptId/answers/:answerId/score",
+  denyClients,
+  requireManager,
+  requireAttemptRead(),
+  scoreWrittenAnswer,
 );
 
 // The candidate-facing assessment routes are mounted in routes/public.routes.ts

@@ -33,6 +33,24 @@ export type InviteCandidateResult = {
   didSendInvite: boolean;
 };
 
+/**
+ * Which question types are scored by comparing the options a candidate picked.
+ *
+ * Everything else is written prose, which nothing can mark automatically. The
+ * two sets are defined here rather than listed twice, because a new choice
+ * type added to only one of them would either score as prose or become
+ * hand-scorable without anyone deciding that.
+ */
+const CHOICE_QUESTION_TYPES = [
+  "multiple_choice",
+  "radio",
+  "checkbox",
+] as const;
+
+export function isChoiceQuestion(type: string): boolean {
+  return (CHOICE_QUESTION_TYPES as readonly string[]).includes(type);
+}
+
 export const assessmentExecutionService = {
   async inviteCandidate(
     candidateId: number,
@@ -346,11 +364,7 @@ export const assessmentExecutionService = {
 
         let pointsEarned = 0;
 
-        if (
-          question.questionType === "multiple_choice" ||
-          question.questionType === "radio" ||
-          question.questionType === "checkbox"
-        ) {
+        if (isChoiceQuestion(question.questionType)) {
           const correctOptions = await tx
             .select()
             .from(assessmentQuestionOptions)
@@ -506,6 +520,9 @@ export const assessmentExecutionService = {
         options: qOptions,
         answer: candAnswer
           ? {
+              // The id, so a written answer can be given a mark. Without it
+              // the reviewer can read the answer and has nothing to act on.
+              id: candAnswer.id,
               answerText: candAnswer.answerText,
               selectedOptionIds: candSelections,
               pointsEarned: candAnswer.pointsEarned,
@@ -518,5 +535,96 @@ export const assessmentExecutionService = {
       attempt,
       questions: formattedQuestions,
     };
+  },
+
+  /**
+   * Awards points for one written answer, and re-totals the attempt.
+   *
+   * Short answers are scored 0 by `completeAttempt` — there is nothing to
+   * compare them against — while still contributing their points to the
+   * total. The builder has always told the author they are "reviewed manually
+   * by the hiring team", and until now nothing could record that review: the
+   * reviewer could read the answer and had no way to say what it was worth, so
+   * an assessment containing one could never be scored above the fraction the
+   * choice questions made up.
+   *
+   * Re-totalling here rather than in a separate step because a score and the
+   * answers it came from must not be able to disagree. Both move together, in
+   * one transaction.
+   */
+  async scoreWrittenAnswer(
+    attemptId: number,
+    answerId: number,
+    pointsEarned: number,
+  ) {
+    return db.transaction(async (tx) => {
+      const [answer] = await tx
+        .select({
+          id: candidateAssessmentAnswers.id,
+          questionId: candidateAssessmentAnswers.questionId,
+          questionType: assessmentQuestions.questionType,
+          questionPoints: assessmentQuestions.points,
+        })
+        .from(candidateAssessmentAnswers)
+        .innerJoin(
+          assessmentQuestions,
+          eq(assessmentQuestions.id, candidateAssessmentAnswers.questionId),
+        )
+        .where(
+          and(
+            eq(candidateAssessmentAnswers.id, answerId),
+            eq(candidateAssessmentAnswers.attemptId, attemptId),
+          ),
+        );
+
+      // Scoped to the attempt as well as the answer: an answer id from another
+      // attempt is a valid id, and would otherwise be scored against this one.
+      if (!answer) return { error: "not_found" as const };
+
+      // Choice questions are scored by comparing selections. Letting a person
+      // overwrite that would make the score untraceable to the answers.
+      if (isChoiceQuestion(answer.questionType)) {
+        return { error: "not_written" as const };
+      }
+
+      const max = Number(answer.questionPoints);
+      if (pointsEarned > max) {
+        return { error: "over_max" as const, max };
+      }
+
+      await tx
+        .update(candidateAssessmentAnswers)
+        .set({ pointsEarned, updatedAt: new Date() })
+        .where(eq(candidateAssessmentAnswers.id, answerId));
+
+      // Re-add from the answers themselves rather than adjusting the stored
+      // total by a delta: a delta drifts the moment anything else writes.
+      const scored = await tx
+        .select({ pointsEarned: candidateAssessmentAnswers.pointsEarned })
+        .from(candidateAssessmentAnswers)
+        .where(eq(candidateAssessmentAnswers.attemptId, attemptId));
+
+      const scoreRaw = scored.reduce(
+        (sum, row) => sum + Number(row.pointsEarned ?? 0),
+        0,
+      );
+
+      const [attempt] = await tx
+        .select({ scoreTotal: candidateAssessmentAttempts.scoreTotal })
+        .from(candidateAssessmentAttempts)
+        .where(eq(candidateAssessmentAttempts.id, attemptId));
+
+      const scoreTotal = Number(attempt?.scoreTotal ?? 0);
+      const scorePercentage =
+        scoreTotal > 0 ? (scoreRaw / scoreTotal) * 100 : 0;
+
+      const [updated] = await tx
+        .update(candidateAssessmentAttempts)
+        .set({ scoreRaw, scorePercentage, updatedAt: new Date() })
+        .where(eq(candidateAssessmentAttempts.id, attemptId))
+        .returning();
+
+      return { attempt: updated };
+    });
   },
 };

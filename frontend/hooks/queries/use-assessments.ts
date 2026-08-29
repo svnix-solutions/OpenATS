@@ -295,6 +295,7 @@ export function useAttemptResults(attemptId: number, options?: { enabled?: boole
               isCorrect: boolean;
             }[];
             answer: {
+              id: number;
               answerText: string | null;
               selectedOptionIds: number[];
               pointsEarned: number | null;
@@ -303,5 +304,35 @@ export function useAttemptResults(attemptId: number, options?: { enabled?: boole
         };
       }>(`/assessment-execution/attempts/${attemptId}/results`),
     enabled: (options?.enabled ?? true) && !!attemptId,
+  });
+}
+
+/**
+ * Records what a written answer was worth.
+ *
+ * Choice questions are scored from the options marked correct; written ones
+ * cannot be, so they score 0 and still count toward the total until somebody
+ * says otherwise. This is that judgement.
+ */
+export function useScoreWrittenAnswer(attemptId: number) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      answerId,
+      pointsEarned,
+    }: {
+      answerId: number;
+      pointsEarned: number;
+    }) =>
+      serverFetch(
+        `/assessment-execution/attempts/${attemptId}/answers/${answerId}/score`,
+        { method: "PATCH", body: JSON.stringify({ pointsEarned }) },
+      ),
+    onSuccess: () => {
+      // The attempt's totals moved, so both the sheet and any list showing a
+      // score have to be re-read.
+      queryClient.invalidateQueries({ queryKey: ["attempt-results", attemptId] });
+      queryClient.invalidateQueries({ queryKey: ["candidate-assessments"] });
+    },
   });
 }
