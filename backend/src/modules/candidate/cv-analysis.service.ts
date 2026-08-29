@@ -1,19 +1,9 @@
-import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { GoogleGenAI } from "@google/genai";
 import { and, eq } from "drizzle-orm";
 import { candidateCvAnalysis, db } from "../../db";
 import { jobSkills, jobs } from "../../db";
+import { r2Service } from "../../shared/services/r2.service";
 import logger from "../../utils/logger";
-
-const r2Client = new S3Client({
-  region: "us-east-1",
-  endpoint: process.env.R2_ENDPOINT!,
-  credentials: {
-    accessKeyId: process.env.R2_ACCESS_KEY_ID!,
-    secretAccessKey: process.env.R2_SECRET_ACCESS_KEY!,
-  },
-  forcePathStyle: true,
-});
 
 if (!process.env.GEMINI_API_KEY) {
   throw new Error("GEMINI_API_KEY environment variable is not set");
@@ -91,34 +81,6 @@ interface ScoreResult {
     certs: number;
   };
   aiSummary: AiSummary | null;
-}
-
-function extractKeyFromUrl(resumeUrl: string): string {
-  const base = process.env.R2_PUBLIC_URL?.endsWith("/")
-    ? process.env.R2_PUBLIC_URL.slice(0, -1)
-    : process.env.R2_PUBLIC_URL;
-
-  return resumeUrl.replace(`${base}/`, "");
-}
-
-// download pdf bytes from r2
-async function downloadPdfFromR2(objectKey: string): Promise<Buffer> {
-  const command = new GetObjectCommand({
-    Bucket: process.env.R2_BUCKET_NAME!,
-    Key: objectKey,
-  });
-  const response = await r2Client.send(command);
-
-  if (!response.Body) {
-    throw new Error(`empty response body for key : ${objectKey}`);
-  }
-
-  const chunks: Uint8Array[] = [];
-  for await (const chunk of response.Body as AsyncIterable<Uint8Array>) {
-    chunks.push(chunk);
-  }
-
-  return Buffer.concat(chunks);
 }
 
 async function ParsedCvWithGemini(pdfBuffer: Buffer): Promise<ParsedCv> {
@@ -688,8 +650,11 @@ export const cvAnalysisService = {
 
     logger.info(`[CV Analysis] Job has ${jobSkillRows.length} required skills`);
 
-    const objectKey = extractKeyFromUrl(resumeUrl);
-    const pdfBuffer = await downloadPdfFromR2(objectKey);
+    const objectKey = r2Service.extractKeyFromUrl(resumeUrl);
+    if (!objectKey) {
+      throw new Error(`Resume URL holds no object key: ${resumeUrl}`);
+    }
+    const pdfBuffer = await r2Service.downloadFile(objectKey);
 
     logger.info(`[CV Analysis] PDF downloaded (${pdfBuffer.length} bytes)`);
 

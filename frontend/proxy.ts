@@ -22,6 +22,14 @@ const PUBLIC_ROUTES = [
   "/interview",
   "/offer",
   "/api/public",
+  // Brand logos out of the private bucket. Public because they render on
+  // careers pages for visitors with no account, and in the /public/clients
+  // feed an agency points its own site at.
+  //
+  // The folder, not `/api/files`: a CV lives one path segment away under
+  // `/api/files/resumes`, and everything-private-by-default is what keeps it
+  // behind a session even before the API decides who may read it.
+  "/api/files/logos",
 ];
 
 function isPublic(pathname: string): boolean {

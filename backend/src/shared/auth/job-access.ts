@@ -1,8 +1,9 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, like } from "drizzle-orm";
 import { db } from "../../db";
 import { jobHiringTeam } from "../../db/schema/pipeline";
 import {
   applications,
+  candidates,
   candidateAssessmentAttempts,
 } from "../../db/schema/candidates";
 import { candidateInterviews } from "../../db/schema/interviews";
@@ -272,6 +273,47 @@ export function canReadAttempt(
   attemptId: number,
 ): Promise<boolean> {
   return canReadVia(user, () => jobIdForAttempt(attemptId));
+}
+
+/**
+ * Whether this user may read the CV stored under `key`.
+ *
+ * A key is a bare UUID: it names an object, not a person, so the row has to be
+ * found before anything can be decided about it. The lookup runs through the
+ * policy, which is what scopes it to the caller's organization — a key from
+ * another tenant finds nothing and is refused, without this function needing to
+ * mention an organization.
+ *
+ * The rule then follows the candidate's applications rather than the person:
+ * `resume_url` hangs off `candidates`, which is one row per person, while
+ * visibility is per submission. Someone who applied to two jobs is readable by
+ * whoever can read either — the same CV, and no reason to hide it from a
+ * reviewer who can already open it from the other application.
+ */
+export async function canReadResumeKey(
+  user: AuthenticatedUser,
+  key: string,
+): Promise<boolean> {
+  // The suffix, not the whole URL: rows written before R2_PUBLIC_URL last
+  // changed still carry the old base, and they address the same object.
+  const [row] = await db
+    .select({ id: candidates.id })
+    .from(candidates)
+    .where(like(candidates.resumeUrl, `%/${key}`))
+    .limit(1);
+
+  if (!row) return false;
+  if (!isClientScoped(user) && !isTeamScoped(user)) return true;
+
+  const rows = await db
+    .select({ jobId: applications.jobId })
+    .from(applications)
+    .where(eq(applications.candidateId, row.id));
+
+  for (const { jobId } of rows) {
+    if (await canReadJob(user, jobId)) return true;
+  }
+  return false;
 }
 
 export function canReadJobSlug(
