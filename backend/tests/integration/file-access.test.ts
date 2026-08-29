@@ -1,4 +1,4 @@
-import { describe, expect, beforeAll, afterAll } from "vitest";
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { eq } from "drizzle-orm";
 
 import { db, runInOrganization } from "../../src/db";
@@ -62,14 +62,16 @@ afterAll(async () => {
 });
 
 describe("which keys are servable at all", () => {
-  itInOrg("accepts the shape uploadFile writes", () => {
+  // Plain `it`: parseFileKey touches no database, so there is no organization
+  // for it to run in.
+  it("accepts the shape uploadFile writes", () => {
     expect(parseFileKey(KEY_A1)).toBe("resumes");
     expect(parseFileKey("logos/44444444-4444-4444-8444-444444444444.png")).toBe(
       "logos",
     );
   });
 
-  itInOrg("refuses anything else", () => {
+  it("refuses anything else", () => {
     // Traversal is not a case to sanitise — it simply is not this shape.
     expect(parseFileKey("logos/../resumes/x.pdf")).toBeNull();
     expect(parseFileKey("resumes/../../etc/passwd")).toBeNull();
