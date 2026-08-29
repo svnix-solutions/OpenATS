@@ -36,7 +36,16 @@ branch = "main"
 # paths in compose.yaml resolve: `..` for the build contexts, `../docker` for
 # the database init scripts.
 run_directory = "komodo"
-file_paths = ["compose.yaml"]
+# compose.yaml publishes nothing. The second file is how this install is
+# reached, and there are two:
+#
+#   compose.tunnel.yaml  the proxy is already a container on its own Docker
+#                        network (Cloudflare Tunnel, Traefik). The three
+#                        internet-facing services join it and are addressed by
+#                        name. No host port at all.
+#
+#   compose.ports.yaml   the proxy runs on the host. Publishes to loopback.
+file_paths = ["compose.yaml", "compose.tunnel.yaml"]
 
 # Redeploy when the repo changes. Komodo exposes a webhook URL for the Stack —
 # add it to the repository's webhooks to make a push to main deploy.

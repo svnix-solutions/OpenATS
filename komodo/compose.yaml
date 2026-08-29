@@ -13,6 +13,23 @@
 # Required variables use `${VAR:?…}` on purpose. A missing one stops
 # `docker compose` before anything starts, with the name of the variable — far
 # better than a container that comes up and fails to authenticate later.
+#
+# **Nothing is published.** No service binds a host port, so a fresh `up` puts
+# nothing on the server's interfaces at all — not the database, and not the
+# three services that do face the internet. Reaching them is a deliberate
+# second file, and which one you add says how this install is fronted:
+#
+#   compose.tunnel.yaml   joins an existing proxy network — a Cloudflare
+#                         Tunnel, Traefik — and is reached by container name.
+#                         No host port is involved at any point.
+#
+#   compose.ports.yaml    publishes ports for a proxy running on the host
+#                         itself, bound to loopback.
+#
+# Set `file_paths` on the Stack to this file and one of those. Publishing a
+# port is the thing that is hard to notice you have done: a service bound to
+# 0.0.0.0 is reachable from anywhere the firewall allows, and stays reachable
+# after the proxy in front of it has been reconfigured, moved or removed.
 
 services:
   postgres:
@@ -104,8 +121,6 @@ services:
     volumes:
       - authorizer-keys:/keys:ro
       - ../docker/authorizer-entrypoint.sh:/entrypoint/authorizer-entrypoint.sh:ro
-    ports:
-      - "${AUTHORIZER_PORT:-8090}:8080"
     depends_on:
       postgres: { condition: service_healthy }
       authorizer-keys: { condition: service_completed_successfully }
@@ -173,8 +188,6 @@ services:
       # How many proxies are in front. Without it every request looks like it
       # came from the proxy and the IP-keyed limiters share one bucket.
       TRUST_PROXY: ${TRUST_PROXY:-0}
-    ports:
-      - "${BACKEND_PORT:-8080}:8080"
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
@@ -258,8 +271,6 @@ services:
       # which is why it must never be prefixed NEXT_PUBLIC_ — that would ship
       # it to every browser.
       AUTHORIZER_ADMIN_SECRET: ${AUTHORIZER_ADMIN_SECRET:?}
-    ports:
-      - "${FRONTEND_PORT:-3000}:3000"
     depends_on:
       - backend
     restart: unless-stopped
