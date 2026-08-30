@@ -16,6 +16,7 @@ import { sql } from "drizzle-orm";
 import { db } from "./db";
 import { createRedisConnection } from "./config/redis";
 import logger from "./utils/logger";
+import { envOr } from "./utils/env.util";
 
 const healthRedis = createRedisConnection();
 
@@ -62,7 +63,7 @@ app.use(
 
       const requestOrigin = normalizeOrigin(origin);
       const fallbackFrontend = normalizeOrigin(
-        process.env.FRONTEND_URL ?? "http://localhost:3000",
+        envOr("FRONTEND_URL", "http://localhost:3000"),
       );
 
       if (requestOrigin === fallbackFrontend) {

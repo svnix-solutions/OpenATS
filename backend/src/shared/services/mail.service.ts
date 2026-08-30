@@ -6,6 +6,7 @@ import { db, currentOrganizationId } from "../../db";
 import { organizations } from "../../db/schema/organizations";
 import { company } from "../../db/schema/company";
 import logger from "../../utils/logger";
+import { envNumberOr } from "../../utils/env.util";
 
 dotenv.config();
 
@@ -69,7 +70,7 @@ function transport(): nodemailer.Transporter | null {
   cachedTransport = host
     ? nodemailer.createTransport({
         host,
-        port: Number(process.env.SMTP_PORT ?? 1025),
+        port: envNumberOr("SMTP_PORT", 1025),
         // A local catcher has no TLS and wants no credentials. Both become
         // real settings the moment SMTP_HOST points at anything else.
         secure: process.env.SMTP_SECURE === "true",

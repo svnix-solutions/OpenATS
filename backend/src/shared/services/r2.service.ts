@@ -6,6 +6,7 @@ import {
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import crypto from "crypto";
+import { envOr } from "../../utils/env.util";
 import logger from "../../utils/logger";
 
 // Any S3-compatible object store, not only R2 — the SDK, the endpoint and the
@@ -15,7 +16,7 @@ import logger from "../../utils/logger";
 // is what R2 signs as regardless. Providers that do check — S3, MinIO with a
 // region configured — need R2_REGION set to match their endpoint.
 const r2Client = new S3Client({
-  region: process.env.R2_REGION ?? "us-east-1",
+  region: envOr("R2_REGION", "us-east-1"),
   endpoint: process.env.R2_ENDPOINT!,
   credentials: {
     accessKeyId: process.env.R2_ACCESS_KEY_ID!,
