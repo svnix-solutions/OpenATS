@@ -89,10 +89,15 @@ jobs:
           cache-from: type=gha,scope=${{ matrix.image }}-${{ steps.name.outputs.slug }}
           cache-to: type=gha,mode=max,scope=${{ matrix.image }}-${{ steps.name.outputs.slug }}
 
+      # The digest names the file, with `sha256:` stripped off the front —
+      # upload-artifact refuses a path containing a colon, and the merge job
+      # puts the prefix back when it reassembles the reference. The two halves
+      # have to agree about this, and only one of them did.
       - name: Export the digest
         run: |
           mkdir -p /tmp/digests
-          touch "/tmp/digests/${{ steps.build.outputs.digest }}"
+          digest="${{ steps.build.outputs.digest }}"
+          touch "/tmp/digests/${digest#sha256:}"
 
       - uses: actions/upload-artifact@v4.6.2
         with:
