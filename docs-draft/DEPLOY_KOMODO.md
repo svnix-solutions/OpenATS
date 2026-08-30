@@ -314,7 +314,11 @@ candidate-facing page.
 ## Pulling the images
 
 They are published to GHCR as `openats-backend`, `openats-migrate` and
-`openats-frontend`. If the packages are private, the server needs to be logged
+`openats-frontend`, each as a manifest list covering **linux/amd64 and
+linux/arm64** — so `docker pull` resolves on either without anyone naming an
+architecture. Both are built on a runner of that architecture rather than one
+emulating the other, which for a Next.js build is the difference between a few
+minutes and most of an hour. If the packages are private, the server needs to be logged
 in once:
 
 ```bash

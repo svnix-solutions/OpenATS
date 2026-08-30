@@ -10,6 +10,11 @@
 # the environment at runtime, the frontend included, so one build of a commit
 # serves every deployment of it.
 #
+# Two architectures, each built on a runner of that architecture. The
+# alternative is emulating one under QEMU, which for a Next.js build and a pnpm
+# install is slow enough to change how often anyone is willing to deploy.
+# GitHub's arm64 runners are free for public repositories.
+#
 # Only on pushes to main and on tags. A pull request builds nothing here; it is
 # already type-checked, linted, tested and built in test.yml, and this workflow
 # would only be pushing images nobody deploys.
@@ -25,30 +30,101 @@ env:
   REGISTRY: ghcr.io
 
 jobs:
+  # Each (image, architecture) is built and pushed by digest — no tag. A tag
+  # can name only one thing, so two architectures pushing the same tag would
+  # race and the loser would simply be gone. The `merge` job below is what
+  # turns the digests into one tag that resolves per-architecture.
   build:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        image: [backend, migrate, frontend]
+        platform: [linux/amd64, linux/arm64]
+        include:
+          - image: backend
+            dockerfile: backend/Dockerfile
+            target: runtime
+          - image: migrate
+            dockerfile: backend/Dockerfile
+            target: migrate
+          - image: frontend
+            dockerfile: frontend/Dockerfile
+            target: runtime
+
+    runs-on: ${{ matrix.platform == 'linux/arm64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
+
     permissions:
       contents: read
       packages: write
 
-    strategy:
-      # One job per image. They share no state and the frontend is the slowest,
-      # so running them together makes the whole thing as long as that one.
-      fail-fast: false
-      matrix:
-        include:
-          - name: backend
-            dockerfile: backend/Dockerfile
-            target: runtime
-          - name: migrate
-            dockerfile: backend/Dockerfile
-            target: migrate
-          - name: frontend
-            dockerfile: frontend/Dockerfile
-            target: runtime
-
     steps:
       - uses: actions/checkout@v4.2.2
+
+      # GHCR requires a lowercase name and this repository is not spelled that
+      # way. metadata-action lowercases for itself, but the digest push below
+      # names the image directly and would otherwise fail on the capitals.
+      - id: name
+        run: |
+          echo "image=$(echo '${{ github.repository }}-${{ matrix.image }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+          echo "slug=$(echo '${{ matrix.platform }}' | tr '/' '-')" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@v3.11.1
+
+      - uses: docker/login-action@v3.6.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - id: build
+        uses: docker/build-push-action@v6.18.0
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          target: ${{ matrix.target }}
+          platforms: ${{ matrix.platform }}
+          outputs: type=image,name=${{ env.REGISTRY }}/${{ steps.name.outputs.image }},push-by-digest=true,name-canonical=true,push=true
+          # Scoped per architecture: one cache shared between them would be
+          # rewritten by whichever finished last and hit on neither next time.
+          cache-from: type=gha,scope=${{ matrix.image }}-${{ steps.name.outputs.slug }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}-${{ steps.name.outputs.slug }}
+
+      - name: Export the digest
+        run: |
+          mkdir -p /tmp/digests
+          touch "/tmp/digests/${{ steps.build.outputs.digest }}"
+
+      - uses: actions/upload-artifact@v4.6.2
+        with:
+          name: digests-${{ matrix.image }}-${{ steps.name.outputs.slug }}
+          path: /tmp/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  # One tag per image, pointing at a manifest list that holds both
+  # architectures. This is the job that makes `docker pull` work on an arm64
+  # server without anyone naming an architecture.
+  merge:
+    needs: build
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        image: [backend, migrate, frontend]
+
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - id: name
+        run: echo "image=$(echo '${{ github.repository }}-${{ matrix.image }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/download-artifact@v4.3.0
+        with:
+          path: /tmp/digests
+          pattern: digests-${{ matrix.image }}-*
+          merge-multiple: true
 
       - uses: docker/setup-buildx-action@v3.11.1
 
@@ -61,7 +137,7 @@ jobs:
       - id: meta
         uses: docker/metadata-action@v5.9.0
         with:
-          images: ${{ env.REGISTRY }}/${{ github.repository }}-${{ matrix.name }}
+          images: ${{ env.REGISTRY }}/${{ steps.name.outputs.image }}
           # `latest` for the branch build, the commit sha so a deployment can
           # name exactly what it is running, and the version for a tag.
           tags: |
@@ -70,16 +146,14 @@ jobs:
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
 
-      - uses: docker/build-push-action@v6.18.0
-        with:
-          context: .
-          file: ${{ matrix.dockerfile }}
-          target: ${{ matrix.target }}
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          # The server's architecture. Add linux/arm64 here if yours is one —
-          # it roughly doubles the build, so it is not on by default.
-          platforms: linux/amd64
-          cache-from: type=gha,scope=${{ matrix.name }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.name }}
+      - name: Create the manifest list
+        working-directory: /tmp/digests
+        run: |
+          docker buildx imagetools create \
+            $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
+            $(printf '${{ env.REGISTRY }}/${{ steps.name.outputs.image }}@sha256:%s ' *)
+
+      - name: Show what was published
+        run: |
+          docker buildx imagetools inspect \
+            ${{ env.REGISTRY }}/${{ steps.name.outputs.image }}:${{ steps.meta.outputs.version }}
