@@ -1,7 +1,21 @@
-import { describe, expect, beforeAll, afterAll, vi } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import { eq } from "drizzle-orm";
 
 const sent: { to: string; body: string }[] = [];
+const enqueued: { messageId: number; peerId: string; body: string }[] = [];
+
+// The bridge is another process. What this test can assert is the half the API
+// owns: a row written as `queued`, and a job carrying enough to send it.
+vi.mock("../../src/queues/telegram-send/queue", () => ({
+  TELEGRAM_SEND_QUEUE: "telegram-send",
+  requestTelegramSend: async (data: {
+    messageId: number;
+    peerId: string;
+    body: string;
+  }) => {
+    enqueued.push(data);
+  },
+}));
 vi.mock("../../src/shared/messaging/whatsapp.provider", () => ({
   whatsappProvider: {
     channel: "whatsapp",
@@ -144,6 +158,47 @@ describe("the free-form window", () => {
     // forever and the screen would offer a send that the provider refuses.
     const [channel] = await messagingService.getChannels(s.personA1);
     expect(channel?.freeFormOpenUntil).toBeNull();
+  });
+});
+
+describe("telegram, which has no window", () => {
+  itInOrg("queues the message and hands the bridge what it needs", async () => {
+    await db.insert(candidateChannels).values({
+      candidateId: s.personB1,
+      channel: "telegram",
+      externalId: "778899",
+      optedInAt: new Date(),
+    });
+    await saveConnection(
+      "telegram",
+      { channel: "telegram", apiId: 1, apiHash: "h", session: "S" },
+      "@agency",
+      s.admin.id,
+    );
+
+    // No inbound message from this person at all. WhatsApp would refuse;
+    // Telegram has no such rule, and the asymmetry is the channel's.
+    const queued = await messagingService.send(
+      s.personB1,
+      "telegram",
+      "we would like to talk",
+      s.admin.id,
+    );
+
+    expect(queued).toMatchObject({ direction: "outbound", delivery: "queued" });
+    expect(enqueued.at(-1)).toMatchObject({
+      messageId: queued!.id,
+      peerId: "778899",
+      body: "we would like to talk",
+    });
+  });
+
+  // Plain `it`: this reads a local array and touches no database, so there is
+  // no organization for it to run in.
+  it("does not reach Telegram from this process", () => {
+    // The session lives only in the bridge container. If the API ever sent
+    // directly, this would be the test that noticed.
+    expect(sent.filter((m) => m.to === "778899")).toEqual([]);
   });
 });
 
