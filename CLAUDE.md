@@ -148,7 +148,19 @@ every route so it reads that organization's own list. Mounted before it, it
 sees an empty list, treats that as "not configured", and waves everything
 through — which is how it was, silently, until an audit went looking.
 
-Do not add an eighth without a good reason.
+A ninth was added for inbound messaging: `app_resolve_org_by_messaging_webhook`
+takes the opaque token in a webhook URL and returns an organization id. Meta
+posts to a public endpoint with no session, so the tenant has to be resolved
+before any context exists — the same problem the others solve, and the same
+shape: an identifier in, an id out, never a row.
+
+Routed by a token in the path rather than by reading the payload, deliberately.
+The verification handshake is a GET with no body, so nothing body-derived can
+serve it; and routing on the body would mean parsing a stranger's JSON to
+decide whose secret to check it against. The token is a routing key, not a
+credential — what authenticates the request is its signature.
+
+Do not add a tenth without a good reason.
 
 The count was wrong here until an audit checked the catalog rather than this
 file: two were added without updating it. `psql -c "\df app_*"` is the

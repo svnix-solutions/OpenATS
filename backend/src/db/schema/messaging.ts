@@ -44,6 +44,13 @@ export const messagingConnections = pgTable(
     credentialsEncrypted: text("credentials_encrypted").notNull(),
     /** Shown in Settings so someone can tell which account this is. */
     accountLabel: varchar("account_label", { length: 255 }),
+    /**
+     * Routes an inbound webhook to this organization, before any context
+     * exists to look it up from. A routing key and not a credential: the URL
+     * gets pasted into a provider's configuration screen and into tickets.
+     * What authenticates a request is its signature.
+     */
+    webhookToken: varchar("webhook_token", { length: 64 }),
     connectedBy: integer("connected_by").references(() => users.id, {
       onDelete: "set null",
     }),

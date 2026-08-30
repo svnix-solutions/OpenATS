@@ -82,7 +82,19 @@ app.use(
     credentials: true,
   }),
 );
-app.use(express.json({ limit: "1mb" }));
+// The raw bytes are kept alongside the parsed body, for the one caller that
+// needs them: a webhook signature is over what was actually sent, and
+// `JSON.parse` then `JSON.stringify` does not reproduce it — key order,
+// whitespace and unicode escapes all differ. Without this the WhatsApp
+// webhook could not tell Meta's POST from a stranger's.
+app.use(
+  express.json({
+    limit: "1mb",
+    verify: (req, _res, buf) => {
+      (req as express.Request & { rawBody?: Buffer }).rawBody = buf;
+    },
+  }),
+);
 
 app.use(
   morgan(

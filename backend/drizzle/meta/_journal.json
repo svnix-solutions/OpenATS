@@ -337,6 +337,13 @@
       "when": 1787446953364,
       "tag": "0047_candidate_messaging",
       "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "7",
+      "when": 1787447013364,
+      "tag": "0048_whatsapp_webhook",
+      "breakpoints": true
     }
   ]
 }
