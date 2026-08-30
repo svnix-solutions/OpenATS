@@ -59,7 +59,21 @@ repo = "svnix-solutions/OpenATS"
 branch = "main"
 run_directory = "komodo"        # what makes ../ resolve to the repo root
 file_paths = ["compose.yaml", "compose.tunnel.yaml"]
+
+# Two services are supposed to be gone once the stack is up.
+ignore_services = ["authorizer-keys", "migrate"]
 ```
+
+`ignore_services` is not cosmetic. `authorizer-keys` generates the signing
+keypair and exits; `migrate` applies migrations and exits. Both are
+`restart: no`, and both are `service_completed_successfully` dependencies of
+what starts after them — so an exited container is the success case. Komodo
+reads exited containers when it computes stack state, so without this a
+perfectly healthy stack is reported unhealthy from the first deploy onward,
+and the status stops being worth looking at.
+
+Only those two belong in the list. Every other service is
+`restart: unless-stopped`, where exiting is how it fails.
 
 `run_directory` matters more than it looks: `compose.yaml` builds from `..` and
 mounts the database init scripts from `../docker`. Run it from anywhere else

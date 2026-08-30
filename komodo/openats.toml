@@ -47,6 +47,20 @@ run_directory = "komodo"
 #   compose.ports.yaml   the proxy runs on the host. Publishes to loopback.
 file_paths = ["compose.yaml", "compose.tunnel.yaml"]
 
+# The two services that are supposed to be gone.
+#
+# `authorizer-keys` generates the signing keypair into a volume and exits;
+# `migrate` applies migrations as the database owner and exits. Both are
+# `restart: no` and both are `service_completed_successfully` dependencies of
+# what comes after them, so an exited container is the success case — but
+# Komodo reads exited containers when it computes stack state, and a healthy
+# stack would otherwise sit there reported as unhealthy forever.
+#
+# Only these two. Anything else in this list would hide a service that had
+# genuinely stopped: every other one is `restart: unless-stopped` and exiting
+# is how it fails.
+ignore_services = ["authorizer-keys", "migrate"]
+
 # Redeploy when the repo changes. Komodo exposes a webhook URL for the Stack —
 # add it to the repository's webhooks to make a push to main deploy.
 webhook_enabled = true
