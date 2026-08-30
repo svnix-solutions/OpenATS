@@ -9,6 +9,7 @@ import {
   UserRemove01Icon,
   Mail01Icon,
   ChartEvaluationIcon,
+  BubbleChatIcon,
 } from "@hugeicons/core-free-icons";
 
 export function timeAgo(dateStr: string) {
@@ -88,6 +89,7 @@ export type SectionId =
   | "interviews"
   | "rejection"
   | "email"
+  | "messages"
   | "scores";
 
 export const SECTIONS = [
@@ -98,6 +100,7 @@ export const SECTIONS = [
   { id: "interviews" as SectionId, label: "Interviews", icon: Calendar02Icon },
   { id: "rejection" as SectionId, label: "Rejection", icon: UserRemove01Icon },
   { id: "email" as SectionId, label: "Send Email", icon: Mail01Icon },
+  { id: "messages" as SectionId, label: "Messages", icon: BubbleChatIcon },
   {
     id: "scores" as SectionId,
     label: "Assessments",
@@ -116,7 +119,15 @@ export const SECTIONS = [
  * tabs were filtered while the panels were not, and the default section was
  * `job-fit`, so a client landed on a hidden panel with no tab selected.
  */
-const CLIENT_HIDDEN_SECTIONS: SectionId[] = ["job-fit", "rejection", "email"];
+const CLIENT_HIDDEN_SECTIONS: SectionId[] = [
+  "job-fit",
+  "rejection",
+  "email",
+  // The conversation is the agency's, on the agency's number, and a client
+  // contact is not a party to it. Sending would also be as the agency, to a
+  // candidate whose contact details the client is deliberately not given.
+  "messages",
+];
 
 export function sectionsFor(isClient: boolean) {
   return isClient
