@@ -107,7 +107,15 @@ services:
       AUTHORIZER_ENCRYPTION_KEY: ${AUTHORIZER_ENCRYPTION_KEY:?}
       # The apps allowed to talk to it, and the exact redirect it may return
       # to. Not the same thing as AUTHORIZER_URL, which is its own address.
-      AUTHORIZER_ALLOWED_ORIGINS: ${NEXT_PUBLIC_APP_URL}
+      # Both, and the second one is the provider's own address. Its sign-up
+      # page and its admin dashboard are served from there and talk to this
+      # same GraphQL endpoint, so with only the app's origin listed they are
+      # refused by its CSRF check — `403 csrf_validation_failed, Origin not
+      # allowed`, which reads as a bad admin secret rather than as a setting.
+      #
+      # That leaves nobody able to create the first account, because the
+      # sign-up page is the only way to create one and it is served from here.
+      AUTHORIZER_ALLOWED_ORIGINS: ${NEXT_PUBLIC_APP_URL},${NEXT_PUBLIC_AUTHORIZER_URL}
       AUTHORIZER_REDIRECT_URIS: ${NEXT_PUBLIC_APP_URL}/api/auth/callback
       # Signup cannot be turned off: OpenATS creates users through the same
       # mutation, with the admin secret, and disabling it refuses both alike.
