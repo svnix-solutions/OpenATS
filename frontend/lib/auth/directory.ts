@@ -1,6 +1,6 @@
 import "server-only";
 
-import { authorizerConfig } from "./config";
+import { authorizerConfig, serverAuthorizerUrl } from "./config";
 
 /**
  * The user directory in the identity provider.
@@ -45,7 +45,11 @@ async function admin<T>(
     );
   }
 
-  const res = await fetch(`${authorizerConfig.authorizerURL}/graphql`, {
+  // The internal address: this runs on the server, and the public hostname
+  // from in here goes out through whatever terminates TLS and back. The Origin
+  // header below stays the public one, because that is what the provider's
+  // allowed-origins list contains.
+  const res = await fetch(`${serverAuthorizerUrl()}/graphql`, {
     method: "POST",
     cache: "no-store",
     headers: {
@@ -56,12 +60,28 @@ async function admin<T>(
     body: JSON.stringify({ query, variables }),
   });
 
-  const body = (await res.json()) as GraphQLResponse<T>;
+  const body = (await res.json().catch(() => null)) as
+    | (GraphQLResponse<T> & { error?: string; error_description?: string })
+    | null;
 
-  if (body.errors?.length) {
-    throw new Error(body.errors[0]?.message ?? "Identity provider rejected the request");
+  // Not every refusal is a GraphQL error. A rejected Origin comes back as
+  // `403 {"error":"csrf_validation_failed","error_description":"Origin not
+  // allowed"}` — no `errors` array and no `data` — which used to fall through
+  // to "Identity provider returned no data". That is true and useless: the
+  // cause is a hostname missing from AUTHORIZER_ALLOWED_ORIGINS, and nothing
+  // in the message pointed at it.
+  if (!res.ok || body?.error) {
+    const detail =
+      body?.error_description ?? body?.error ?? `HTTP ${res.status}`;
+    throw new Error(`Identity provider refused the request: ${detail}`);
   }
-  if (!body.data) throw new Error("Identity provider returned no data");
+
+  if (body?.errors?.length) {
+    throw new Error(
+      body.errors[0]?.message ?? "Identity provider rejected the request",
+    );
+  }
+  if (!body?.data) throw new Error("Identity provider returned no data");
 
   return body.data;
 }

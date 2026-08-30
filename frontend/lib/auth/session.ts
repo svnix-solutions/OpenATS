@@ -3,7 +3,7 @@ import "server-only";
 import { cache } from "react";
 import { cookies } from "next/headers";
 import { createRemoteJWKSet, jwtVerify } from "jose";
-import { authorizerConfig } from "./config";
+import { authorizerConfig, serverAuthorizerUrl } from "./config";
 
 /**
  * The app owns its session cookie; the provider is only asked to authenticate.
@@ -39,7 +39,7 @@ export const SESSION_COOKIE = "openats_session";
  */
 export const JWKS = createRemoteJWKSet(
   new URL(
-    `${process.env.AUTHORIZER_INTERNAL_URL || authorizerConfig.authorizerURL}/.well-known/jwks.json`,
+    `${serverAuthorizerUrl()}/.well-known/jwks.json`,
   ),
 );
 
