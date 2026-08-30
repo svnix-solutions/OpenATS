@@ -7,7 +7,7 @@ Everything needed is in `komodo/`:
 
 | File | What it is |
 | --- | --- |
-| `komodo/compose.yaml` | The stack Komodo runs: Postgres, Redis, the identity provider, migrations, API, queue worker, frontend. Publishes no ports |
+| `komodo/compose.yaml` | The stack Komodo runs: Postgres, Redis, the identity provider, migrations, API, queue worker, Telegram bridge, frontend. Publishes no ports |
 | `komodo/compose.tunnel.yaml` | Joins a proxy's existing Docker network — a Cloudflare Tunnel, Traefik. Reached by container name |
 | `komodo/compose.ports.yaml` | Publishes to loopback instead, for a proxy running on the host |
 | `komodo/compose.build.yaml` | Builds the images on the server instead of pulling them |
@@ -118,7 +118,7 @@ database, so give it a few minutes. In order:
 2. `authorizer-keys` generates the RS256 keypair into a volume and exits.
 3. `authorizer` starts with that key.
 4. `migrate` runs to completion as the database **owner** and exits.
-5. `backend` and `worker` start as `openats_app`.
+5. `backend`, `worker` and `telegram` start as `openats_app`.
 6. `frontend` starts once the backend is up.
 
 ## The identity provider
@@ -224,6 +224,26 @@ repository's webhooks and a push to `main` redeploys.
 `auto_update` and `poll_for_updates` are off deliberately. They redeploy when a
 newer image is found upstream, which for `postgres:17` means a database engine
 upgrading itself with nobody watching. Update deliberately.
+
+## The Telegram bridge
+
+`telegram` is a container of its own, and that is not tidiness. MTProto is a
+connection that stays open rather than a webhook, and **exactly one process may
+hold a given session** — two clients on the same session fight over the auth
+key and the account is signed out of both.
+
+The API may run more than one replica and the queue worker may be scaled, so
+neither can promise "exactly one". This container can, which is the whole
+reason it exists. **Do not scale it.**
+
+It holds one connection per organization that has connected Telegram, reads the
+sessions through the unscoped connection — the one question that legitimately
+spans tenants — and does every write inside that organization's context.
+
+Its environment is deliberately short: the database, Redis, and the encryption
+key that reads the stored session. No mail, no object storage, no identity
+provider. A process holding credentials equivalent to somebody's Telegram
+password should hold nothing else.
 
 ## Behind a Cloudflare Tunnel
 
