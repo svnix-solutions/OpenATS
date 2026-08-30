@@ -303,12 +303,41 @@ export async function canReadResumeKey(
     .limit(1);
 
   if (!row) return false;
-  if (!isClientScoped(user) && !isTeamScoped(user)) return true;
+  return canReadPerson(user, row.id);
+}
+
+/**
+ * Whether this user may see anything belonging to a person, as opposed to one
+ * of their submissions.
+ *
+ * A CV and a WhatsApp thread hang off `candidates`, which is one row per
+ * person, while visibility is per application. So the rule follows the
+ * person's applications and grants on any one of them: someone who applied to
+ * two jobs is one CV and one conversation, and there is no reason to hide
+ * either from a reviewer who can already open it from the other application.
+ *
+ * The lookup runs through the tenancy policy, so a person in another
+ * organization is not there to be found and no rule here needs to say so.
+ */
+export async function canReadPerson(
+  user: AuthenticatedUser,
+  candidateId: number,
+): Promise<boolean> {
+  // Unrestricted roles skip the query, as canReadVia does — they make most of
+  // the requests.
+  if (!isClientScoped(user) && !isTeamScoped(user)) {
+    const [exists] = await db
+      .select({ id: candidates.id })
+      .from(candidates)
+      .where(eq(candidates.id, candidateId))
+      .limit(1);
+    return Boolean(exists);
+  }
 
   const rows = await db
     .select({ jobId: applications.jobId })
     .from(applications)
-    .where(eq(applications.candidateId, row.id));
+    .where(eq(applications.candidateId, candidateId));
 
   for (const { jobId } of rows) {
     if (await canReadJob(user, jobId)) return true;

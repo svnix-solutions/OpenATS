@@ -20,6 +20,10 @@ import {
   requireCandidateRead,
   requireJobRead,
 } from "../../middlewares/job-access.middleware";
+import {
+  getConversation,
+  sendMessage,
+} from "../messaging/messaging.controller";
 
 const router: Router = Router();
 
@@ -41,6 +45,12 @@ router.post(
 router.get("/", getCandidates);
 router.get("/jobs/:jobId", getCandidates);
 router.get("/:id", requireCandidateRead("id"), getCandidateById);
+
+// The conversation. Authorized inside the handler rather than by
+// requireCandidateRead, because messages hang off the person and that
+// middleware answers a question about one application.
+router.get("/:id/messages", getConversation);
+router.post("/:id/messages", sendMessage);
 router.patch("/:id", requireManager, upload.single("resume"), updateCandidateBasicDetails);
 router.put("/:id/stage", requireManager, moveCandidateStage);
 // Correspondence with a candidate: readable by anyone who may read the
