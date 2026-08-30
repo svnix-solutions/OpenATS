@@ -190,6 +190,10 @@ services:
       # How many proxies are in front. Without it every request looks like it
       # came from the proxy and the IP-keyed limiters share one bucket.
       TRUST_PROXY: ${TRUST_PROXY:-0}
+      # Where providers reach this API from outside. Shown to operators as the
+      # webhook URL to paste into a provider's configuration screen — the same
+      # public origin the browser uses, not the container address.
+      PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }

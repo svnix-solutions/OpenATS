@@ -42,6 +42,7 @@ import { OfferSection } from "./sections/offer-section";
 import { InterviewsSection } from "./sections/inerviews-section";
 import { RejectionSection } from "./sections/rejection-section";
 import { EmailSection } from "./sections/email-section";
+import { MessagesSection } from "./sections/messages-section";
 import { ScoresSection } from "./sections/scores-section";
 import { EditCandidateDialog } from "./dialogs/edit-candidate-dialog";
 import { CandidateDeleteDialog } from "../../_components/candidate-delete-dialog";
@@ -329,6 +330,12 @@ export function CandidateDetail({
               )}
               {shownSection === "email" && (
                 <EmailSection candidate={candidate} />
+              )}
+              {shownSection === "messages" && (
+                // The application id, which is what this page is addressed by.
+                // The API translates it to the person the conversation hangs
+                // off — someone who applied twice has one thread, not two.
+                <MessagesSection applicationId={Number(candidate.id)} />
               )}
               {shownSection === "scores" && (
                 <ScoresSection
