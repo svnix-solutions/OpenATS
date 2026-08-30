@@ -20,17 +20,10 @@ RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
 
 FROM deps AS build
 COPY frontend/ frontend/
-# NEXT_PUBLIC_* are inlined at build time, not read at runtime, so anything the
-# browser needs has to be present now. They are public by definition — the
-# name says so, and they end up in the JavaScript either way.
-ARG NEXT_PUBLIC_API_URL
-ARG NEXT_PUBLIC_APP_URL
-ARG NEXT_PUBLIC_AUTHORIZER_URL
-ARG NEXT_PUBLIC_AUTHORIZER_CLIENT_ID
-ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL \
-    NEXT_PUBLIC_APP_URL=$NEXT_PUBLIC_APP_URL \
-    NEXT_PUBLIC_AUTHORIZER_URL=$NEXT_PUBLIC_AUTHORIZER_URL \
-    NEXT_PUBLIC_AUTHORIZER_CLIENT_ID=$NEXT_PUBLIC_AUTHORIZER_CLIENT_ID
+# No build arguments. The values the browser needs are read from the
+# environment when a page is rendered and written into the document — see
+# frontend/lib/public-config.ts. This image is not specific to any deployment,
+# so one build serves all of them and changing a URL is a restart.
 RUN pnpm --filter openats-frontend build
 
 FROM node:22-alpine AS runtime

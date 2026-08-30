@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient, keepPreviousData } from "@tansta
 import type { Offer, OfferWithRelations, PublicOfferView } from "@/types";
 import { serverFetch } from "@/lib/auth-action";
 import type { PaginationInfo } from "@/components/table/table-footer";
+import { publicConfig } from "@/lib/public-config";
 
 export type OfferListParams = {
   page?: number;
@@ -197,12 +198,15 @@ export function useMarkOfferAsHired() {
   });
 }
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
+// Read on use, not on import: in the browser the value comes from what
+// the layout wrote into the document, which a module-scope constant would
+// capture too early.
+const api_base = () => publicConfig().apiUrl;
 
 export async function fetchPublicOffer(
   token: string,
 ): Promise<PublicOfferView> {
-  const response = await fetch(`${API_BASE}/public/offers/${token}`, {
+  const response = await fetch(`${api_base()}/public/offers/${token}`, {
     cache: "no-store",
   });
 
@@ -222,7 +226,7 @@ export async function fetchPublicOffer(
 }
 
 export async function acceptPublicOffer(token: string): Promise<void> {
-  const response = await fetch(`${API_BASE}/public/offers/${token}/accept`, {
+  const response = await fetch(`${api_base()}/public/offers/${token}/accept`, {
     method: "POST",
   });
 
@@ -233,7 +237,7 @@ export async function acceptPublicOffer(token: string): Promise<void> {
 }
 
 export async function declinePublicOffer(token: string): Promise<void> {
-  const response = await fetch(`${API_BASE}/public/offers/${token}/decline`, {
+  const response = await fetch(`${api_base()}/public/offers/${token}/decline`, {
     method: "POST",
   });
 

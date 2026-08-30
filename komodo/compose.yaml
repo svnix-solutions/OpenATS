@@ -130,10 +130,7 @@ services:
   # restarts. Migrations connect as the owner: they create and alter, which
   # the application role cannot do and should not be able to.
   migrate:
-    build:
-      context: ..
-      dockerfile: backend/Dockerfile
-      target: migrate
+    image: ${IMAGE_REPO:-ghcr.io/svnix-solutions/openats}-migrate:${IMAGE_TAG:-latest}
     environment:
       MIGRATION_DATABASE_URL: postgresql://${POSTGRES_USER:-openats}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-openats}
       DATABASE_URL: postgresql://openats_app:${APP_DATABASE_PASSWORD}@postgres:5432/${POSTGRES_DB:-openats}
@@ -142,10 +139,7 @@ services:
     restart: "no"
 
   backend:
-    build:
-      context: ..
-      dockerfile: backend/Dockerfile
-      target: runtime
+    image: ${IMAGE_REPO:-ghcr.io/svnix-solutions/openats}-backend:${IMAGE_TAG:-latest}
     environment:
       # openats_app, never the owner. Postgres exempts superusers and the
       # table owner from row-level security, so a backend connected as either
@@ -199,10 +193,7 @@ services:
   # server. Without it, uploaded CVs queue for analysis and are never picked
   # up — and nothing reports an error, because nothing has failed.
   worker:
-    build:
-      context: ..
-      dockerfile: backend/Dockerfile
-      target: runtime
+    image: ${IMAGE_REPO:-ghcr.io/svnix-solutions/openats}-backend:${IMAGE_TAG:-latest}
     command: ["node", "dist/src/worker.js"]
     environment:
       DATABASE_URL: postgresql://openats_app:${APP_DATABASE_PASSWORD}@postgres:5432/${POSTGRES_DB:-openats}
@@ -234,25 +225,21 @@ services:
     restart: unless-stopped
 
   frontend:
-    build:
-      context: ..
-      dockerfile: frontend/Dockerfile
-      args:
-        # NEXT_PUBLIC_* are inlined into the JavaScript at build time, not read
-        # at runtime, so they are build args. Changing one needs a rebuild —
-        # in Komodo, a Deploy with the image rebuilt, not a Restart.
-        #
-        # Bare origins, with no /api: lib/api.ts appends /api itself and the
-        # public pages append /public. Including it here double-prefixes the
-        # dashboard and 404s every candidate-facing page.
-        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:?the public URL of the backend}
-        NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL}
-        NEXT_PUBLIC_AUTHORIZER_URL: ${NEXT_PUBLIC_AUTHORIZER_URL:?the public URL of the identity provider}
-        NEXT_PUBLIC_AUTHORIZER_CLIENT_ID: ${NEXT_PUBLIC_AUTHORIZER_CLIENT_ID:?}
+    image: ${IMAGE_REPO:-ghcr.io/svnix-solutions/openats}-frontend:${IMAGE_TAG:-latest}
     environment:
-      # Server-side rendering talks to the backend container directly; the
-      # browser uses NEXT_PUBLIC_API_URL, baked in above.
+      # Server-side rendering talks to the backend container directly, over
+      # the internal network. This is never handed to a browser — it names a
+      # container.
       OPENATS_API_URL: http://backend:8080
+
+      # What the browser is told, written into each page as it is rendered.
+      # Deliberately not NEXT_PUBLIC_*: Next replaces those with string
+      # literals when it builds, which would make this image specific to one
+      # deployment's URLs. See frontend/lib/public-config.ts.
+      API_URL: ${NEXT_PUBLIC_API_URL:?the public URL of the backend}
+      APP_URL: ${NEXT_PUBLIC_APP_URL:?the public URL of this app}
+      AUTHORIZER_URL: ${NEXT_PUBLIC_AUTHORIZER_URL:?the public URL of the identity provider}
+      AUTHORIZER_CLIENT_ID: ${NEXT_PUBLIC_AUTHORIZER_CLIENT_ID:?}
       # Also at runtime, not only as build args above. Next inlines these into
       # the browser bundle at build time, but the server reads them from the
       # environment — and the session cookie is verified on the server. Left

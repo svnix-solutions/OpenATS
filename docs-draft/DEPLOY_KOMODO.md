@@ -10,6 +10,7 @@ Everything needed is in `komodo/`:
 | `komodo/compose.yaml` | The stack Komodo runs: Postgres, Redis, the identity provider, migrations, API, queue worker, frontend. Publishes no ports |
 | `komodo/compose.tunnel.yaml` | Joins a proxy's existing Docker network — a Cloudflare Tunnel, Traefik. Reached by container name |
 | `komodo/compose.ports.yaml` | Publishes to loopback instead, for a proxy running on the host |
+| `komodo/compose.build.yaml` | Builds the images on the server instead of pulling them |
 | `komodo/openats.toml` | The Stack declared as a Komodo resource, for sync |
 | `komodo/.env.example` | Every variable the stack needs, and why |
 
@@ -28,9 +29,18 @@ comes from the environment, and the app services are not behind a profile.
 ## What Komodo does
 
 Clones this repo onto the target server, writes the Stack's environment to a
-file, and runs `docker compose up -d` from `komodo/`. The images are built on
-that server from the checkout, so there is no registry and no build step in
-between — and no way for what runs to differ from what is committed.
+file, and runs `docker compose up -d` from `komodo/`. The images are **pulled**
+from GHCR, built by `.github/workflows/images.yml` on every push to `main`.
+
+The server used to build them. That cost it the disk and CPU to hold a full
+dependency tree and a TypeScript compiler for something it then ran once, and
+it meant the running image was produced by whatever that box happened to have
+installed rather than by what CI tested. `IMAGE_TAG` pins which build is
+deployed; `latest` follows `main`, and a commit sha or a version tag names one
+exactly.
+
+To build on the server anyway — a fork whose CI publishes nothing, or an
+uncommitted change — add `compose.build.yaml` to `file_paths`.
 
 ## Before you start
 
@@ -184,10 +194,10 @@ organization with no members cannot be signed in to at all.
 
 ## Two things that will bite you
 
-**The frontend's `NEXT_PUBLIC_*` values are baked in at build time.** They are
-inlined into the JavaScript, not read at runtime, so changing `NEXT_PUBLIC_API_URL`
-or the provider URL needs a **rebuild** — in Komodo, a Deploy, not a Restart. A
-Restart brings back a container with the old values compiled in.
+**The frontend's public URLs are read at runtime, and this used to be the
+other way round.** They are written into each page as it renders rather than
+compiled in, so changing one is a Restart. If you are looking at an older
+deployment whose image predates that, a Deploy is what picks the change up.
 
 **The application must connect as `openats_app`, never the owner.** Multi-tenancy
 in OpenATS is Postgres row-level security, and Postgres exempts superusers and
@@ -300,6 +310,31 @@ Socket.IO connection goes direct. `NEXT_PUBLIC_API_URL` must be the URL a
 browser can reach, with **no `/api` suffix** — the client appends the path
 itself, and including it double-prefixes the dashboard and 404s every
 candidate-facing page.
+
+## Pulling the images
+
+They are published to GHCR as `openats-backend`, `openats-migrate` and
+`openats-frontend`. If the packages are private, the server needs to be logged
+in once:
+
+```bash
+echo "$GHCR_TOKEN" | docker login ghcr.io -u <github-user> --password-stdin
+```
+
+A classic token with `read:packages` is enough. Making the packages public
+instead removes the step; they hold no secrets and no deployment's URLs.
+
+**No image is specific to a deployment.** All three read every value from the
+environment at runtime, so one build of a commit runs anywhere and changing a
+URL is a restart rather than a rebuild.
+
+That is worth a note, because Next makes it easy to get wrong. `NEXT_PUBLIC_*`
+is replaced with a string literal when the frontend is built — in the *server*
+output as well as the browser's, so even a server-side read of one is
+build-time. The frontend therefore reads non-prefixed variables and writes what
+the browser needs into each page as it renders; see
+`frontend/lib/public-config.ts`. `NEXT_PUBLIC_*` is still accepted as a
+fallback, so a deployment that sets only those keeps working.
 
 ## Backups
 

@@ -1,4 +1,5 @@
 import { notFound, redirect } from "next/navigation";
+import { publicConfig } from "@/lib/public-config";
 
 // Careers pages are addressed by the company advertising the roles
 // (/careers/acme). This bare URL is what a single-tenant install has always
@@ -13,9 +14,7 @@ type ClientCompany = { name: string; slug: string };
 
 function getApiBase() {
   return (
-    process.env.OPENATS_API_URL ??
-    process.env.NEXT_PUBLIC_API_URL ??
-    ""
+    process.env.OPENATS_API_URL || publicConfig().apiUrl
   ).replace(/\/$/, "");
 }
 

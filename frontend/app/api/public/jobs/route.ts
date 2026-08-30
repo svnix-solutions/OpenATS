@@ -4,6 +4,7 @@ import {
   publicApiOptionsResponse,
 } from "@/lib/public-api-cors";
 import { publicJobsUpstreamHeaders } from "@/lib/public-jobs-proxy";
+import { publicConfig } from "@/lib/public-config";
 
 export async function OPTIONS(request: NextRequest) {
   return publicApiOptionsResponse(request);
@@ -11,7 +12,7 @@ export async function OPTIONS(request: NextRequest) {
 
 function backendBaseUrl(): string | null {
   const raw =
-    process.env.OPENATS_API_URL ?? process.env.NEXT_PUBLIC_API_URL ?? "";
+    process.env.OPENATS_API_URL || publicConfig().apiUrl;
   const trimmed = raw.replace(/\/$/, "");
   return trimmed || null;
 }

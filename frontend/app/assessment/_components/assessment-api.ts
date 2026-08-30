@@ -1,10 +1,14 @@
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
+import { publicConfig } from "@/lib/public-config";
+// Read on use, not on import: in the browser the value comes from what
+// the layout wrote into the document, which a module-scope constant would
+// capture too early.
+const api_base = () => publicConfig().apiUrl;
 
 export async function apiFetch<T>(
   path: string,
   options: RequestInit = {},
 ): Promise<T> {
-  const res = await fetch(`${API_BASE}/public${path}`, {
+  const res = await fetch(`${api_base()}/public${path}`, {
     ...options,
     headers: { "Content-Type": "application/json", ...options.headers },
   });

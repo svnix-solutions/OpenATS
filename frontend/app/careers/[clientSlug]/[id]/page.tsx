@@ -1,10 +1,9 @@
 import { JobApplicationForm } from "./job-application-form";
 import type { JobDetail, CustomQuestion } from "@/types";
+import { publicConfig } from "@/lib/public-config";
 
 const API_BASE = (
-  process.env.OPENATS_API_URL ??
-  process.env.NEXT_PUBLIC_API_URL ??
-  ""
+  process.env.OPENATS_API_URL || publicConfig().apiUrl
 ).replace(/\/$/, "");
 
 async function getJob(id: number): Promise<JobDetail | null> {

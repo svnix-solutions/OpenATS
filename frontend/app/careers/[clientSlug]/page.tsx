@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import type { Job } from "@/types";
 import { CareersJobsList } from "../_components/careers-jobs-list";
+import { publicConfig } from "@/lib/public-config";
 
 // A careers page belongs to the company advertising the roles, not the agency
 // behind it. The slug in the URL is what tells the backend which tenant this
@@ -28,9 +29,7 @@ type CareersPage = {
 
 function getApiBase() {
   return (
-    process.env.OPENATS_API_URL ??
-    process.env.NEXT_PUBLIC_API_URL ??
-    ""
+    process.env.OPENATS_API_URL || publicConfig().apiUrl
   ).replace(/\/$/, "");
 }
 

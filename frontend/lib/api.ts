@@ -1,3 +1,4 @@
+import { publicConfig } from "@/lib/public-config";
 /**
  * Where the API is, from wherever this is running.
  *
@@ -13,9 +14,7 @@
  * dashboard did not, so only half the app went container to container.
  */
 const API_BASE_URL =
-  process.env.OPENATS_API_URL ??
-  process.env.NEXT_PUBLIC_API_URL ??
-  "http://localhost:8080";
+  process.env.OPENATS_API_URL || publicConfig().apiUrl;
 
 export async function apiFetch<T>(
   path: string,
