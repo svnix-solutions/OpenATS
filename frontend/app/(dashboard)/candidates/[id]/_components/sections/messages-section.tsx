@@ -130,6 +130,10 @@ export function MessagesSection({ applicationId }: { applicationId: number }) {
 
 function isOpen(channel: CandidateChannel): boolean {
   if (channel.optedOutAt) return false;
+  // Telegram has no window. The 24-hour rule is WhatsApp's, and treating both
+  // the same would leave a Telegram composer permanently disabled for a
+  // candidate who simply had not written first.
+  if (channel.channel === "telegram") return true;
   if (!channel.freeFormOpenUntil) return false;
   return new Date(channel.freeFormOpenUntil) > new Date();
 }
@@ -146,6 +150,14 @@ function ChannelState({ channel }: { channel: CandidateChannel }) {
     return (
       <span className="rounded-full bg-red-50 px-2 py-0.5 font-semibold text-red-600 dark:bg-red-950/30 dark:text-red-400">
         Opted out
+      </span>
+    );
+  }
+
+  if (channel.channel === "telegram") {
+    return (
+      <span className="rounded-full bg-green-50 px-2 py-0.5 font-semibold text-green-700 dark:bg-green-950/30 dark:text-green-400">
+        Open
       </span>
     );
   }

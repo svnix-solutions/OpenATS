@@ -14,6 +14,7 @@ import {
   OutsideMessagingWindowError,
   type MessagingChannelId,
 } from "../../shared/messaging/types";
+import { requestTelegramSend } from "../../queues/telegram-send/queue";
 import logger from "../../utils/logger";
 import { getErrorMessage } from "../../utils/error.utils";
 
@@ -124,11 +125,35 @@ export const messagingService = {
     const credentials = await getCredentials(channel);
     if (!credentials) throw new ChannelNotConnectedError(channel);
 
-    if (channel !== "whatsapp") {
-      // Telegram lands here next. Deliberately an error rather than a silent
-      // no-op: a message that is neither sent nor refused is the worst of the
-      // three outcomes.
-      throw new ChannelNotConnectedError(channel);
+    // Telegram goes out through the bridge, which is the only process holding
+    // the session. The row is written first, as `queued`, so the message
+    // appears in the thread the moment it is sent rather than when Telegram
+    // acknowledges it — and so a send that fails has somewhere to record why.
+    //
+    // No window check: Telegram has none. That asymmetry is the channel's, not
+    // an oversight.
+    if (channel === "telegram") {
+      const [queued] = await db
+        .insert(candidateMessages)
+        .values({
+          candidateId,
+          channel,
+          direction: "outbound",
+          body,
+          sentBy,
+          delivery: "queued",
+        })
+        .returning();
+
+      if (!queued) throw new Error("Could not record the message");
+
+      await requestTelegramSend({
+        messageId: queued.id,
+        peerId: link.externalId,
+        body,
+      });
+
+      return queued;
     }
 
     const openUntil = await freeFormOpenUntil(candidateId, channel);
