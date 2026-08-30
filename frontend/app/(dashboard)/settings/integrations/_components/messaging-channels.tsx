@@ -13,6 +13,7 @@ import {
   useMessagingConnections,
   type ConnectWhatsappResult,
 } from "@/hooks/queries/use-messaging-channels";
+import { TelegramConnect } from "./telegram-connect";
 
 /**
  * Messaging channels, kept apart from the meeting integrations above.
@@ -31,6 +32,7 @@ export function MessagingChannels() {
   );
 
   const whatsapp = data?.data.find((c) => c.channel === "whatsapp");
+  const telegram = data?.data.find((c) => c.channel === "telegram");
 
   return (
     <section className="mt-8">
@@ -121,6 +123,57 @@ export function MessagingChannels() {
               value={justConnected.webhookVerifyToken}
             />
           </div>
+        )}
+      </div>
+
+      <div className="mt-4 max-w-2xl rounded-md border border-slate-300 bg-white p-5 dark:border-neutral-700 dark:bg-neutral-900">
+        <div className="flex items-start gap-3">
+          <span className="flex size-11 shrink-0 items-center justify-center rounded-md border border-slate-200 bg-slate-50 text-slate-500 dark:border-neutral-800 dark:bg-neutral-800 dark:text-neutral-400">
+            <HugeiconsIcon icon={BubbleChatIcon} className="size-5" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="text-base font-semibold text-slate-900 dark:text-neutral-100">
+              Telegram
+            </p>
+            <p className="mt-1 text-xs leading-relaxed text-slate-400 dark:text-neutral-500">
+              Signs in a Telegram account of yours. Unlike WhatsApp there is no
+              24-hour window — but Telegram limits accounts that message people
+              who have not written first.
+            </p>
+          </div>
+        </div>
+
+        {isLoading ? (
+          <p className="mt-4 text-sm text-slate-500">Loading…</p>
+        ) : telegram ? (
+          <div className="mt-4 flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <p className="truncate text-sm font-semibold text-slate-800 dark:text-neutral-200">
+                {telegram.accountLabel ?? "Connected"}
+              </p>
+              {telegram.isActive ? (
+                <p className="text-xs text-green-600 dark:text-green-400">
+                  Active
+                </p>
+              ) : (
+                <p className="text-xs text-red-600 dark:text-red-400">
+                  Stopped: {telegram.lastError ?? "unknown reason"}
+                </p>
+              )}
+            </div>
+            <Button
+              variant="ghost"
+              disabled={disconnect.isPending}
+              onClick={async () => {
+                await disconnect.mutateAsync("telegram");
+                toast.success("Telegram disconnected");
+              }}
+            >
+              Disconnect
+            </Button>
+          </div>
+        ) : (
+          <TelegramConnect />
         )}
       </div>
     </section>

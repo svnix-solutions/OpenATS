@@ -51,6 +51,38 @@ export function useConnectWhatsapp() {
   });
 }
 
+export type TelegramStartInput = {
+  apiId: number;
+  apiHash: string;
+  phoneNumber: string;
+};
+
+export function useStartTelegramLogin() {
+  return useMutation({
+    mutationFn: (input: TelegramStartInput) =>
+      serverFetch<{ data: { status: "code_sent" } }>(
+        "/messaging/connections/telegram/start",
+        { method: "POST", body: JSON.stringify(input) },
+      ),
+  });
+}
+
+export function useVerifyTelegramLogin() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { code: string; password?: string }) =>
+      serverFetch<{
+        data:
+          | { status: "needs_password" }
+          | { status: "connected"; accountLabel: string };
+      }>("/messaging/connections/telegram/verify", {
+        method: "POST",
+        body: JSON.stringify(input),
+      }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: KEY }),
+  });
+}
+
 export function useDisconnectChannel() {
   const queryClient = useQueryClient();
   return useMutation({
