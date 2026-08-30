@@ -6,12 +6,21 @@
  * provider-specific now lives under `lib/auth/`, so the next change is here
  * and not spread through the tree.
  */
+import { publicConfig } from "../public-config";
+//
+// Getters rather than plain fields. The values are read at runtime — in the
+// browser, from what the root layout wrote into the document — and a plain
+// field would capture them when this module is first imported, which in a
+// client bundle is before that script has necessarily been seen. Every call
+// site reads `authorizerConfig.authorizerURL` exactly as before.
 export const authorizerConfig = {
-  authorizerURL: (
-    process.env.NEXT_PUBLIC_AUTHORIZER_URL ?? "http://localhost:8090"
-  ).replace(/\/$/, ""),
-  redirectURL: (
-    process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"
-  ).replace(/\/$/, ""),
-  clientID: process.env.NEXT_PUBLIC_AUTHORIZER_CLIENT_ID ?? "",
+  get authorizerURL(): string {
+    return publicConfig().authorizerUrl;
+  },
+  get redirectURL(): string {
+    return publicConfig().appUrl;
+  },
+  get clientID(): string {
+    return publicConfig().authorizerClientId;
+  },
 };

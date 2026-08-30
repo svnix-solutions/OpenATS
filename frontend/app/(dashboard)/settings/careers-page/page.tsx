@@ -11,6 +11,7 @@ import { Add01Icon, Delete02Icon } from "@hugeicons/core-free-icons";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { publicConfig } from "@/lib/public-config";
 
 import {
   useSettingsAllowedOrigins,
@@ -110,8 +111,7 @@ export default function CareersSettingsPage() {
   }
 
   const appBase = useMemo(() => {
-    const env = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "").trim();
-    return env || "http://localhost:3000";
+    return publicConfig().appUrl;
   }, []);
 
   const jobsListUrl = `${appBase}/api/public/jobs`;

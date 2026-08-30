@@ -2,8 +2,9 @@ import { notFound } from "next/navigation";
 import AlreadyScheduled from "../_components/already-scheduled";
 import SlotPicker from "../_components/slot-picker";
 import { InterviewData } from "../types";
+import { publicConfig } from "@/lib/public-config";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
+const API_BASE = publicConfig().apiUrl;
 
 async function getInterview(token: string): Promise<InterviewData | null> {
   try {

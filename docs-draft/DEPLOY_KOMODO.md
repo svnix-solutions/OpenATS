@@ -194,10 +194,10 @@ organization with no members cannot be signed in to at all.
 
 ## Two things that will bite you
 
-**The frontend's `NEXT_PUBLIC_*` values are baked in at build time.** They are
-inlined into the JavaScript, not read at runtime, so changing `NEXT_PUBLIC_API_URL`
-or the provider URL needs a **rebuild** — in Komodo, a Deploy, not a Restart. A
-Restart brings back a container with the old values compiled in.
+**The frontend's public URLs are read at runtime, and this used to be the
+other way round.** They are written into each page as it renders rather than
+compiled in, so changing one is a Restart. If you are looking at an older
+deployment whose image predates that, a Deploy is what picks the change up.
 
 **The application must connect as `openats_app`, never the owner.** Multi-tenancy
 in OpenATS is Postgres row-level security, and Postgres exempts superusers and
@@ -322,23 +322,19 @@ echo "$GHCR_TOKEN" | docker login ghcr.io -u <github-user> --password-stdin
 ```
 
 A classic token with `read:packages` is enough. Making the packages public
-instead removes the step; they hold no secrets, and the frontend image already
-carries its `NEXT_PUBLIC_*` values in plain JavaScript by design.
+instead removes the step; they hold no secrets and no deployment's URLs.
 
-**The frontend image is specific to the URLs it was built for.** `NEXT_PUBLIC_*`
-values are inlined into the browser bundle at build time, so they are
-repository *variables* on the images workflow rather than environment on the
-Stack:
+**No image is specific to a deployment.** All three read every value from the
+environment at runtime, so one build of a commit runs anywhere and changing a
+URL is a restart rather than a rebuild.
 
-```
-NEXT_PUBLIC_API_URL, NEXT_PUBLIC_APP_URL,
-NEXT_PUBLIC_AUTHORIZER_URL, NEXT_PUBLIC_AUTHORIZER_CLIENT_ID
-```
-
-Set them under **Settings → Secrets and variables → Actions → Variables**.
-Changing one needs the image rebuilt — re-run the workflow, then Deploy. A
-Restart brings back a container with the old values compiled in. The two
-backend images read everything at runtime and are not affected.
+That is worth a note, because Next makes it easy to get wrong. `NEXT_PUBLIC_*`
+is replaced with a string literal when the frontend is built — in the *server*
+output as well as the browser's, so even a server-side read of one is
+build-time. The frontend therefore reads non-prefixed variables and writes what
+the browser needs into each page as it renders; see
+`frontend/lib/public-config.ts`. `NEXT_PUBLIC_*` is still accepted as a
+fallback, so a deployment that sets only those keeps working.
 
 ## Backups
 

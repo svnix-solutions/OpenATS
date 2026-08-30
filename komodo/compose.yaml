@@ -225,16 +225,21 @@ services:
     restart: unless-stopped
 
   frontend:
-    # NEXT_PUBLIC_* are inlined into the browser bundle when this image is
-    # built, not read from the environment below, so this image is specific to
-    # the URLs CI built it for — they are repository variables on the
-    # images workflow. Changing one is a rebuild, not a redeploy of the same
-    # tag.
     image: ${IMAGE_REPO:-ghcr.io/svnix-solutions/openats}-frontend:${IMAGE_TAG:-latest}
     environment:
-      # Server-side rendering talks to the backend container directly; the
-      # browser uses NEXT_PUBLIC_API_URL, baked in above.
+      # Server-side rendering talks to the backend container directly, over
+      # the internal network. This is never handed to a browser — it names a
+      # container.
       OPENATS_API_URL: http://backend:8080
+
+      # What the browser is told, written into each page as it is rendered.
+      # Deliberately not NEXT_PUBLIC_*: Next replaces those with string
+      # literals when it builds, which would make this image specific to one
+      # deployment's URLs. See frontend/lib/public-config.ts.
+      API_URL: ${NEXT_PUBLIC_API_URL:?the public URL of the backend}
+      APP_URL: ${NEXT_PUBLIC_APP_URL:?the public URL of this app}
+      AUTHORIZER_URL: ${NEXT_PUBLIC_AUTHORIZER_URL:?the public URL of the identity provider}
+      AUTHORIZER_CLIENT_ID: ${NEXT_PUBLIC_AUTHORIZER_CLIENT_ID:?}
       # Also at runtime, not only as build args above. Next inlines these into
       # the browser bundle at build time, but the server reads them from the
       # environment — and the session cookie is verified on the server. Left

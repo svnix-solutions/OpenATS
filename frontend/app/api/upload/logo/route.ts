@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getAccessToken } from "@/lib/auth/session";
+import { publicConfig } from "@/lib/public-config";
 
 /** The local helper threw when unauthenticated; callers still rely on that. */
 async function requireAccessToken(): Promise<string> {
@@ -8,7 +9,7 @@ async function requireAccessToken(): Promise<string> {
   return token;
 }
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
+const API_BASE_URL = publicConfig().apiUrl;
 
 export async function POST(req: Request) {
   try {

@@ -17,8 +17,12 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 
 import type { JobDetail, CustomQuestion } from "@/types";
+import { publicConfig } from "@/lib/public-config";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
+// Read on use, not on import: in the browser the value comes from what
+// the layout wrote into the document, which a module-scope constant would
+// capture too early.
+const api_base = () => publicConfig().apiUrl;
 
 type PublicFetchError = Error & { code?: string; status?: number };
 
@@ -26,7 +30,7 @@ async function publicFetch<T>(
   path: string,
   options: RequestInit = {},
 ): Promise<T> {
-  const res = await fetch(`${API_BASE}/public${path}`, {
+  const res = await fetch(`${api_base()}/public${path}`, {
     ...options,
     headers: { "Content-Type": "application/json", ...options.headers },
   });
@@ -111,7 +115,7 @@ export function JobApplicationForm({
     try {
       const form = new FormData();
       form.append("file", file);
-      const res = await fetch(`${API_BASE}/public/upload/resume`, {
+      const res = await fetch(`${api_base()}/public/upload/resume`, {
         method: "POST",
         body: form,
       });

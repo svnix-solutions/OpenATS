@@ -1,8 +1,12 @@
 "use client";
 
 import { io, type Socket } from "socket.io-client";
+import { publicConfig } from "@/lib/public-config";
 
-const SOCKET_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
+// Read on use, not on import: in the browser the value comes from what
+// the layout wrote into the document, which a module-scope constant would
+// capture too early.
+const socket_url = () => publicConfig().apiUrl;
 
 // Give up after this many auth failures instead of looping forever.
 const MAX_AUTH_RETRIES = 3;
@@ -24,7 +28,7 @@ export function createAuthedSocket(fallbackToken?: string): Socket {
   let authRetries = 0;
   let retryTimer: ReturnType<typeof setTimeout> | undefined;
 
-  const socket = io(SOCKET_URL, {
+  const socket = io(socket_url(), {
     transports: ["websocket"],
     auth: (cb: (data: { token: string | undefined }) => void) => {
       // First attempt reuses the server-rendered token.

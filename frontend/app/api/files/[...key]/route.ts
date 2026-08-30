@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getAccessToken } from "@/lib/auth/session";
+import { publicConfig } from "@/lib/public-config";
 
 /**
  * The address a browser uses for anything in the bucket.
@@ -18,9 +19,7 @@ import { getAccessToken } from "@/lib/auth/session";
  */
 
 const API_BASE_URL =
-  process.env.OPENATS_API_URL ??
-  process.env.NEXT_PUBLIC_API_URL ??
-  "http://localhost:8080";
+  process.env.OPENATS_API_URL || publicConfig().apiUrl;
 
 export async function GET(
   _req: Request,

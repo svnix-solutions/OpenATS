@@ -34,12 +34,3 @@ services:
       context: ..
       dockerfile: frontend/Dockerfile
       target: runtime
-      args:
-        # Inlined into the browser bundle at build time, not read at runtime.
-        # Bare origins with no /api: lib/api.ts appends /api itself and the
-        # public pages append /public. Including it double-prefixes the
-        # dashboard and 404s every candidate-facing page.
-        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:?the public URL of the backend}
-        NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL}
-        NEXT_PUBLIC_AUTHORIZER_URL: ${NEXT_PUBLIC_AUTHORIZER_URL:?the public URL of the identity provider}
-        NEXT_PUBLIC_AUTHORIZER_CLIENT_ID: ${NEXT_PUBLIC_AUTHORIZER_CLIENT_ID:?}

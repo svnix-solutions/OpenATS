@@ -6,6 +6,10 @@
 # — and meant the running image was produced by whatever that box happened to
 # have installed, rather than by what CI tested.
 #
+# No build arguments anywhere below. Every image reads its configuration from
+# the environment at runtime, the frontend included, so one build of a commit
+# serves every deployment of it.
+#
 # Only on pushes to main and on tags. A pull request builds nothing here; it is
 # already type-checked, linted, tested and built in test.yml, and this workflow
 # would only be pushing images nobody deploys.
@@ -79,16 +83,3 @@ jobs:
           platforms: linux/amd64
           cache-from: type=gha,scope=${{ matrix.name }}
           cache-to: type=gha,mode=max,scope=${{ matrix.name }}
-          # NEXT_PUBLIC_* are inlined into the browser bundle at build time, so
-          # the frontend image is specific to the URLs it was built for. They
-          # are repository *variables* rather than secrets: the name says
-          # public, and they are readable in the shipped JavaScript either way.
-          #
-          # Changing one means rebuilding this image — a Deploy in Komodo, not
-          # a Restart. Ignored by the two backend images, which read every
-          # value at runtime.
-          build-args: |
-            NEXT_PUBLIC_API_URL=${{ vars.NEXT_PUBLIC_API_URL }}
-            NEXT_PUBLIC_APP_URL=${{ vars.NEXT_PUBLIC_APP_URL }}
-            NEXT_PUBLIC_AUTHORIZER_URL=${{ vars.NEXT_PUBLIC_AUTHORIZER_URL }}
-            NEXT_PUBLIC_AUTHORIZER_CLIENT_ID=${{ vars.NEXT_PUBLIC_AUTHORIZER_CLIENT_ID }}
