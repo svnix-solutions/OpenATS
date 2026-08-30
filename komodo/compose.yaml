@@ -204,30 +204,25 @@ services:
   # The same image as the backend, running the queue consumer instead of the
   # server. Without it, uploaded CVs queue for analysis and are never picked
   # up — and nothing reports an error, because nothing has failed.
-  worker:
+  # The Telegram connection, alone in a process.
+  #
+  # MTProto is a connection that stays open, not a webhook, and exactly one
+  # process may hold a given session — two clients on the same session fight
+  # over the auth key and the account ends up signed out of both. The API may
+  # run more than one replica and the queue worker may be scaled, so neither
+  # can promise "exactly one". This container can.
+  #
+  # Do not scale it. `deploy.replicas: 1` is the default and is the point.
+  #
+  # Its environment is deliberately short: it reaches Telegram and the
+  # database. No mail, no object storage, no identity provider.
+  telegram:
     image: ${IMAGE_REPO:-ghcr.io/svnix-solutions/openats}-backend:${IMAGE_TAG:-latest}
-    command: ["node", "dist/src/worker.js"]
+    command: ["node", "dist/src/telegram.js"]
     environment:
       DATABASE_URL: postgresql://openats_app:${APP_DATABASE_PASSWORD}@postgres:5432/${POSTGRES_DB:-openats}
       REDIS_URL: redis://redis:6379
-      FRONTEND_URL: ${NEXT_PUBLIC_APP_URL}
-      OIDC_JWKS_URL: ${OIDC_JWKS_URL:-http://authorizer:8080/.well-known/jwks.json}
-      OIDC_ISSUER: ${OIDC_ISSUER:-${NEXT_PUBLIC_AUTHORIZER_URL}}
       ENCRYPTION_KEY: ${ENCRYPTION_KEY}
-      RESEND_API_KEY: ${RESEND_API_KEY}
-      RESEND_FROM_EMAIL: ${RESEND_FROM_EMAIL}
-      SMTP_HOST: ${SMTP_HOST:-}
-      SMTP_PORT: ${SMTP_PORT:-587}
-      SMTP_SECURE: ${SMTP_SECURE:-true}
-      SMTP_USER: ${SMTP_USER:-}
-      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
-      R2_ENDPOINT: ${R2_ENDPOINT}
-      R2_REGION: ${R2_REGION:-}
-      R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID}
-      R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY}
-      R2_BUCKET_NAME: ${R2_BUCKET_NAME}
-      R2_PUBLIC_URL: ${R2_PUBLIC_URL}
-      GEMINI_API_KEY: ${GEMINI_API_KEY}
       SENTRY_DSN: ${SENTRY_DSN:-}
       LOG_LEVEL: ${LOG_LEVEL:-info}
     depends_on:

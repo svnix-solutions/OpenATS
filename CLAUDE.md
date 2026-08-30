@@ -116,6 +116,7 @@ forgotten, and the connection it writes was silently refused for it:
 | CV analysis worker | `organizationId` carried on the BullMQ job |
 | Google OAuth callback | `organizationId` carried in the signed `state` |
 | CV analysis broadcast | `organizationId` carried on the Redis pub/sub event |
+| Telegram bridge | `organizationId` read from `messaging_connections`, one held connection each |
 
 **In-memory state is outside the boundary.** Row-level security scopes rows,
 not the process. Anything cached, memoised or broadcast in Node is shared by
