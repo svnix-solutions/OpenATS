@@ -30,6 +30,10 @@ import { db } from "../db";
 import { candidates, jobs, candidateInterviews, users } from "../db/schema";
 import { and, eq, ne } from "drizzle-orm";
 import rateLimit from "express-rate-limit";
+import {
+  receiveWhatsappWebhook,
+  verifyWhatsappWebhook,
+} from "../modules/messaging/webhook.controller";
 import logger from "../utils/logger";
 import { mailService } from "../shared/services/mail.service";
 import { socketService } from "../shared/services/socket.service";
@@ -118,6 +122,34 @@ router.get(
   withPublicOrganization("client_slug", "clientSlug"),
   checkOrigins,
   listCareersJobsForClient,
+);
+
+// Inbound WhatsApp. Deliberately without `checkOrigins`: that list is the
+// browser origins an agency has configured for its careers pages, and Meta is
+// not a browser and sends no Origin at all. What authenticates this is the
+// signature over the body, checked in the handler before anything is written.
+//
+// Its own limiter, keyed by IP: the endpoint is public, and the work behind it
+// is a database write per message.
+const webhookLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 300,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many requests." },
+});
+
+router.get(
+  "/webhooks/whatsapp/:token",
+  webhookLimiter,
+  withPublicOrganization("messaging_webhook", "token"),
+  verifyWhatsappWebhook,
+);
+router.post(
+  "/webhooks/whatsapp/:token",
+  webhookLimiter,
+  withPublicOrganization("messaging_webhook", "token"),
+  receiveWhatsappWebhook,
 );
 
 router.get("/company", withPublicOrganization("only"), checkOrigins, getPublicCompany);

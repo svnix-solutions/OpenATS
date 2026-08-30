@@ -14,12 +14,20 @@ export type PublicOrgSource =
   | "offer_token"
   | "interview_token"
   | "client_slug"
+  | "messaging_webhook"
   | "only";
 
 async function resolve(
   kind: PublicOrgSource,
   identifier: string,
 ): Promise<number | null> {
+  if (kind === "messaging_webhook") {
+    const result = await unscopedDb.execute<{
+      app_resolve_org_by_messaging_webhook: number | null;
+    }>(sql`SELECT app_resolve_org_by_messaging_webhook(${identifier})`);
+    return result.rows[0]?.app_resolve_org_by_messaging_webhook ?? null;
+  }
+
   if (kind === "client_slug") {
     const result = await unscopedDb.execute<{
       app_resolve_org_by_client_slug: number | null;
