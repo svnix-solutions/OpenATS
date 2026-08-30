@@ -57,11 +57,12 @@ const pretty = winston.format.printf((info) => {
   return `[${info.timestamp}] ${info.level.toUpperCase()}:${org} ${info.message}${suffix}`;
 });
 
-// Console only, on purpose. pm2 already writes stdout and stderr to files and
-// rotates them; a file transport here would write every line to disk twice,
-// in a second place nothing is configured to rotate. The file transports that
-// used to sit here commented out have been removed rather than left as a
-// standing suggestion to do that.
+// Console only, on purpose. Whatever runs this process already captures and
+// rotates stdout and stderr — the container runtime, in every deployment this
+// supports; a file transport here would write every line to disk twice, in a
+// second place nothing is configured to rotate. The file transports that used
+// to sit here commented out have been removed rather than left as a standing
+// suggestion to do that.
 const logger = winston.createLogger({
   level: process.env.LOG_LEVEL || "info",
   format: winston.format.combine(

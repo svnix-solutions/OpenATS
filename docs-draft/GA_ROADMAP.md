@@ -42,7 +42,7 @@ The focus of this phase is correctness and safety, not new features. Nothing her
 | Use `git reset --hard origin/main` | The VM has drifted (locally modified `pnpm-workspace.yaml`, stray `pnpm-lock.yaml`), which makes `git pull` abort. A hard reset removes drift permanently. | 🟢 Done |
 | Install from the repo root, not `backend/` | The deploy still installs from `backend/`, which is wrong since the pnpm workspace conversion. | 🟢 Done |
 | Health check after restart | `curl -fsS http://localhost:8080/health` at the end, so a crash-looping process does not report a green deploy. | 🟢 Done |
-| Gate deploy on tests passing | `test.yml` and `deploy.yml` are independent, so a red build still deploys. | 🟢 Done |
+| Gate deploy on tests passing | Moot since the SSH deploy was removed. `images.yml` publishes on push to `main`; deploying is a deliberate action in Komodo against a tag you choose. | 🟢 Done |
 
 ### Testing
 
@@ -72,11 +72,11 @@ The "do it properly" phase. None of this is urgent, all of it is what separates 
 
 | Item | Why it matters | Status |
 | --- | --- | --- |
-| Build artifacts in CI | CI builds `backend/dist`, uploads it, and the deploy unpacks that exact tarball on the VM. Unverified end to end: this fork has no `SSH_HOST`. | 🟡 In progress |
-| Rollback mechanism | Deploys keep the last 5 build tarballs on the VM; `scripts/rollback.sh` unpacks one and restarts. Code only — migrations still roll forward. Unverified end to end: no `SSH_HOST` on this fork. | 🟡 In progress |
+| Build artifacts in CI | `images.yml` builds the three deployment images and pushes them to GHCR on every push to `main`; the server pulls and builds nothing. Replaced the `backend/dist` tarball, which only the removed SSH deploy consumed. | 🟢 Done |
+| Rollback mechanism | Every commit's images stay in the registry, so rolling back is setting `IMAGE_TAG` to an earlier sha and deploying — nothing to rebuild. Code only; migrations still roll forward. | 🟢 Done |
 | Staging environment | Every change still goes straight to production, but the app now runs entirely in Docker (`docker compose --profile app up`), so a staging host is a compose file and a second `.env` rather than a bespoke build. | 🟡 In progress |
 | Error tracking | Sentry on both the backend and the worker, off unless `SENTRY_DSN` is set. Events carry the `organizationId`; PII is deliberately not sent. | 🟢 Done |
-| Structured logging | One JSON object per line when `NODE_ENV=production`, readable otherwise; errors keep their stack in a named field, and every line carries the `organizationId` it came from. Console only — pm2 already writes and rotates stdout. | 🟢 Done |
+| Structured logging | One JSON object per line when `NODE_ENV=production`, readable otherwise; errors keep their stack in a named field, and every line carries the `organizationId` it came from. Console only — the container runtime already captures and rotates stdout. | 🟢 Done |
 | Refuse to start on an RLS-exempt role | `assertTenancyIsEnforceable()`, checked by the server and the CV worker before either accepts work. The boundary is policies on tables, and a superuser or `BYPASSRLS` role ignores them with no symptom | 🟢 Done |
 | Fixed E2E running as a superuser | `playwright.config.ts` pointed the backend at the database owner, which bypasses row-level security even where FORCEd. Every E2E run had been unable to observe a tenancy failure | 🟢 Done |
 | End-to-end tests in CI | The Playwright suite ran nowhere, so nothing it covered was guarded on a pull request. CI now starts the identity provider and runs it, including authenticated dashboard specs | 🟢 Done |

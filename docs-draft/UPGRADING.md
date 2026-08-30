@@ -12,11 +12,12 @@ git pull
 pnpm install --frozen-lockfile
 pnpm --filter ./backend build
 pnpm --filter ./backend exec drizzle-kit migrate
-pm2 restart ecosystem.config.js --update-env
 ```
 
-On the deployed VM this is the workflow's job and you do not run it by hand —
-see [DEPLOYMENT.md](./DEPLOYMENT.md). Locally, or on an install you manage
+Then restart whatever runs it. On a Komodo stack none of the above is run by
+hand — a Deploy pulls the new images and the `migrate` service applies the
+migrations before the API starts; see
+[DEPLOY_KOMODO.md](./DEPLOY_KOMODO.md). Locally, or on an install you manage
 yourself, that is the sequence.
 
 Check `.env.example` in both packages against your `.env` after every upgrade.
@@ -38,10 +39,10 @@ Practically:
 - After a failed deploy, the database is on the new schema and the process is
   on the old code. Whether that works depends entirely on the change. Adding a
   nullable column is harmless; renaming or dropping one is not.
-- `scripts/rollback.sh` puts the previous build back in seconds without a CI
-  run, but it rolls back **code only** — see
-  [DEPLOYMENT.md](./DEPLOYMENT.md). Past an additive migration that is safe;
-  past a destructive one it is not.
+- Rolling back is setting `IMAGE_TAG` to the previous commit sha and
+  deploying: the images are in the registry, so there is nothing to rebuild.
+  It rolls back **code only**. Past an additive migration that is safe; past a
+  destructive one it is not.
 - Rolling back leaves `main` still containing the bad commit, so follow it with
   a revert or the next deploy ships it again.
 

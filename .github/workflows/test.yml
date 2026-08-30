@@ -5,8 +5,6 @@ on:
   push:
     branches:
       - main
-  # Lets deploy.yml run this suite as a gate before deploying.
-  workflow_call:
 
 jobs:
   test:
@@ -94,26 +92,6 @@ jobs:
 
       - name: Build backend
         run: pnpm --filter ./backend build
-
-      # The compiled output is what gets deployed. Building it once here and
-      # shipping the result is the point: compiling on the production VM meant
-      # the artifact was produced by whatever toolchain that box happened to
-      # have, which is how it drifted from what CI had tested.
-      #
-      # A tarball rather than the directory: scp of a tree needs
-      # strip_components to line up, and it leaves files behind that a newer
-      # build no longer produces.
-      - name: Package backend build
-        if: github.event_name == 'push'
-        run: tar -czf backend-dist.tar.gz -C backend dist
-
-      - name: Upload backend build
-        if: github.event_name == 'push'
-        uses: actions/upload-artifact@v4.6.2
-        with:
-          name: backend-dist
-          path: backend-dist.tar.gz
-          retention-days: 7
 
       # Next resolves routes at build time, and a whole class of errors —
       # ambiguous dynamic segments, invalid page signatures, server/client

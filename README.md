@@ -216,20 +216,21 @@ database and the queue worker, see
 [Komodo](https://komo.do) Stack, with the compose file and the resource
 declaration in [`komodo/`](./komodo).
 
-In short: pushing to `main` deploys the backend to an Azure VM, but only if the
-test suite passes. CI builds `backend/dist` and ships that exact tarball — the
-VM does not compile, because compiling there produced an artifact from whatever
-toolchain that box happened to have rather than the one CI tested.
-
-The frontend is a standard Next.js app and is not deployed by that workflow.
+In short: pushing to `main` builds three images and pushes them to GHCR, and
+the server pulls them. Nothing is compiled on the server — an image built there
+would be produced by whatever that box has installed rather than by what CI
+tested — and no image is specific to a deployment, so one build of a commit
+runs anywhere.
 
 Two things that bite on a first deploy:
 
 - `DATABASE_URL` must be the least-privileged `openats_app` role. Owners and
   superusers **bypass row-level security**, so pointing it at the owner turns
   multi-tenancy off silently — every query still works and nothing is filtered.
-- `ecosystem.config.js` is not in this repository. It lives on the VM, and the
-  deploy restarts pm2 against it.
+  The server refuses to start on such a role for exactly this reason.
+- Seeding is a separate step and the app does not work without it: without
+  pipeline stages there is nowhere to put an applicant, and without the default
+  templates an offer can be drafted and never sent.
 
 ## Contributing
 
