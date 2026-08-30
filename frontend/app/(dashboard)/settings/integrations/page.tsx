@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import { serverFetch } from "@/lib/auth-action";
 import { IntegrationsGrid } from "@/app/(dashboard)/settings/integrations/_components/integrations-grid";
 import { OAuthCallbackToast } from "@/app/(dashboard)/settings/integrations/_components/oauth-callback-toast";
+import { MessagingChannels } from "@/app/(dashboard)/settings/integrations/_components/messaging-channels";
 import type { IntegrationStatus } from "@/hooks/queries/use-integrations";
 
 export default async function SettingsIntegrationsPage() {
@@ -26,6 +27,7 @@ export default async function SettingsIntegrationsPage() {
 
       <div className="flex-1 overflow-y-auto px-6 py-5">
         <IntegrationsGrid initialStatus={initialStatus} />
+        <MessagingChannels />
       </div>
     </div>
   );
