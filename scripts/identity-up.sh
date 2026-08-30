@@ -34,6 +34,14 @@ openssl genrsa -out "$KEYDIR/private.pem" 2048 2>/dev/null
 openssl rsa -in "$KEYDIR/private.pem" -pubout -out "$KEYDIR/public.pem" 2>/dev/null
 
 ADMIN_SECRET=$(openssl rand -hex 16)
+
+# localhost:8090 is this provider's own address, and it has to be here. Its
+# sign-up page and its admin dashboard are served from there and call the same
+# GraphQL endpoint, so without it they are refused by its CSRF check —
+# `csrf_validation_failed, Origin not allowed`, which reads as a bad admin
+# secret rather than as a setting. The sign-up page this script points you at
+# is one of them.
+ALLOWED_ORIGINS=http://localhost:3000,http://localhost:8080,http://localhost:8090
 CLIENT_ID=$(uuidgen | tr '[:upper:]' '[:lower:]')
 
 docker run -d --name "$NAME" \
@@ -52,7 +60,7 @@ docker run -d --name "$NAME" \
     --default-roles=super_admin \
     --disable-mfa --disable-totp-login --disable-email-otp \
     --custom-access-token-script='function(user, tokenPayload){ var d = tokenPayload; d.email = user.email; d.given_name = user.given_name; d.family_name = user.family_name; return d; }' \
-    --allowed-origins=http://localhost:3000,http://localhost:8080 \
+    --allowed-origins="$ALLOWED_ORIGINS" \
     --redirect-uris=http://localhost:3000/api/auth/callback \
     --app-cookie-secure=false --admin-cookie-secure=false --app-cookie-same-site=lax >/dev/null
 

@@ -156,7 +156,16 @@ promoted by hand, once.
 
 ### 4. Bootstrap the first administrator
 
-Sign in once through the frontend, which creates the account locally. Then, on
+There is no sign-up in OpenATS — it is sign-in only, and accounts are created
+at the provider. Go to `https://auth.example.com/app` and sign up; then sign in
+at the frontend, which is what creates the account locally.
+
+The provider's own hostname has to be in `AUTHORIZER_ALLOWED_ORIGINS`, which is
+why the compose file lists both. That sign-up page and the admin dashboard are
+served from it and call its GraphQL endpoint, so without it they are refused
+with `403 csrf_validation_failed, Origin not allowed` — which looks like a
+rejected admin secret rather than a missing setting, and leaves nobody able to
+create the first account at all. Then, on
 the server:
 
 ```bash
