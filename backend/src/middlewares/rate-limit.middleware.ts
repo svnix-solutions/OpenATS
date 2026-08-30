@@ -1,5 +1,6 @@
 import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import type { Request } from "express";
+import { envNumberOr } from "../utils/env.util";
 
 // Rate limiting for the authenticated API. `/public/*` has its own limiters.
 
@@ -21,14 +22,14 @@ const shared = {
 // Generous: the dashboard refetches on every socket event.
 export const apiLimiter = rateLimit({
   ...shared,
-  limit: Number(process.env.RATE_LIMIT_API ?? 1000),
+  limit: envNumberOr("RATE_LIMIT_API", 1000),
   message: { error: "Too many requests. Please slow down and try again." },
 });
 
 // For requests that cost storage or an external provider call.
 export const expensiveLimiter = rateLimit({
   ...shared,
-  limit: Number(process.env.RATE_LIMIT_EXPENSIVE ?? 60),
+  limit: envNumberOr("RATE_LIMIT_EXPENSIVE", 60),
   message: {
     error: "Too many requests for this operation. Please try again later.",
   },

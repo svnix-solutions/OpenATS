@@ -1,3 +1,4 @@
+import { envOr } from "../utils/env.util";
 /**
  * The URLs a candidate is sent, in one place.
  *
@@ -19,7 +20,7 @@
  */
 
 function frontendBase(): string {
-  return (process.env.FRONTEND_URL ?? "http://localhost:3000").replace(
+  return envOr("FRONTEND_URL", "http://localhost:3000").replace(
     /\/$/,
     "",
   );

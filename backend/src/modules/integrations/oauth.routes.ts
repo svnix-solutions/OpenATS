@@ -2,6 +2,7 @@ import { Router, Request, Response } from "express";
 import { integrationConnectionService } from "../../shared/integrations/connection.service";
 import logger from "../../utils/logger";
 import { getErrorMessage } from "../../utils/error.utils";
+import { envOr } from "../../utils/env.util";
 
 const router: Router = Router();
 
@@ -10,7 +11,7 @@ function normalizeOrigin(origin: string): string {
 }
 
 function frontendUrl(): string {
-  return normalizeOrigin(process.env.FRONTEND_URL ?? "http://localhost:3000");
+  return normalizeOrigin(envOr("FRONTEND_URL", "http://localhost:3000"));
 }
 
 router.get("/google/callback", async (req: Request, res: Response) => {

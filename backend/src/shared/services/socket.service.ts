@@ -14,6 +14,7 @@ import {
 } from "../auth/job-access";
 import logger from "../../utils/logger";
 import { getErrorMessage } from "../../utils/error.utils";
+import { envOr } from "../../utils/env.util";
 
 /**
  * Dashboard events go to the staff of one organization, not to everyone.
@@ -64,7 +65,7 @@ export class SocketService {
   public initialize(server: HttpServer) {
     this.io = new Server(server, {
       cors: {
-        origin: process.env.FRONTEND_URL ?? "http://localhost:3000",
+        origin: envOr("FRONTEND_URL", "http://localhost:3000"),
         methods: ["GET", "POST"],
         credentials: true,
       },
