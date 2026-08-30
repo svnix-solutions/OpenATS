@@ -98,6 +98,30 @@ export const cvAnalysisStatus = pgEnum("cv_analysis_status", [
 
 export const meetingProvider = pgEnum("meeting_provider", ["google_meet"]);
 
+// Channels a candidate can be messaged on, beyond email. Deliberately not
+// folded into `meeting_provider`: a meeting provider is asked to create a
+// meeting, a channel is asked to carry a conversation, and the two share no
+// operations at all.
+export const messagingChannel = pgEnum("messaging_channel", [
+  "whatsapp",
+  "telegram",
+]);
+
+export const messageDirection = pgEnum("message_direction", [
+  "inbound",
+  "outbound",
+]);
+
+// `queued` and `failed` are distinct: a send that never left is something to
+// retry, one the provider refused is something to show a person.
+export const messageDelivery = pgEnum("message_delivery", [
+  "queued",
+  "sent",
+  "delivered",
+  "read",
+  "failed",
+]);
+
 // Roles within an organization. The first four are agency staff; the last two
 // are client contacts, confined to their own client company. `platform_admin`
 // is deliberately absent: it is not a membership, it is the absence of one.
