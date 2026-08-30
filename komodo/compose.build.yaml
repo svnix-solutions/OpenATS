@@ -1,0 +1,45 @@
+# Building the images here instead of pulling them.
+#
+#   file_paths = ["compose.yaml", "compose.tunnel.yaml", "compose.build.yaml"]
+#
+# The default is to pull what CI built and pushed, because a deployment server
+# has no reason to hold a TypeScript compiler and a full dependency tree to
+# produce something it runs once — and an image built there is produced by
+# whatever that box has installed rather than by what CI tested.
+#
+# Use this when you are working on a fork whose CI does not publish images, or
+# when you want to run an uncommitted change. `image:` is kept so the build is
+# tagged the same way and `docker compose up` does not pull over it.
+services:
+  migrate:
+    build:
+      context: ..
+      dockerfile: backend/Dockerfile
+      target: migrate
+
+  backend:
+    build:
+      context: ..
+      dockerfile: backend/Dockerfile
+      target: runtime
+
+  worker:
+    build:
+      context: ..
+      dockerfile: backend/Dockerfile
+      target: runtime
+
+  frontend:
+    build:
+      context: ..
+      dockerfile: frontend/Dockerfile
+      target: runtime
+      args:
+        # Inlined into the browser bundle at build time, not read at runtime.
+        # Bare origins with no /api: lib/api.ts appends /api itself and the
+        # public pages append /public. Including it double-prefixes the
+        # dashboard and 404s every candidate-facing page.
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:?the public URL of the backend}
+        NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL}
+        NEXT_PUBLIC_AUTHORIZER_URL: ${NEXT_PUBLIC_AUTHORIZER_URL:?the public URL of the identity provider}
+        NEXT_PUBLIC_AUTHORIZER_CLIENT_ID: ${NEXT_PUBLIC_AUTHORIZER_CLIENT_ID:?}

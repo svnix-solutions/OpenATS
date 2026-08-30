@@ -1,0 +1,94 @@
+# Builds the deployment images and pushes them to GHCR.
+#
+# The point is that the server stops building. It used to clone the repo and
+# run `docker build` for three images, which cost it the disk and CPU to hold a
+# full dependency tree and a TypeScript compiler for something it then ran once
+# — and meant the running image was produced by whatever that box happened to
+# have installed, rather than by what CI tested.
+#
+# Only on pushes to main and on tags. A pull request builds nothing here; it is
+# already type-checked, linted, tested and built in test.yml, and this workflow
+# would only be pushing images nobody deploys.
+name: images
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    strategy:
+      # One job per image. They share no state and the frontend is the slowest,
+      # so running them together makes the whole thing as long as that one.
+      fail-fast: false
+      matrix:
+        include:
+          - name: backend
+            dockerfile: backend/Dockerfile
+            target: runtime
+          - name: migrate
+            dockerfile: backend/Dockerfile
+            target: migrate
+          - name: frontend
+            dockerfile: frontend/Dockerfile
+            target: runtime
+
+    steps:
+      - uses: actions/checkout@v4.2.2
+
+      - uses: docker/setup-buildx-action@v3.11.1
+
+      - uses: docker/login-action@v3.6.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - id: meta
+        uses: docker/metadata-action@v5.9.0
+        with:
+          images: ${{ env.REGISTRY }}/${{ github.repository }}-${{ matrix.name }}
+          # `latest` for the branch build, the commit sha so a deployment can
+          # name exactly what it is running, and the version for a tag.
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=sha,format=long
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+
+      - uses: docker/build-push-action@v6.18.0
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          target: ${{ matrix.target }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          # The server's architecture. Add linux/arm64 here if yours is one —
+          # it roughly doubles the build, so it is not on by default.
+          platforms: linux/amd64
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.name }}
+          # NEXT_PUBLIC_* are inlined into the browser bundle at build time, so
+          # the frontend image is specific to the URLs it was built for. They
+          # are repository *variables* rather than secrets: the name says
+          # public, and they are readable in the shipped JavaScript either way.
+          #
+          # Changing one means rebuilding this image — a Deploy in Komodo, not
+          # a Restart. Ignored by the two backend images, which read every
+          # value at runtime.
+          build-args: |
+            NEXT_PUBLIC_API_URL=${{ vars.NEXT_PUBLIC_API_URL }}
+            NEXT_PUBLIC_APP_URL=${{ vars.NEXT_PUBLIC_APP_URL }}
+            NEXT_PUBLIC_AUTHORIZER_URL=${{ vars.NEXT_PUBLIC_AUTHORIZER_URL }}
+            NEXT_PUBLIC_AUTHORIZER_CLIENT_ID=${{ vars.NEXT_PUBLIC_AUTHORIZER_CLIENT_ID }}

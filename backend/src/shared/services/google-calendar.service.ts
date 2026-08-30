@@ -1,4 +1,13 @@
-import { google } from "googleapis";
+// The calendar client and the auth library directly, not the `googleapis`
+// meta-package. That package carries a generated client for every Google API
+// there is — 204 MB of them in the runtime image, for the one this uses.
+//
+// `auth` comes from this package too, not from google-auth-library directly.
+// The client is typed against the copy it bundles, and a JWT built from a
+// separately-resolved copy is structurally a different type — it compiles
+// wherever the two versions happen to match and stops compiling when they
+// drift.
+import { auth, calendar, type calendar_v3 } from "@googleapis/calendar";
 
 function getAuth() {
   const raw = process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
@@ -6,20 +15,20 @@ function getAuth() {
 
   const key = JSON.parse(raw);
 
-  return new google.auth.JWT({
+  return new auth.JWT({
     email: key.client_email,
     key: key.private_key,
     scopes: ["https://www.googleapis.com/auth/calendar.events"],
   });
 }
 
-let _calendarClient: ReturnType<typeof google.calendar> | null = null;
+let _calendarClient: calendar_v3.Calendar | null = null;
 
 function getCalendarClient() {
   if (_calendarClient) return _calendarClient;
 
   const auth = getAuth();
-  _calendarClient = google.calendar({ version: "v3", auth });
+  _calendarClient = calendar({ version: "v3", auth });
   return _calendarClient;
 }
 

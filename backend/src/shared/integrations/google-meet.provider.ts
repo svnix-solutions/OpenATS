@@ -1,5 +1,5 @@
 import { randomUUID } from "crypto";
-import { google } from "googleapis";
+import { auth, calendar as googleCalendar } from "@googleapis/calendar";
 import type {
   CreateMeetingInput,
   CreateMeetingResult,
@@ -22,7 +22,7 @@ function getOAuthClient() {
       "GOOGLE_OAUTH_CLIENT_ID, GOOGLE_OAUTH_CLIENT_SECRET, and GOOGLE_OAUTH_REDIRECT_URI must be set",
     );
   }
-  return new google.auth.OAuth2(clientId, clientSecret, redirectUri);
+  return new auth.OAuth2(clientId, clientSecret, redirectUri);
 }
 
 async function fetchAccountEmail(accessToken: string): Promise<string> {
@@ -90,7 +90,7 @@ export const googleMeetProvider: MeetingProviderClient = {
   ): Promise<CreateMeetingResult> {
     const client = getOAuthClient();
     client.setCredentials({ access_token: accessToken });
-    const calendar = google.calendar({ version: "v3", auth: client });
+    const calendar = googleCalendar({ version: "v3", auth: client });
 
     const endTime = new Date(
       input.scheduledAt.getTime() + input.durationMinutes * 60_000,
@@ -127,7 +127,7 @@ export const googleMeetProvider: MeetingProviderClient = {
   ): Promise<void> {
     const client = getOAuthClient();
     client.setCredentials({ access_token: accessToken });
-    const calendar = google.calendar({ version: "v3", auth: client });
+    const calendar = googleCalendar({ version: "v3", auth: client });
     await calendar.events.delete({
       calendarId: "primary",
       eventId: providerMeetingId,

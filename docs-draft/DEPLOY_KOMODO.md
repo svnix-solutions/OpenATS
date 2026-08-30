@@ -10,6 +10,7 @@ Everything needed is in `komodo/`:
 | `komodo/compose.yaml` | The stack Komodo runs: Postgres, Redis, the identity provider, migrations, API, queue worker, frontend. Publishes no ports |
 | `komodo/compose.tunnel.yaml` | Joins a proxy's existing Docker network — a Cloudflare Tunnel, Traefik. Reached by container name |
 | `komodo/compose.ports.yaml` | Publishes to loopback instead, for a proxy running on the host |
+| `komodo/compose.build.yaml` | Builds the images on the server instead of pulling them |
 | `komodo/openats.toml` | The Stack declared as a Komodo resource, for sync |
 | `komodo/.env.example` | Every variable the stack needs, and why |
 
@@ -28,9 +29,18 @@ comes from the environment, and the app services are not behind a profile.
 ## What Komodo does
 
 Clones this repo onto the target server, writes the Stack's environment to a
-file, and runs `docker compose up -d` from `komodo/`. The images are built on
-that server from the checkout, so there is no registry and no build step in
-between — and no way for what runs to differ from what is committed.
+file, and runs `docker compose up -d` from `komodo/`. The images are **pulled**
+from GHCR, built by `.github/workflows/images.yml` on every push to `main`.
+
+The server used to build them. That cost it the disk and CPU to hold a full
+dependency tree and a TypeScript compiler for something it then ran once, and
+it meant the running image was produced by whatever that box happened to have
+installed rather than by what CI tested. `IMAGE_TAG` pins which build is
+deployed; `latest` follows `main`, and a commit sha or a version tag names one
+exactly.
+
+To build on the server anyway — a fork whose CI publishes nothing, or an
+uncommitted change — add `compose.build.yaml` to `file_paths`.
 
 ## Before you start
 
@@ -300,6 +310,35 @@ Socket.IO connection goes direct. `NEXT_PUBLIC_API_URL` must be the URL a
 browser can reach, with **no `/api` suffix** — the client appends the path
 itself, and including it double-prefixes the dashboard and 404s every
 candidate-facing page.
+
+## Pulling the images
+
+They are published to GHCR as `openats-backend`, `openats-migrate` and
+`openats-frontend`. If the packages are private, the server needs to be logged
+in once:
+
+```bash
+echo "$GHCR_TOKEN" | docker login ghcr.io -u <github-user> --password-stdin
+```
+
+A classic token with `read:packages` is enough. Making the packages public
+instead removes the step; they hold no secrets, and the frontend image already
+carries its `NEXT_PUBLIC_*` values in plain JavaScript by design.
+
+**The frontend image is specific to the URLs it was built for.** `NEXT_PUBLIC_*`
+values are inlined into the browser bundle at build time, so they are
+repository *variables* on the images workflow rather than environment on the
+Stack:
+
+```
+NEXT_PUBLIC_API_URL, NEXT_PUBLIC_APP_URL,
+NEXT_PUBLIC_AUTHORIZER_URL, NEXT_PUBLIC_AUTHORIZER_CLIENT_ID
+```
+
+Set them under **Settings → Secrets and variables → Actions → Variables**.
+Changing one needs the image rebuilt — re-run the workflow, then Deploy. A
+Restart brings back a container with the old values compiled in. The two
+backend images read everything at runtime and are not affected.
 
 ## Backups
 
