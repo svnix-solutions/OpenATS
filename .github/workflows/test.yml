@@ -93,6 +93,92 @@ jobs:
       - name: Build backend
         run: pnpm --filter ./backend build
 
+      # Next resolves routes at build time, and a whole class of errors —
+      # ambiguous dynamic segments, invalid page signatures, server/client
+      # boundary violations — appears here and nowhere else. Lint and tests
+      # both pass on a frontend that cannot build.
+      - name: Build frontend
+        run: pnpm --filter ./frontend build
+
+      # The E2E suite existed but ran nowhere, so nothing it covered was
+      # actually guarded on a pull request.
+      #
+      # The identity provider is a step rather than a service container
+      # because authorizer takes its configuration as flags, and a service
+      # container cannot override the command. `--network host` so it reaches
+      # the Postgres service on 5433 and the suite reaches it on 8090.
+      - name: Start the identity provider
+        run: |
+          PGPASSWORD=openats psql -h localhost -p 5433 -U openats -d openats_test \
+            -c "CREATE DATABASE authorizer"
+          openssl genrsa -out /tmp/authz-private.pem 2048
+          openssl rsa -in /tmp/authz-private.pem -pubout -out /tmp/authz-public.pem
+          docker run -d --name authorizer --network host \
+            lakhansamani/authorizer:latest \
+              --url=http://localhost:8090 --http-port=8090 \
+              --database-type=postgres \
+              --database-url="postgresql://openats:openats@localhost:5433/authorizer?sslmode=disable" \
+              --admin-secret=ci-admin-secret \
+              --encryption-key="$(openssl rand -hex 32)" \
+              --client-id=11111111-1111-1111-1111-111111111111 \
+              --client-secret="$(openssl rand -hex 24)" \
+              --jwt-type=RS256 \
+              --jwt-private-key="$(cat /tmp/authz-private.pem)" \
+              --jwt-public-key="$(cat /tmp/authz-public.pem)" \
+              --roles=super_admin,hiring_manager,interviewer,client_admin,client_reviewer \
+              --default-roles=super_admin \
+              --disable-mfa --disable-totp-login --disable-email-otp \
+              --custom-access-token-script='function(user, tokenPayload){ var d = tokenPayload; d.email = user.email; d.given_name = user.given_name; d.family_name = user.family_name; return d; }' \
+              --allowed-origins=http://localhost:3000,http://localhost:8080 \
+              --redirect-uris=http://localhost:3000/api/auth/callback \
+              --app-cookie-secure=false --admin-cookie-secure=false \
+              --app-cookie-same-site=lax
+          for i in $(seq 1 60); do
+            curl -sf http://localhost:8090/.well-known/jwks.json >/dev/null && break
+            sleep 2
+          done
+          curl -sf http://localhost:8090/.well-known/jwks.json >/dev/null
+
+      # Both packages read their own .env; the E2E run needs the provider's
+      # address in both, and the admin secret in the frontend's.
+      - name: Point both packages at it
+        run: |
+          cat >> backend/.env <<'ENVEOF'
+          OIDC_JWKS_URL=http://localhost:8090/.well-known/jwks.json
+          OIDC_ISSUER=http://localhost:8090
+          DATABASE_URL=postgresql://openats_app:openats_app@localhost:5433/openats_test
+          MIGRATION_DATABASE_URL=postgresql://openats:openats@localhost:5433/openats_test
+          REDIS_URL=redis://localhost:6379
+          ENCRYPTION_KEY=BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc=
+          FRONTEND_URL=http://localhost:3000
+          # Send through the Mailpit service rather than at Resend, which has
+          # only a dummy key here. Without this a spec that sends mail fails on
+          # the send — correctly, since nothing records a message that did not
+          # leave — and looks like a bug in the feature rather than a gap in
+          # the environment. That is exactly how it failed the first time.
+          SMTP_HOST=localhost
+          SMTP_PORT=1025
+          # Dummy values. The server validates these at boot, and CI
+          # deliberately has no secrets — nothing the E2E specs touch reaches
+          # any of them; mail goes to Mailpit above.
+          R2_ENDPOINT=http://localhost:9000
+          R2_ACCESS_KEY_ID=ci
+          R2_SECRET_ACCESS_KEY=ci
+          R2_BUCKET_NAME=ci
+          R2_PUBLIC_URL=http://localhost:9000/ci
+          RESEND_API_KEY=re_test_000000000000000000000000
+          RESEND_FROM_EMAIL=ci@example.test
+          GEMINI_API_KEY=ci-gemini-key
+          ENVEOF
+          cat >> frontend/.env <<'ENVEOF'
+          NEXT_PUBLIC_AUTHORIZER_URL=http://localhost:8090
+          NEXT_PUBLIC_AUTHORIZER_CLIENT_ID=11111111-1111-1111-1111-111111111111
+          AUTHORIZER_ADMIN_SECRET=ci-admin-secret
+          OPENATS_API_URL=http://localhost:8080
+          NEXT_PUBLIC_API_URL=http://localhost:8080
+          NEXT_PUBLIC_APP_URL=http://localhost:3000
+          FRONTEND_URL=http://localhost:3000
+          ENVEOF
 
       - name: Install Playwright browsers
         run: pnpm exec playwright install --with-deps chromium
