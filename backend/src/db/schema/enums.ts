@@ -102,6 +102,16 @@ export const meetingProvider = pgEnum("meeting_provider", ["google_meet"]);
 // folded into `meeting_provider`: a meeting provider is asked to create a
 // meeting, a channel is asked to carry a conversation, and the two share no
 // operations at all.
+// How a bulk candidate import is getting on. `failed` is the run itself
+// falling over, not rows being rejected — a file where every row is invalid
+// still finishes `done`, with a report saying so.
+export const importStatus = pgEnum("import_status", [
+  "queued",
+  "running",
+  "done",
+  "failed",
+]);
+
 export const messagingChannel = pgEnum("messaging_channel", [
   "whatsapp",
   "telegram",

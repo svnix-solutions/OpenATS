@@ -108,7 +108,14 @@ function splitName(full: string): { firstName: string; lastName: string } {
 export async function importCandidates(
   jobId: number,
   csv: string,
-  { dryRun }: { dryRun: boolean },
+  {
+    dryRun,
+    onProgress,
+  }: {
+    dryRun: boolean;
+    /** Called as rows are handled, so a long run can be watched. */
+    onProgress?: (processed: number, total: number) => Promise<void>;
+  },
 ): Promise<ImportReport> {
   const parsed = parse(csv, {
     columns: (header: string[]) =>
@@ -125,8 +132,19 @@ export async function importCandidates(
   // second as "already on this job" once the first has gone in.
   const seen = new Set<string>();
 
-  for (const [index, raw] of parsed.entries()) {
-    const line = index + 2; // +1 for zero-based, +1 for the header row.
+  /**
+   * One row's outcome, including the write.
+   *
+   * Extracted so the caller reports progress exactly once per row. It used to
+   * be a loop of early `continue`s with the progress call at the bottom, which
+   * meant a skipped row never counted — a file of a thousand rows where nine
+   * hundred were duplicates reported reaching a hundred and then stopped,
+   * while finishing perfectly well.
+   */
+  async function classify(
+    raw: Record<string, string>,
+    line: number,
+  ): Promise<ImportRow> {
     const email = (raw.email ?? "").trim().toLowerCase();
 
     let firstName = (raw.firstName ?? "").trim();
@@ -135,30 +153,20 @@ export async function importCandidates(
       ({ firstName, lastName } = splitName(raw.fullName));
     }
 
-    const base = { line, email: email || null, firstName: firstName || null, lastName: lastName || null };
+    const base = {
+      line,
+      email: email || null,
+      firstName: firstName || null,
+      lastName: lastName || null,
+    };
 
-    if (!email) {
-      rows.push({ ...base, outcome: "missing_email" });
-      continue;
-    }
-    if (!EMAIL.test(email)) {
-      rows.push({ ...base, outcome: "invalid_email" });
-      continue;
-    }
-    if (!firstName) {
-      rows.push({ ...base, outcome: "missing_name" });
-      continue;
-    }
-    if (seen.has(email)) {
-      rows.push({ ...base, outcome: "duplicate_in_file" });
-      continue;
-    }
+    if (!email) return { ...base, outcome: "missing_email" };
+    if (!EMAIL.test(email)) return { ...base, outcome: "invalid_email" };
+    if (!firstName) return { ...base, outcome: "missing_name" };
+    if (seen.has(email)) return { ...base, outcome: "duplicate_in_file" };
     seen.add(email);
 
-    if (dryRun) {
-      rows.push({ ...base, outcome: "would_import" });
-      continue;
-    }
+    if (dryRun) return { ...base, outcome: "would_import" };
 
     try {
       await candidateService.apply(jobId, {
@@ -170,15 +178,21 @@ export async function importCandidates(
         // Never. A spreadsheet cannot consent on someone's behalf.
         messagingOptIn: false,
       });
-      rows.push({ ...base, outcome: "imported" });
+      return { ...base, outcome: "imported" };
     } catch (error) {
       if (error instanceof DuplicateApplicationError) {
         // Not a failure. It is what a corrected file re-uploaded looks like.
-        rows.push({ ...base, outcome: "already_on_job" });
-        continue;
+        return { ...base, outcome: "already_on_job" };
       }
-      rows.push({ ...base, outcome: "failed", detail: getErrorMessage(error) });
+      return { ...base, outcome: "failed", detail: getErrorMessage(error) };
     }
+  }
+
+  for (const [index, raw] of parsed.entries()) {
+    // +1 for zero-based, +1 for the header row, so it matches the line a
+    // spreadsheet shows.
+    rows.push(await classify(raw, index + 2));
+    if (onProgress) await onProgress(rows.length, parsed.length);
   }
 
   const counts: Record<string, number> = {};

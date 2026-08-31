@@ -1,10 +1,11 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useAddCandidate } from "@/hooks/queries/use-candidates";
 import {
   useImportCandidates,
+  useImportRun,
   type ImportReport,
   type ImportRow,
 } from "@/hooks/queries/use-candidate-import";
@@ -53,6 +54,14 @@ export function AddCandidateDialog({
   const [saving, setSaving] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const add = useAddCandidate();
+
+  // Stable, so the panel's effect does not see a new function on every
+  // render. It is idempotent regardless, but an identity that changes
+  // constantly makes every dependency array a judgement call.
+  const handleImported = useCallback(() => {
+    onClose();
+    onAdded();
+  }, [onClose, onAdded]);
 
   const ready = jobId && firstName.trim() && lastName.trim() && email.trim();
 
@@ -153,13 +162,7 @@ export function AddCandidateDialog({
           </div>
 
           {mode === "many" && (
-            <ImportPanel
-              jobId={jobId}
-              onImported={() => {
-                onClose();
-                onAdded();
-              }}
-            />
+            <ImportPanel jobId={jobId} onImported={handleImported} />
           )}
 
           {mode === "one" && (
@@ -254,26 +257,55 @@ function ImportPanel({
   const importer = useImportCandidates();
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<ImportReport | null>(null);
+  const [runId, setRunId] = useState<number | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   async function run(dryRun: boolean) {
     if (!file || !jobId) return;
     try {
-      const report = await importer.mutateAsync({
+      const result = await importer.mutateAsync({
         jobId: Number(jobId),
         file,
         dryRun,
       });
+
       if (dryRun) {
-        setPreview(report);
+        setPreview(result as ImportReport);
         return;
       }
-      toast.success(`Imported ${report.counts.imported ?? 0} candidates`);
-      onImported();
+
+      // The real run is a job, so this is an id rather than a report. The
+      // work outlives this dialog: closing it does not cancel the import, it
+      // just stops watching.
+      setRunId((result as { importId: number }).importId);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "The import failed");
     }
   }
+
+  const { data } = useImportRun(runId);
+  const live = data?.data;
+
+  /**
+   * Which run has already been announced.
+   *
+   * The effect has to be safe to run more than once, because the poll keeps
+   * returning the same finished row and `onImported` is a new function on
+   * every render of the parent. Listing an honest dependency array without
+   * this would fire a toast per render; leaving the array short would be the
+   * same bug hidden behind a lint warning.
+   *
+   * A ref rather than state: recording that something has been announced is
+   * not something to re-render for.
+   */
+  const announced = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (live?.status !== "done" || announced.current === live.id) return;
+    announced.current = live.id;
+    toast.success(`Imported ${live.counts.imported ?? 0} candidates`);
+    onImported();
+  }, [live, onImported]);
 
   const problems = preview?.rows.filter(
     (r) => r.outcome !== "would_import" && r.outcome !== "imported",
@@ -329,6 +361,22 @@ function ImportPanel({
         </div>
       )}
 
+      {live && live.status !== "done" && (
+        <div className="space-y-1 rounded-md border border-slate-200 p-3 dark:border-neutral-800">
+          <p className="text-sm font-semibold text-slate-800 dark:text-neutral-200">
+            {live.status === "queued"
+              ? "Queued…"
+              : `Importing ${live.processed} of ${live.total || "…"}`}
+          </p>
+          <p className="text-xs text-slate-400">
+            This runs in the background. Closing this does not stop it.
+          </p>
+          {live.status === "failed" && (
+            <p className="text-xs text-red-600">{live.error}</p>
+          )}
+        </div>
+      )}
+
       <div className="flex justify-end gap-2">
         <Button
           variant="ghost"
@@ -340,7 +388,7 @@ function ImportPanel({
         <Button
           // Only after a preview: importing several hundred people is not
           // something to do without having seen what it will do.
-          disabled={!preview || importer.isPending}
+          disabled={!preview || importer.isPending || runId !== null}
           onClick={() => run(false)}
         >
           Import {preview?.counts.would_import ?? 0}
