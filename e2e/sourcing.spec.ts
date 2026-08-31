@@ -36,20 +36,22 @@ test.describe("adding a candidate by hand", () => {
 
     const email = `sourced.${Date.now()}@example.test`;
 
-    await page.getByRole("button", { name: /Add candidate/i }).first().click();
+    // A page, like /jobs/new — not a dialog. The button lives in the filters
+    // bar next to Clear All, exactly where Create New Job does on the jobs
+    // page.
+    await page.getByText("Add Candidate").first().click();
+    await page.waitForURL("**/candidates/new");
+    await page.waitForLoadState("networkidle");
+
     await page.selectOption("#add-job", { label: world.jobTitle });
     await page.getByLabel("First name").fill("Hand");
     await page.getByLabel("Last name").fill("Added");
     await page.getByLabel("Email").fill(email);
     await page.getByRole("button", { name: /Add to pipeline/i }).click();
 
-    // The dialog closing is the claim that the request succeeded; the row
+    // Returning to the list is the claim that the request succeeded; the row
     // appearing is the claim that it did what it said.
-    await expect(
-      page.getByRole("button", { name: /Add to pipeline/i }),
-    ).toHaveCount(0, { timeout: 15_000 });
-
-    await page.reload();
+    await page.waitForURL("**/candidates", { timeout: 15_000 });
     await page.waitForLoadState("networkidle");
     await expect(page.getByText("Hand Added").first()).toBeVisible({
       timeout: 15_000,
@@ -66,7 +68,8 @@ test.describe("adding a candidate by hand", () => {
     const email = `twice.${Date.now()}@example.test`;
 
     for (const attempt of [1, 2]) {
-      await page.getByRole("button", { name: /Add candidate/i }).first().click();
+      await page.goto("/candidates/new");
+      await page.waitForLoadState("networkidle");
       await page.selectOption("#add-job", { label: world.jobTitle });
       await page.getByLabel("First name").fill("Twice");
       await page.getByLabel("Last name").fill("Over");
@@ -98,7 +101,8 @@ test.describe("importing a list", () => {
       `Cher,cher.${stamp}@example.test\r\n` +
       "Broken Row,not-an-email\r\n";
 
-    await page.getByRole("button", { name: /Add candidate/i }).first().click();
+    await page.goto("/candidates/new");
+    await page.waitForLoadState("networkidle");
     await page.getByRole("button", { name: /Import a list/i }).click();
     await page.selectOption("#add-job", { label: world.jobTitle });
 
@@ -120,8 +124,7 @@ test.describe("importing a list", () => {
 
     // A dry run writes nothing. The import button exists but has not been
     // pressed, and the people are not in the list.
-    await page.keyboard.press("Escape");
-    await page.reload();
+    await page.goto("/candidates");
     await page.waitForLoadState("networkidle");
     await expect(page.getByText("Alan Turing")).toHaveCount(0);
   });
@@ -131,7 +134,8 @@ test.describe("importing a list", () => {
     await page.goto("/candidates");
     await page.waitForLoadState("networkidle");
 
-    await page.getByRole("button", { name: /Add candidate/i }).first().click();
+    await page.goto("/candidates/new");
+    await page.waitForLoadState("networkidle");
     await page.getByRole("button", { name: /Import a list/i }).click();
     await page.selectOption("#add-job", { label: world.jobTitle });
     await page.locator('input[type="file"]').first().setInputFiles({

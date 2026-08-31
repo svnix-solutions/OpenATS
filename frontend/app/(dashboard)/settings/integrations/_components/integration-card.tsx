@@ -10,27 +10,41 @@ export type Integration = {
   provider?: "google_meet";
 };
 
+/**
+ * One integration's card.
+ *
+ * `logo` is an image in /public/integrations; `icon` is anything else drawn in
+ * the same square. The messaging channels have no logo file to point at, and
+ * the alternative to this was a second card component that looked almost but
+ * not quite the same on the same page.
+ */
 export function IntegrationCardShell({
   name,
   logo,
+  icon,
   description,
   children,
 }: {
   name: string;
-  logo: string;
+  logo?: string;
+  icon?: ReactNode;
   description: string;
   children: ReactNode;
 }) {
   return (
     <div className="flex flex-col gap-4 rounded-md border border-slate-300 dark:border-neutral-700 bg-white dark:bg-neutral-900 p-5">
       <div className="h-14 w-14 rounded-md border border-slate-200 dark:border-neutral-800 bg-slate-50 dark:bg-neutral-800 flex items-center justify-center overflow-hidden shrink-0">
-        <Image
-          src={logo}
-          alt={`${name} logo`}
-          width={36}
-          height={36}
-          className="object-contain"
-        />
+        {logo ? (
+          <Image
+            src={logo}
+            alt={`${name} logo`}
+            width={36}
+            height={36}
+            className="object-contain"
+          />
+        ) : (
+          icon
+        )}
       </div>
 
       <div className="flex-1">

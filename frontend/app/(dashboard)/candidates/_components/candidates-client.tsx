@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
+import { useCurrentUser } from "@/hooks/queries/use-user";
 import {
   useBulkDeleteCandidates,
   useCandidates,
@@ -11,8 +12,6 @@ import {
 import { useJobs } from "@/hooks/queries/use-jobs";
 import type { Candidate } from "@/types";
 import { CandidateFilters } from "./candidate-filters";
-import { AddCandidateDialog } from "./add-candidate-dialog";
-import { Button } from "@/components/ui/button";
 import { CandidatesTable } from "./candidates-table";
 import { CandidateEditDialog } from "./candidate-edit-dialog";
 import { CandidateDeleteDialog } from "./candidate-delete-dialog";
@@ -28,12 +27,15 @@ const PAGE_LIMIT = 15;
 
 export default function CandidatesPageClient() {
   const router = useRouter();
+  // The same gate as Create New Job on the jobs page.
+  const { data: currentUserRes } = useCurrentUser();
+  const role = currentUserRes?.data?.role;
+  const isManager = role === "super_admin" || role === "hiring_manager";
 
   // ── Filter State ───────────────────────────────────────────
   const [selectedJobId, setSelectedJobId] = useState<number | undefined>();
   // Null until a row is opened: the panel fetches nothing before that.
   const [panelCandidateId, setPanelCandidateId] = useState<number | null>(null);
-  const [addOpen, setAddOpen] = useState(false);
   const [selectedStatus, setSelectedStatus] =
     useState<CandidateStatusFilter>("all");
   const [search, setSearch] = useState("");
@@ -164,23 +166,12 @@ export default function CandidatesPageClient() {
         <h1 className="text-2xl font-medium text-slate-900 dark:text-neutral-100 leading-none">
           Manage Candidates
         </h1>
-        {/*
-          Sourcing: someone the recruiter already knew about, who did not
-          apply. Recorded as such rather than counted as an applicant.
-        */}
-        <Button onClick={() => setAddOpen(true)}>Add candidate</Button>
       </div>
-
-      <AddCandidateDialog
-        open={addOpen}
-        onClose={() => setAddOpen(false)}
-        jobs={jobs}
-        onAdded={() => router.refresh()}
-      />
 
       {/* Fixed filters bar — never scrolls away */}
       <div className="flex-shrink-0">
         <CandidateFilters
+          isManager={isManager}
           search={search}
           onSearchChange={handleSearchChange}
           selectedJobId={selectedJobId}
