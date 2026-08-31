@@ -79,6 +79,9 @@ export function JobApplicationForm({
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
   const [phoneNumber, setPhoneNumber] = useState("");
+  // Unticked by default, and it must stay that way: a pre-ticked box is not
+  // consent, and WhatsApp enforces opt-in through its quality rating.
+  const [messagingOptIn, setMessagingOptIn] = useState(false);
   const [answers, setAnswers] = useState<Record<number, Answer>>({});
 
   const [resumeFile, setResumeFile] = useState<File | null>(null);
@@ -159,6 +162,7 @@ export function JobApplicationForm({
           lastName,
           email,
           phone: phoneNumber ? phoneNumber : undefined,
+          messagingOptIn: messagingOptIn && phoneNumber.trim().length > 0,
           resumeUrl: resumeUrl ?? undefined,
           customAnswers,
         }),
@@ -244,12 +248,14 @@ export function JobApplicationForm({
           ) : (
             <form className="space-y-6" onSubmit={handleSubmit}>
               <div className="space-y-2">
-                <Label className="text-slate-700 dark:text-neutral-300 text-sm">
+                <Label htmlFor="apply-first-name" className="text-slate-700 dark:text-neutral-300 text-sm">
                   Name <span className="text-red-500">*</span>
                 </Label>
                 <div className="grid grid-cols-2 gap-3">
                   <Input
+                    id="apply-first-name"
                     required
+                    aria-label="First name"
                     placeholder="First name"
                     value={firstName}
                     onChange={(e) => setFirstName(e.target.value)}
@@ -267,10 +273,11 @@ export function JobApplicationForm({
 
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-2">
-                  <Label className="text-slate-700 dark:text-neutral-300 text-sm">
+                  <Label htmlFor="apply-email" className="text-slate-700 dark:text-neutral-300 text-sm">
                     Email <span className="text-red-500">*</span>
                   </Label>
                   <Input
+                    id="apply-email"
                     type="email"
                     required
                     placeholder="example@gmail.com"
@@ -294,10 +301,11 @@ export function JobApplicationForm({
                 </div>
 
                 <div className="space-y-2">
-                  <Label className="text-slate-700 dark:text-neutral-300 text-sm">
+                  <Label htmlFor="apply-phone" className="text-slate-700 dark:text-neutral-300 text-sm">
                     Phone
                   </Label>
                   <Input
+                    id="apply-phone"
                     value={phoneNumber}
                     onChange={(e) => setPhoneNumber(e.target.value)}
                     placeholder="Add country code eg :+94"
@@ -306,11 +314,39 @@ export function JobApplicationForm({
                 </div>
               </div>
 
+              {/*
+                Consent, asked for rather than assumed. A phone number is how
+                someone is called about an interview; opening a WhatsApp thread
+                on it is a different permission, and the one WhatsApp's opt-in
+                rule exists to require.
+
+                Only offered once there is a number to attach it to, so the
+                box cannot be ticked against nothing.
+              */}
+              {phoneNumber.trim().length > 0 && (
+                <label className="flex cursor-pointer items-start gap-2.5 rounded-md border border-slate-200 p-3 dark:border-neutral-700">
+                  <input
+                    type="checkbox"
+                    checked={messagingOptIn}
+                    onChange={(e) => setMessagingOptIn(e.target.checked)}
+                    className="mt-0.5 size-4 shrink-0 cursor-pointer"
+                  />
+                  <span className="text-sm text-slate-600 dark:text-neutral-300">
+                    You can message me on WhatsApp about this application.
+                    <span className="mt-0.5 block text-xs text-slate-400">
+                      Include your country code above. You can ask us to stop at
+                      any time.
+                    </span>
+                  </span>
+                </label>
+              )}
+
               <div className="space-y-2">
-                <Label className="text-slate-700 dark:text-neutral-300 text-sm">
+                <Label htmlFor="apply-resume" className="text-slate-700 dark:text-neutral-300 text-sm">
                   Resume
                 </Label>
                 <input
+                  id="apply-resume"
                   ref={fileInputRef}
                   type="file"
                   accept=".pdf,.doc,.docx"

@@ -28,6 +28,9 @@ const candidateApplySchema = z.object({
   lastName: z.string().min(1, "Last name is required").max(100),
   email: z.string().email("Invalid email address").max(255),
   phone: z.string().max(50).optional().nullable(),
+  // Consent to be messaged on that number. Absent means no — an application
+  // form that omits the checkbox must not opt anybody in.
+  messagingOptIn: z.coerce.boolean().optional(),
   resumeUrl: z
     .string()
     .url("Invalid resume URL")
