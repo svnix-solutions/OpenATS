@@ -24,6 +24,8 @@ import {
 import { assessmentExecutionService } from "../assessment-execution/assessment-execution.service";
 import { candidateActivityService } from "./candidate-activity.service";
 import { socketService } from "../../shared/services/socket.service";
+import { candidateChannels } from "../../db/schema/messaging";
+import { toChannelAddress } from "../../shared/messaging/address";
 import { rejectionService } from "../rejection/rejection.service";
 import { escapeHtml, mailService } from "../../shared/services/mail.service";
 import { cleanObject as clean } from "../../utils/object.utils";
@@ -61,6 +63,15 @@ export interface CustomAnswerInput {
 }
 
 export interface CandidateApplyInput {
+  /**
+   * Whether they agreed to be messaged on the number they gave.
+   *
+   * A separate field rather than inferred from the phone being present: a
+   * phone number is how you call someone about an interview, and treating it
+   * as permission to open a WhatsApp thread is the assumption Meta's opt-in
+   * rule exists to prevent.
+   */
+  messagingOptIn?: boolean;
   firstName: string;
   lastName: string;
   email: string;
@@ -198,7 +209,7 @@ async function sendApplicationConfirmationEmail(
 
 export const candidateService = {
   async apply(jobId: number, input: CandidateApplyInput) {
-    const { customAnswers, ...rest } = input;
+    const { customAnswers, messagingOptIn, ...rest } = input;
     const normalizedEmail = rest.email.trim().toLowerCase();
     const candidateData = { ...rest, email: normalizedEmail };
 
@@ -281,6 +292,28 @@ export const candidateService = {
               );
             }
           }
+        }
+
+        // Consent, recorded where it was given. Inside the transaction, so an
+        // application that rolls back does not leave behind a permission to
+        // message someone about it.
+        //
+        // Keyed on the person, and left alone if they already have one: a
+        // second application is not a second consent, and it must not
+        // overwrite an opt-out from the first.
+        const address = messagingOptIn ? toChannelAddress(rest.phone) : null;
+        if (address) {
+          await tx
+            .insert(candidateChannels)
+            .values({
+              candidateId: candidate.id,
+              channel: "whatsapp",
+              externalId: address,
+              displayName: `${candidate.firstName} ${candidate.lastName}`.trim(),
+              optedInAt: new Date(),
+              optInSource: `application to job ${jobId}`,
+            })
+            .onConflictDoNothing();
         }
 
         // `id` is the submission, matching what every other candidate route
