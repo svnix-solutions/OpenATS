@@ -8,6 +8,7 @@ import {
   OptedOutError,
   messagingService,
   personForApplication,
+  sendTemplate,
 } from "./messaging.service";
 import { eq } from "drizzle-orm";
 import { db } from "../../db";
@@ -15,6 +16,8 @@ import { candidates } from "../../db/schema/candidates";
 import { candidateChannels } from "../../db/schema/messaging";
 import { toChannelAddress } from "../../shared/messaging/address";
 import { requestTelegramResolve } from "../../queues/telegram-send/queue";
+import { getCredentials } from "../../shared/messaging/connection.service";
+import { whatsappProvider } from "../../shared/messaging/whatsapp.provider";
 import logger from "../../utils/logger";
 import { getErrorMessage } from "../../utils/error.utils";
 
@@ -142,6 +145,75 @@ export const findOnTelegram = async (req: Request, res: Response) => {
   } catch (error) {
     logger.error(`Failed to look a candidate up on Telegram: ${getErrorMessage(error)}`);
     return res.status(500).json({ error: "Could not ask Telegram" });
+  }
+};
+
+const templateSchema = z.object({
+  name: z.string().trim().min(1),
+  language: z.string().trim().min(2),
+  body: z.string(),
+  parameters: z.array(z.string()).max(20).default([]),
+});
+
+/**
+ * The approved templates this organization can send.
+ *
+ * Read from Meta each time rather than cached. A template's status changes on
+ * Meta's side — approved, paused for quality, rejected — and a cached list
+ * offers choices that fail at the point of sending, which is the moment it
+ * matters most.
+ */
+export const listTemplates = async (_req: Request, res: Response) => {
+  try {
+    const credentials = await getCredentials("whatsapp");
+    if (!credentials) {
+      return res
+        .status(409)
+        .json({ error: "WhatsApp is not connected", code: "channel_not_connected" });
+    }
+
+    const templates = await whatsappProvider.listTemplates(
+      JSON.stringify(credentials),
+    );
+    return res.status(200).json({ data: templates });
+  } catch (error) {
+    const message = getErrorMessage(error);
+    logger.error(`Failed to list WhatsApp templates: ${message}`);
+    // Meta's own message, which says whether the token lacks a permission or
+    // the business account id is wrong — both fixable, neither guessable.
+    return res.status(502).json({ error: message });
+  }
+};
+
+export const sendTemplateMessage = async (req: Request, res: Response) => {
+  try {
+    const candidateId = await resolvePerson(req, res);
+    if (candidateId === null) return;
+
+    const parsed = templateSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res
+        .status(400)
+        .json({ error: parsed.error.issues[0]?.message ?? "Invalid request" });
+    }
+
+    const message = await sendTemplate(candidateId, parsed.data, req.user!.id);
+    return res.status(201).json({ data: message });
+  } catch (error) {
+    if (error instanceof OptedOutError) {
+      return res.status(409).json({ error: error.message, code: "opted_out" });
+    }
+    if (error instanceof NoChannelError) {
+      return res.status(409).json({ error: error.message, code: "no_channel" });
+    }
+    if (error instanceof ChannelNotConnectedError) {
+      return res
+        .status(409)
+        .json({ error: error.message, code: "channel_not_connected" });
+    }
+    const message = getErrorMessage(error);
+    logger.error(`Failed to send a template: ${message}`);
+    return res.status(502).json({ error: message });
   }
 };
 

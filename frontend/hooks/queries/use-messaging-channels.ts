@@ -26,7 +26,33 @@ export type ConnectWhatsappInput = {
   phoneNumberId: string;
   accessToken: string;
   appSecret: string;
+  /** Only needed to list templates; sending and receiving work without it. */
+  businessAccountId?: string;
 };
+
+export type MessageTemplate = {
+  name: string;
+  language: string;
+  category: string | null;
+  body: string;
+  parameterCount: number;
+};
+
+/**
+ * The approved templates, read fresh.
+ *
+ * Not cached: Meta changes a template's status on its side — paused for
+ * quality, rejected — and a stale list offers choices that fail at the moment
+ * of sending.
+ */
+export function useMessageTemplates(enabled: boolean) {
+  return useQuery({
+    queryKey: ["message-templates"],
+    queryFn: () => serverFetch<{ data: MessageTemplate[] }>("/messaging/templates"),
+    enabled,
+    staleTime: 0,
+  });
+}
 
 export type ConnectWhatsappResult = {
   accountLabel: string;

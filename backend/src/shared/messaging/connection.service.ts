@@ -23,6 +23,15 @@ export type WhatsAppCredentials = {
   webhookVerifyToken: string;
   /** Signs every webhook POST; without it any stranger can post one. */
   appSecret: string;
+  /**
+   * The WhatsApp Business Account the number belongs to.
+   *
+   * Only needed to list approved templates, which is a different Graph node
+   * from the phone number. Optional so a connection made before templates
+   * existed keeps working — without it the template picker says what is
+   * missing rather than showing an empty list.
+   */
+  businessAccountId?: string;
 };
 
 export type TelegramCredentials = {

@@ -26,6 +26,33 @@ type GraphError = {
   error?: { message?: string; code?: number; error_subcode?: number };
 };
 
+/**
+ * A template as Meta describes it.
+ *
+ * `components` is where the parameters hide: the BODY component's text carries
+ * `{{1}}`, `{{2}}` placeholders, and how many there are is the only thing that
+ * says what a sender must supply. Meta does not state the count anywhere else.
+ */
+type TemplateResponse = GraphError & {
+  data?: {
+    name: string;
+    status: string;
+    language: string;
+    category?: string;
+    components?: { type: string; text?: string }[];
+  }[];
+};
+
+export type WhatsAppTemplate = {
+  name: string;
+  language: string;
+  category: string | null;
+  /** The body as approved, placeholders and all, so a person can read it. */
+  body: string;
+  /** How many `{{n}}` it expects. Filling the wrong number is refused by Meta. */
+  parameterCount: number;
+};
+
 type SendResponse = GraphError & {
   messages?: { id: string }[];
 };
@@ -65,6 +92,16 @@ async function post(
   return id;
 }
 
+/** `{{1}} … {{3}}` → 3. Counting distinct indices, not occurrences: a
+ * placeholder may legitimately appear twice. */
+function countParameters(text: string): number {
+  const seen = new Set<string>();
+  for (const match of text.matchAll(/\{\{\s*(\d+)\s*\}\}/g)) {
+    if (match[1]) seen.add(match[1]);
+  }
+  return seen.size;
+}
+
 export const whatsappProvider: WebhookChannelClient = {
   channel: "whatsapp",
   inbound: "webhook",
@@ -78,6 +115,90 @@ export const whatsappProvider: WebhookChannelClient = {
       type: "text",
       text: { preview_url: false, body },
     });
+    return { externalId };
+  },
+
+  /**
+   * The templates Meta has approved, which are the only thing that reaches a
+   * candidate outside the 24-hour window.
+   *
+   * Approved only. A pending or rejected template is not a choice a recruiter
+   * can act on, and offering one produces a send that fails at the provider
+   * for a reason the screen cannot explain.
+   */
+  async listTemplates(credentialsJson: string): Promise<WhatsAppTemplate[]> {
+    const credentials = JSON.parse(credentialsJson) as WhatsAppCredentials;
+    if (!credentials.businessAccountId) {
+      throw new Error(
+        "This WhatsApp connection has no business account id, so its templates cannot be listed. Reconnect and supply one.",
+      );
+    }
+
+    const url = new URL(
+      `${GRAPH}/${credentials.businessAccountId}/message_templates`,
+    );
+    url.searchParams.set("status", "APPROVED");
+    url.searchParams.set("limit", "100");
+
+    const res = await fetch(url, {
+      headers: { Authorization: `Bearer ${credentials.accessToken}` },
+    });
+    const json = (await res.json().catch(() => ({}))) as TemplateResponse;
+
+    if (!res.ok || json.error) {
+      throw new Error(
+        json.error?.message ??
+          `WhatsApp refused to list templates (HTTP ${res.status})`,
+      );
+    }
+
+    return (json.data ?? []).map((t) => {
+      const body = t.components?.find((c) => c.type === "BODY")?.text ?? "";
+      return {
+        name: t.name,
+        language: t.language,
+        category: t.category ?? null,
+        body,
+        parameterCount: countParameters(body),
+      };
+    });
+  },
+
+  /**
+   * Sends an approved template, which is how a conversation is opened.
+   *
+   * Parameters are positional and Meta counts them: too few or too many is a
+   * rejection, not a best effort. The caller is given the count from
+   * `listTemplates` for exactly this reason.
+   */
+  async sendTemplate(
+    credentialsJson: string,
+    to: string,
+    template: { name: string; language: string; parameters: string[] },
+  ): Promise<{ externalId: string }> {
+    const credentials = JSON.parse(credentialsJson) as WhatsAppCredentials;
+
+    const externalId = await post(credentials, {
+      messaging_product: "whatsapp",
+      to,
+      type: "template",
+      template: {
+        name: template.name,
+        language: { code: template.language },
+        ...(template.parameters.length > 0 && {
+          components: [
+            {
+              type: "body",
+              parameters: template.parameters.map((text) => ({
+                type: "text",
+                text,
+              })),
+            },
+          ],
+        }),
+      },
+    });
+
     return { externalId };
   },
 

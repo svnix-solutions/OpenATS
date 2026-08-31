@@ -24,6 +24,8 @@ vi.mock("../../src/queues/telegram-send/queue", () => ({
     resolves.push(data);
   },
 }));
+const templatesSent: { name: string; parameters: string[] }[] = [];
+
 vi.mock("../../src/shared/messaging/whatsapp.provider", () => ({
   whatsappProvider: {
     channel: "whatsapp",
@@ -31,6 +33,14 @@ vi.mock("../../src/shared/messaging/whatsapp.provider", () => ({
     send: async (_c: string, to: string, body: string) => {
       sent.push({ to, body });
       return { externalId: `wamid.OUT${sent.length}` };
+    },
+    sendTemplate: async (
+      _c: string,
+      _to: string,
+      t: { name: string; parameters: string[] },
+    ) => {
+      templatesSent.push(t);
+      return { externalId: `wamid.TPL${templatesSent.length}` };
     },
   },
 }));
@@ -44,6 +54,7 @@ import { saveConnection } from "../../src/shared/messaging/connection.service";
 import {
   messagingService,
   personForApplication,
+  sendTemplate,
   NoChannelError,
   OptedOutError,
 } from "../../src/modules/messaging/messaging.service";
@@ -254,5 +265,45 @@ describe("applications and people", () => {
 
   itInOrg("refuses an interviewer a person from a job they are not on", async () => {
     expect(await canReadPerson(s.interviewer, s.personB1)).toBe(false);
+  });
+});
+
+describe("templates, for when the window is shut", () => {
+  itInOrg("sends one and records what the candidate actually received", async () => {
+    // personA1's window is closed by this point in the file — the inbound
+    // message was aged past 24 hours. A template is the only way through.
+    await expect(
+      messagingService.send(s.personA1, "whatsapp", "plain text", s.admin.id),
+    ).rejects.toBeInstanceOf(OutsideMessagingWindowError);
+
+    const stored = await sendTemplate(
+      s.personA1,
+      {
+        name: "interview_invite",
+        language: "en_US",
+        body: "Hi {{1}}, we would like to meet about {{2}}.",
+        parameters: ["Ada", "the Robotics role"],
+      },
+      s.admin.id,
+    );
+
+    // The rendered text, not the template name. Read six months later,
+    // "interview_invite" tells nobody what was said.
+    expect(stored?.body).toBe(
+      "Hi Ada, we would like to meet about the Robotics role.",
+    );
+    expect(stored?.direction).toBe("outbound");
+  });
+
+  itInOrg("still refuses someone who opted out", async () => {
+    // A template is not an exemption from consent. Meta enforces this through
+    // quality rating, and it is the right answer regardless.
+    await expect(
+      sendTemplate(
+        s.personA2,
+        { name: "x", language: "en_US", body: "hi", parameters: [] },
+        s.admin.id,
+      ),
+    ).rejects.toBeInstanceOf(OptedOutError);
   });
 });
