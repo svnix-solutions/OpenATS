@@ -2,6 +2,7 @@ import { Router } from "express";
 import multer from "multer";
 import {
   applyForJob,
+  getCandidateImport,
   importCandidatesToJob,
   getCandidates,
   getCandidateById,
@@ -56,6 +57,9 @@ router.post(
   requireJobRead("jobId"),
   applyForJob,
 );
+
+// Before "/:id", or an import id is read as a candidate id.
+router.get("/imports/:importId", requireManager, getCandidateImport);
 
 router.get("/", getCandidates);
 router.get("/jobs/:jobId", getCandidates);
