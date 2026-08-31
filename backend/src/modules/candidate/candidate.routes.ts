@@ -1,5 +1,6 @@
 import { Router } from "express";
 import multer from "multer";
+import { expensiveLimiter } from "../../middlewares/rate-limit.middleware";
 import {
   applyForJob,
   getCandidateImport,
@@ -47,6 +48,7 @@ router.post(
   denyClients,
   requireManager,
   requireJobRead("jobId"),
+  expensiveLimiter,
   upload.single("file"),
   importCandidatesToJob,
 );
@@ -69,14 +71,18 @@ router.get("/:id", requireCandidateRead("id"), getCandidateById);
 // requireCandidateRead, because messages hang off the person and that
 // middleware answers a question about one application.
 router.get("/:id/messages", getConversation);
-router.post("/:id/messages", sendMessage);
+// Every send leaves the building. `apiLimiter` allows a thousand of these in
+// fifteen minutes, which for WhatsApp is real money and a quality rating, and
+// for Telegram is an account that stops working. `expensiveLimiter` exists for
+// exactly this and was not on any of them.
+router.post("/:id/messages", expensiveLimiter, sendMessage);
 // One candidate, on purpose. Telegram limits accounts that look up numbers in
 // bulk, so this is never a sweep.
-router.post("/:id/messages/find-on-telegram", findOnTelegram);
+router.post("/:id/messages/find-on-telegram", expensiveLimiter, findOnTelegram);
 // A template is a different request from a message: different arguments,
 // different failures, and it is the only thing that reaches a candidate whose
 // WhatsApp window has shut.
-router.post("/:id/messages/template", sendTemplateMessage);
+router.post("/:id/messages/template", expensiveLimiter, sendTemplateMessage);
 router.patch("/:id", requireManager, upload.single("resume"), updateCandidateBasicDetails);
 router.put("/:id/stage", requireManager, moveCandidateStage);
 // Correspondence with a candidate: readable by anyone who may read the

@@ -81,6 +81,7 @@ The "do it properly" phase. None of this is urgent, all of it is what separates 
 | Fixed E2E running as a superuser | `playwright.config.ts` pointed the backend at the database owner, which bypasses row-level security even where FORCEd. Every E2E run had been unable to observe a tenancy failure | 🟢 Done |
 | End-to-end tests in CI | The Playwright suite ran nowhere, so nothing it covered was guarded on a pull request. CI now starts the identity provider and runs it, including authenticated dashboard specs | 🟢 Done |
 | Security review | Uploads, raw SQL, token generation, secret logging and CORS reviewed; the tenancy boundary was covered separately in #39. Found the `/public/*` origin check silently disabled. Socket.IO payloads, assessment execution and the dependency surface all reviewed since. | 🟡 In progress |
+| Rate limits on calls that leave the building | Every messaging endpoint sat under the generous per-user API budget rather than `expensiveLimiter`, which exists for exactly this: a thousand WhatsApp templates in fifteen minutes is real money and a quality rating, and a thousand Telegram contact lookups is a banned account. Bulk import is capped by rows, checked before anything is written | 🟢 Done |
 | Complete documentation | [DEPLOYMENT.md](DEPLOYMENT.md), [CONFIGURATION.md](CONFIGURATION.md), [UPGRADING.md](UPGRADING.md). Writing them found five frontend and one backend env var read by code but absent from `.env.example`. | 🟢 Done |
 
 ---

@@ -64,6 +64,40 @@ describe("a real run", () => {
   });
 });
 
+describe("a file that is too big", () => {
+  itInOrg("is refused with a number rather than accepted and gone quiet", async () => {
+    // The upload limit is ten megabytes, which is something like two hundred
+    // thousand rows — hours on a queue that runs one row at a time, with every
+    // other import behind it.
+    const huge = [
+      "Name,Email",
+      ...Array.from({ length: 5001 }, (_, i) => `P ${i},p${i}@huge.test`),
+    ].join("\n");
+
+    await expect(
+      importCandidates(s.jobA.id, huge, { dryRun: true }),
+    ).rejects.toThrow(/5001 rows and the limit is 5000/);
+  });
+
+  itInOrg("refuses before writing anything, not partway through", async () => {
+    const huge = [
+      "Name,Email",
+      ...Array.from({ length: 5001 }, (_, i) => `Q ${i},q${i}@huge.test`),
+    ].join("\n");
+
+    await expect(
+      importCandidates(s.jobA.id, huge, { dryRun: false }),
+    ).rejects.toThrow(/limit is 5000/);
+
+    const [any] = await db
+      .select({ id: candidates.id })
+      .from(candidates)
+      .where(eq(candidates.email, "q0@huge.test"))
+      .limit(1);
+    expect(any).toBeUndefined();
+  });
+});
+
 describe("the same list against a second job", () => {
   itInOrg("attaches the same people rather than creating new ones", async () => {
     // The workflow this exists for: import a list once, then put those same
