@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useAddCandidate } from "@/hooks/queries/use-candidates";
 import {
@@ -54,6 +54,14 @@ export function AddCandidateDialog({
   const [saving, setSaving] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const add = useAddCandidate();
+
+  // Stable, so the panel's effect does not see a new function on every
+  // render. It is idempotent regardless, but an identity that changes
+  // constantly makes every dependency array a judgement call.
+  const handleImported = useCallback(() => {
+    onClose();
+    onAdded();
+  }, [onClose, onAdded]);
 
   const ready = jobId && firstName.trim() && lastName.trim() && email.trim();
 
@@ -154,13 +162,7 @@ export function AddCandidateDialog({
           </div>
 
           {mode === "many" && (
-            <ImportPanel
-              jobId={jobId}
-              onImported={() => {
-                onClose();
-                onAdded();
-              }}
-            />
+            <ImportPanel jobId={jobId} onImported={handleImported} />
           )}
 
           {mode === "one" && (
@@ -281,16 +283,29 @@ function ImportPanel({
     }
   }
 
-  const run_ = useImportRun(runId);
-  const live = run_.data?.data;
+  const { data } = useImportRun(runId);
+  const live = data?.data;
 
-  // Reported once, when it lands. `finishedAt` is the edge to watch: the
-  // query keeps returning the same finished row afterwards.
+  /**
+   * Which run has already been announced.
+   *
+   * The effect has to be safe to run more than once, because the poll keeps
+   * returning the same finished row and `onImported` is a new function on
+   * every render of the parent. Listing an honest dependency array without
+   * this would fire a toast per render; leaving the array short would be the
+   * same bug hidden behind a lint warning.
+   *
+   * A ref rather than state: recording that something has been announced is
+   * not something to re-render for.
+   */
+  const announced = useRef<number | null>(null);
+
   useEffect(() => {
-    if (live?.status !== "done") return;
+    if (live?.status !== "done" || announced.current === live.id) return;
+    announced.current = live.id;
     toast.success(`Imported ${live.counts.imported ?? 0} candidates`);
     onImported();
-  }, [live?.status, live?.finishedAt]);
+  }, [live, onImported]);
 
   const problems = preview?.rows.filter(
     (r) => r.outcome !== "would_import" && r.outcome !== "imported",
