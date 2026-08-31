@@ -180,6 +180,14 @@ test.describe("the agency dashboard", () => {
   });
 
   test("every link on the dashboard goes somewhere", async ({ page }) => {
+    // Longer than the default thirty seconds, because the work is genuinely
+    // that long: this visits every dashboard page and then every link they
+    // render, and `next dev` compiles each route the first time it is asked
+    // for. It ran in about twenty seconds locally, which left it one slow
+    // compile from failing — and it did fail, on main, before this budget
+    // existed.
+    test.setTimeout(120_000);
+
     await signIn(page, operator);
 
     // Crawled rather than listed: the three dead links found so far were all
@@ -233,11 +241,16 @@ test.describe("the agency dashboard", () => {
       expect([...links]).toContain(expected);
     }
 
+    // Requested rather than navigated to. The assertion is about the status
+    // code, and it was already only reading that — but a `goto` also renders
+    // the page and runs its client bundle, which is most of the time spent
+    // and none of what is being checked. The context's cookies come along, so
+    // these are still authenticated requests.
     const broken: string[] = [];
     for (const href of links) {
-      const response = await page.goto(href);
-      if ((response?.status() ?? 0) >= 400) {
-        broken.push(`${href} → ${response?.status()}`);
+      const response = await page.request.get(href);
+      if (response.status() >= 400) {
+        broken.push(`${href} → ${response.status()}`);
       }
     }
     expect(broken).toEqual([]);
