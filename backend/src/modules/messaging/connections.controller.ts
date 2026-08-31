@@ -2,7 +2,7 @@ import { randomBytes } from "crypto";
 import type { Request, Response } from "express";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
-import { db } from "../../db";
+import { currentOrganizationId, db } from "../../db";
 import { messagingConnections } from "../../db/schema/messaging";
 import {
   disconnect,
@@ -10,6 +10,11 @@ import {
   saveConnection,
 } from "../../shared/messaging/connection.service";
 import { whatsappProvider } from "../../shared/messaging/whatsapp.provider";
+import {
+  completeLogin,
+  NoPendingLoginError,
+  startLogin,
+} from "../../shared/messaging/telegram-login.service";
 import logger from "../../utils/logger";
 import { getErrorMessage } from "../../utils/error.utils";
 
@@ -21,12 +26,37 @@ import { getErrorMessage } from "../../utils/error.utils";
  * disconnecting one silently ends every thread on it.
  */
 
+const telegramStartSchema = z.object({
+  // From my.telegram.org. Not secrets in the usual sense — they identify the
+  // application, not the account — but they are what the session is bound to,
+  // so they are stored with it rather than in the environment.
+  apiId: z.coerce.number().int().positive(),
+  apiHash: z.string().trim().min(8),
+  phoneNumber: z.string().trim().regex(/^\+[0-9]{6,20}$/, "Use international format, e.g. +49301234567"),
+});
+
+const telegramVerifySchema = z.object({
+  code: z.string().trim().min(3).max(16),
+  /** Only after Telegram has said the account has two-step verification. */
+  password: z.string().min(1).optional(),
+});
+
 const whatsappSchema = z.object({
   channel: z.literal("whatsapp"),
   phoneNumberId: z.string().trim().min(1),
   accessToken: z.string().trim().min(1),
   appSecret: z.string().trim().min(1),
 });
+
+/**
+ * The api_id and api_hash between the two steps of a login.
+ *
+ * Held here rather than sent again with the code, so a browser does not carry
+ * them twice. Keyed by organization for the same reason the pending client is:
+ * process-local state in a multi-tenant application is shared by every tenant
+ * unless its key says otherwise.
+ */
+const pendingCredentials = new Map<number, { apiId: number; apiHash: string }>();
 
 export const getMessagingConnections = async (_req: Request, res: Response) => {
   try {
@@ -117,6 +147,93 @@ export const connectWhatsapp = async (req: Request, res: Response) => {
   } catch (error) {
     logger.error(`Failed to connect WhatsApp: ${getErrorMessage(error)}`);
     return res.status(500).json({ error: "Failed to connect WhatsApp" });
+  }
+};
+
+/**
+ * Step one: ask Telegram to send a login code.
+ *
+ * The code arrives in the Telegram app on that account, not by SMS, whenever
+ * the account is signed in somewhere already. People wait for a text that
+ * never comes, so the screen says so.
+ */
+export const startTelegramLogin = async (req: Request, res: Response) => {
+  try {
+    const parsed = telegramStartSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res
+        .status(400)
+        .json({ error: parsed.error.issues[0]?.message ?? "Invalid request" });
+    }
+
+    pendingCredentials.set(currentOrganizationId()!, {
+      apiId: parsed.data.apiId,
+      apiHash: parsed.data.apiHash,
+    });
+
+    await startLogin(parsed.data.apiId, parsed.data.apiHash, parsed.data.phoneNumber);
+    return res.status(200).json({ data: { status: "code_sent" } });
+  } catch (error) {
+    const message = getErrorMessage(error);
+    logger.error(`Telegram login could not be started: ${message}`);
+    // Telegram's own message is the useful one here — a wrong api_hash, a
+    // number it refuses, a flood wait with the seconds in it.
+    return res.status(400).json({ error: message });
+  }
+};
+
+/**
+ * Step two: the code, and the password if there is one.
+ *
+ * "Needs password" is a normal answer, not a failure: Telegram only says an
+ * account has two-step verification after the code has been accepted, so it
+ * cannot be asked for up front.
+ */
+export const verifyTelegramLogin = async (req: Request, res: Response) => {
+  try {
+    const parsed = telegramVerifySchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res
+        .status(400)
+        .json({ error: parsed.error.issues[0]?.message ?? "Invalid request" });
+    }
+
+    const result = await completeLogin(parsed.data.code, parsed.data.password);
+    if (result.status === "needs_password") {
+      return res.status(200).json({ data: { status: "needs_password" } });
+    }
+
+    const orgId = currentOrganizationId()!;
+    const creds = pendingCredentials.get(orgId);
+    if (!creds) {
+      return res.status(409).json({
+        error: "That login expired. Start again.",
+        code: "no_pending_login",
+      });
+    }
+    pendingCredentials.delete(orgId);
+
+    await saveConnection(
+      "telegram",
+      { channel: "telegram", ...creds, session: result.session },
+      result.accountLabel,
+      req.user!.id,
+    );
+
+    // The bridge notices on its next scan; it is not started from here,
+    // because it lives in another container by design.
+    return res.status(201).json({
+      data: { status: "connected", accountLabel: result.accountLabel },
+    });
+  } catch (error) {
+    if (error instanceof NoPendingLoginError) {
+      return res
+        .status(409)
+        .json({ error: error.message, code: "no_pending_login" });
+    }
+    const message = getErrorMessage(error);
+    logger.error(`Telegram login could not be completed: ${message}`);
+    return res.status(400).json({ error: message });
   }
 };
 

@@ -11,6 +11,12 @@ import {
 import { decrypt } from "../integrations/crypto";
 import { markFailed } from "./connection.service";
 import type { TelegramCredentials } from "./connection.service";
+import { Worker } from "bullmq";
+import { createRedisConnection } from "../../config/redis";
+import {
+  TELEGRAM_SEND_QUEUE,
+  type TelegramSendJobData,
+} from "../../queues/telegram-send/queue";
 import logger from "../../utils/logger";
 import { getErrorMessage } from "../../utils/error.utils";
 
@@ -124,10 +130,59 @@ export async function startTelegramBridge() {
   await scan();
   const timer = setInterval(() => void scan(), RESCAN_MS);
 
+  /**
+   * Outbound, consumed here because this is the only process holding a
+   * session. The API writes the row and enqueues; nothing outside this
+   * container ever decrypts a Telegram session.
+   *
+   * Concurrency of one, deliberately. Telegram rate-limits an account that
+   * sends quickly, and the punishment is a flood wait measured in hours
+   * against the agency's own number.
+   */
+  const sender = new Worker<TelegramSendJobData>(
+    TELEGRAM_SEND_QUEUE,
+    async (job) => {
+      const { organizationId, messageId, peerId, body } = job.data;
+      const entry = live.get(organizationId);
+
+      if (!entry) {
+        // Not connected yet, or connected and then lost. Throwing puts it back
+        // for a retry rather than marking a message failed that nothing has
+        // actually tried to send.
+        throw new Error(
+          `Telegram is not connected for organization ${organizationId}`,
+        );
+      }
+
+      try {
+        const sent = await entry.client.sendMessage(peerId, { message: body });
+        await runInOrganization(organizationId, () =>
+          db
+            .update(candidateMessages)
+            .set({ delivery: "sent", externalId: sent.id.toString() })
+            .where(eq(candidateMessages.id, messageId)),
+        );
+      } catch (error) {
+        const message = getErrorMessage(error);
+        // Recorded on the message rather than only logged: the thread is where
+        // someone will look when a candidate says they never heard back.
+        await runInOrganization(organizationId, () =>
+          db
+            .update(candidateMessages)
+            .set({ delivery: "failed", failureReason: message })
+            .where(eq(candidateMessages.id, messageId)),
+        );
+        throw error;
+      }
+    },
+    { connection: createRedisConnection(), concurrency: 1 },
+  );
+
   return {
     async stop() {
       stopped = true;
       clearInterval(timer);
+      await sender.close();
       await Promise.all(
         [...live.values()].map((e) => e.client.disconnect().catch(() => undefined)),
       );
