@@ -21,6 +21,7 @@ import {
   requireJobRead,
 } from "../../middlewares/job-access.middleware";
 import {
+  findOnTelegram,
   getConversation,
   sendMessage,
 } from "../messaging/messaging.controller";
@@ -51,6 +52,9 @@ router.get("/:id", requireCandidateRead("id"), getCandidateById);
 // middleware answers a question about one application.
 router.get("/:id/messages", getConversation);
 router.post("/:id/messages", sendMessage);
+// One candidate, on purpose. Telegram limits accounts that look up numbers in
+// bulk, so this is never a sweep.
+router.post("/:id/messages/find-on-telegram", findOnTelegram);
 router.patch("/:id", requireManager, upload.single("resume"), updateCandidateBasicDetails);
 router.put("/:id/stage", requireManager, moveCandidateStage);
 // Correspondence with a candidate: readable by anyone who may read the

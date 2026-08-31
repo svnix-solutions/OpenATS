@@ -4,6 +4,24 @@ import { currentOrganizationId } from "../../db";
 
 export const TELEGRAM_SEND_QUEUE = "telegram-send";
 
+/**
+ * Two jobs, one queue, deliberately.
+ *
+ * They share the worker's concurrency of one, which is what protects the
+ * account: Telegram rate-limits sending *and* contact lookups, and separate
+ * queues would let the two race each other into a flood wait together.
+ */
+export type TelegramJobName = "send" | "resolve";
+
+export type TelegramResolveJobData = {
+  /** The person to link, once Telegram says who this number is. */
+  candidateId: number;
+  /** E.164 digits, the same normalisation the WhatsApp address uses. */
+  phone: string;
+  displayName: string;
+  organizationId: number;
+};
+
 export type TelegramSendJobData = {
   /**
    * The row already written as `queued`. The bridge updates it rather than
@@ -23,7 +41,9 @@ export type TelegramSendJobData = {
   organizationId: number;
 };
 
-export const telegramSendQueue = new Queue<TelegramSendJobData>(
+export type TelegramJobData = TelegramSendJobData | TelegramResolveJobData;
+
+export const telegramSendQueue = new Queue<TelegramJobData>(
   TELEGRAM_SEND_QUEUE,
   {
     connection: createRedisConnection(),
@@ -39,6 +59,24 @@ export const telegramSendQueue = new Queue<TelegramSendJobData>(
   },
 );
 
+/**
+ * Asks the bridge who this number is on Telegram, and links them.
+ *
+ * On demand, one candidate at a time — never swept over everyone who applied.
+ * Importing contacts in bulk is precisely the pattern Telegram limits accounts
+ * for, and the account it would cost is the agency's own.
+ */
+export async function requestTelegramResolve(
+  data: Omit<TelegramResolveJobData, "organizationId">,
+): Promise<void> {
+  const organizationId = currentOrganizationId();
+  if (organizationId === null) {
+    throw new Error("requestTelegramResolve called with no organization context");
+  }
+
+  await telegramSendQueue.add("resolve", { ...data, organizationId });
+}
+
 export async function requestTelegramSend(
   data: Omit<TelegramSendJobData, "organizationId">,
 ): Promise<void> {
@@ -47,5 +85,5 @@ export async function requestTelegramSend(
     throw new Error("requestTelegramSend called with no organization context");
   }
 
-  await telegramSendQueue.add("send", { ...data, organizationId });
+  await telegramSendQueue.add("send", { ...data, organizationId } as TelegramSendJobData);
 }

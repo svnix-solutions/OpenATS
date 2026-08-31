@@ -33,6 +33,7 @@
     "@google/genai": "^1.46.0",
     "@googleapis/calendar": "^16.0.0",
     "@sentry/node": "^10.70.0",
+    "big-integer": "^1.6.52",
     "bullmq": "^5.78.1",
     "cors": "^2.8.6",
     "dotenv": "^17.2.4",

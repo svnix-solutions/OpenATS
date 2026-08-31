@@ -1,4 +1,5 @@
-import { TelegramClient } from "teleproto";
+import { Api, TelegramClient } from "teleproto";
+import bigInt from "big-integer";
 import { StringSession } from "teleproto/sessions";
 import { NewMessage, type NewMessageEvent } from "teleproto/events";
 import { and, eq } from "drizzle-orm";
@@ -15,6 +16,8 @@ import { Worker } from "bullmq";
 import { createRedisConnection } from "../../config/redis";
 import {
   TELEGRAM_SEND_QUEUE,
+  type TelegramJobData,
+  type TelegramResolveJobData,
   type TelegramSendJobData,
 } from "../../queues/telegram-send/queue";
 import logger from "../../utils/logger";
@@ -139,10 +142,10 @@ export async function startTelegramBridge() {
    * sends quickly, and the punishment is a flood wait measured in hours
    * against the agency's own number.
    */
-  const sender = new Worker<TelegramSendJobData>(
+  const sender = new Worker<TelegramJobData>(
     TELEGRAM_SEND_QUEUE,
     async (job) => {
-      const { organizationId, messageId, peerId, body } = job.data;
+      const { organizationId } = job.data;
       const entry = live.get(organizationId);
 
       if (!entry) {
@@ -154,6 +157,12 @@ export async function startTelegramBridge() {
         );
       }
 
+      if (job.name === "resolve") {
+        await resolve(entry, job.data as TelegramResolveJobData);
+        return;
+      }
+
+      const { messageId, peerId, body } = job.data as TelegramSendJobData;
       try {
         const sent = await entry.client.sendMessage(peerId, { message: body });
         await runInOrganization(organizationId, () =>
@@ -191,6 +200,63 @@ export async function startTelegramBridge() {
     /** For tests and for the health of the process. */
     connectedOrganizations: () => [...live.keys()],
   };
+}
+
+/**
+ * Asks Telegram who a phone number belongs to, and links the candidate.
+ *
+ * `importContacts` is the only way to reach someone who has not written first,
+ * and it is also the operation Telegram limits accounts over. One number at a
+ * time, from a recruiter's deliberate action, never a sweep.
+ *
+ * A number that is not on Telegram comes back as no user rather than an error.
+ * That is a real answer — most people are not — and it is recorded as such
+ * instead of being retried.
+ */
+async function resolve(
+  entry: Live,
+  data: TelegramResolveJobData,
+): Promise<void> {
+  const { organizationId, candidateId, phone, displayName } = data;
+
+  const imported = await entry.client.invoke(
+    new Api.contacts.ImportContacts({
+      contacts: [
+        new Api.InputPhoneContact({
+          clientId: bigInt(candidateId),
+          phone,
+          firstName: displayName || "Candidate",
+          lastName: "",
+        }),
+      ],
+    }),
+  );
+
+  const user = imported.users[0];
+  if (!user || !("id" in user)) {
+    logger.info(
+      `No Telegram account for the number on candidate ${candidateId}`,
+    );
+    return;
+  }
+
+  await runInOrganization(organizationId, async () => {
+    await db
+      .insert(candidateChannels)
+      .values({
+        candidateId,
+        channel: "telegram",
+        externalId: user.id.toString(),
+        displayName:
+          "username" in user && user.username ? `@${user.username}` : displayName,
+        // The consent that reached here is the one given on the application
+        // form. Recorded as its own row because it is a different channel, and
+        // an opt-out on one is not an opt-out on the other.
+        optedInAt: new Date(),
+        optInSource: "resolved from the number on their application",
+      })
+      .onConflictDoNothing();
+  });
 }
 
 /**

@@ -6,6 +6,8 @@ const enqueued: { messageId: number; peerId: string; body: string }[] = [];
 
 // The bridge is another process. What this test can assert is the half the API
 // owns: a row written as `queued`, and a job carrying enough to send it.
+const resolves: { candidateId: number; phone: string }[] = [];
+
 vi.mock("../../src/queues/telegram-send/queue", () => ({
   TELEGRAM_SEND_QUEUE: "telegram-send",
   requestTelegramSend: async (data: {
@@ -14,6 +16,12 @@ vi.mock("../../src/queues/telegram-send/queue", () => ({
     body: string;
   }) => {
     enqueued.push(data);
+  },
+  requestTelegramResolve: async (data: {
+    candidateId: number;
+    phone: string;
+  }) => {
+    resolves.push(data);
   },
 }));
 vi.mock("../../src/shared/messaging/whatsapp.provider", () => ({
