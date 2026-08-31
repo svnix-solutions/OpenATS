@@ -245,6 +245,12 @@ key that reads the stored session. No mail, no object storage, no identity
 provider. A process holding credentials equivalent to somebody's Telegram
 password should hold nothing else.
 
+That short list is also what it validates at boot. It used to run the same
+check as the API and refused to start over a missing Resend key it would never
+use — a container crash-looping on config it had been deliberately denied. Each
+entry point now names what it needs, so a missing value still stops the process
+that actually uses it.
+
 ## Behind a Cloudflare Tunnel
 
 A tunnel is the easiest way to put this on the internet from a box with no

@@ -2,7 +2,16 @@ import "dotenv/config";
 import { validateEnv } from "./config/env";
 import { initSentry } from "./config/sentry";
 
-validateEnv();
+// What this process actually touches: a database, Redis, and the key that
+// decrypts a stored session. Not mail, not object storage, not the identity
+// provider — its compose environment carries none of those on purpose, and
+// validating the whole schema here would have meant handing it a Resend key
+// and an R2 secret so that a check could pass.
+validateEnv([
+  "DATABASE_URL",
+  "REDIS_URL",
+  "ENCRYPTION_KEY",
+]);
 initSentry();
 
 import { assertTenancyIsEnforceable } from "./db";

@@ -53,8 +53,27 @@ const envSchema = z.object({
 
 export type Env = z.infer<typeof envSchema>;
 
-export function validateEnv(): Env {
-  const result = envSchema.safeParse(process.env);
+/**
+ * Checks the environment before anything tries to use it.
+ *
+ * `keys` narrows it to what one process actually needs. The schema describes
+ * the API, which touches everything — but the Telegram bridge holds a
+ * connection and writes messages, and giving it a Resend key and an object
+ * storage secret so that a validator would pass is the opposite of what its
+ * short environment is for.
+ *
+ * Narrowing rather than making things optional: a missing R2 secret must still
+ * stop the API at boot, where the message names it, instead of surfacing as a
+ * failed upload a week later.
+ */
+export function validateEnv(keys?: readonly (keyof Env)[]): Env {
+  const schema = keys ? envSchema.pick(
+    Object.fromEntries(keys.map((k) => [k, true])) as {
+      [K in keyof Env]?: true;
+    },
+  ) : envSchema;
+
+  const result = schema.safeParse(process.env);
 
   if (!result.success) {
     const issues = result.error.issues
@@ -67,5 +86,5 @@ export function validateEnv(): Env {
     process.exit(1);
   }
 
-  return result.data;
+  return result.data as Env;
 }
