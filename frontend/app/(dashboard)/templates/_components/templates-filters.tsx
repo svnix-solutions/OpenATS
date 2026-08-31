@@ -1,7 +1,7 @@
 "use client";
 
 import { HugeiconsIcon } from "@hugeicons/react";
-import { Search01Icon } from "@hugeicons/core-free-icons";
+import { Search01Icon, PlusSignIcon } from "@hugeicons/core-free-icons";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -13,6 +13,9 @@ import {
 } from "@/components/ui/select";
 
 interface TemplatesFiltersProps {
+  /** Managers only, and the click still opens the type picker. */
+  onNewTemplate?: () => void;
+  isManager?: boolean;
   search: string;
   onSearchChange: (value: string) => void;
   filterType: string;
@@ -21,6 +24,8 @@ interface TemplatesFiltersProps {
 }
 
 export function TemplatesFilters({
+  onNewTemplate,
+  isManager,
   search,
   onSearchChange,
   filterType,
@@ -68,6 +73,30 @@ export function TemplatesFilters({
         >
           Clear All
         </Button>
+      )}
+
+      {/*
+        Where Create New Job and Add Candidate sit, styled identically. It was
+        beside the heading with its own slightly different styling —
+        font-medium rather than font-semibold, no leading-none — which is the
+        kind of difference nobody can name and everybody notices.
+
+        The click still opens the type picker. Only the button moved.
+      */}
+      {isManager && onNewTemplate && (
+        <div className="ml-auto">
+          <Button
+            onClick={onNewTemplate}
+            className="h-8 rounded-md border-none bg-[var(--theme-color)] px-4 text-sm font-semibold leading-none text-white shadow-none hover:bg-[var(--theme-color-hover)] cursor-pointer"
+          >
+            <HugeiconsIcon
+              icon={PlusSignIcon}
+              className="size-4"
+              strokeWidth={2.5}
+            />
+            <span>New Template</span>
+          </Button>
+        </div>
       )}
     </div>
   );

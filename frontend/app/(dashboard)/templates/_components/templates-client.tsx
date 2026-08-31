@@ -9,6 +9,7 @@ import {
   useBulkDeleteTemplates,
 } from "@/hooks/queries/use-templates";
 import type { Template } from "@/types";
+import { useIsManager } from "@/hooks/use-role";
 import { TemplatesHeader } from "./templates-header";
 import { TemplatesFilters } from "./templates-filters";
 import { TemplatesTable } from "./templates-table";
@@ -21,6 +22,8 @@ export default function TemplatesPageClient() {
   const router = useRouter();
 
   // ── Filter State ───────────────────────────────────────────
+  // The same gate the header used to apply.
+  const isManager = useIsManager();
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [filterType, setFilterType] = useState("all");
@@ -108,10 +111,12 @@ export default function TemplatesPageClient() {
 
   return (
     <div className="flex flex-1 flex-col min-h-0 bg-white dark:bg-neutral-950">
-      <TemplatesHeader onNewTemplate={handleOpenTypePicker} />
+      <TemplatesHeader />
 
       <div className="flex-shrink-0">
         <TemplatesFilters
+          onNewTemplate={handleOpenTypePicker}
+          isManager={isManager}
           search={search}
           onSearchChange={handleSearchChange}
           filterType={filterType}

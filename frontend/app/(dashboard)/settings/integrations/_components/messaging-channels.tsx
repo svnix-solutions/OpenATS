@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { toast } from "sonner";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { BubbleChatIcon, Copy01Icon } from "@hugeicons/core-free-icons";
+import { Copy01Icon } from "@hugeicons/core-free-icons";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -64,6 +64,7 @@ export function MessagingChannels() {
       <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <ChannelCard
           name="WhatsApp"
+          logo="/integrations/whatsapp.webp"
           description="Through Meta's Cloud API. You can answer freely for 24 hours after each of their messages, and reach them with an approved template outside that."
           connection={whatsapp}
           isLoading={isLoading}
@@ -71,6 +72,7 @@ export function MessagingChannels() {
         />
         <ChannelCard
           name="Telegram"
+          logo="/integrations/telegram.webp"
           description="Signs in a Telegram account of yours. No 24-hour window — but Telegram limits accounts that message people who have not written first."
           connection={telegram}
           isLoading={isLoading}
@@ -139,12 +141,14 @@ export function MessagingChannels() {
 
 function ChannelCard({
   name,
+  logo,
   description,
   connection,
   isLoading,
   onConnect,
 }: {
   name: string;
+  logo: string;
   description: string;
   connection: MessagingConnection | undefined;
   isLoading: boolean;
@@ -155,7 +159,7 @@ function ChannelCard({
   return (
     <IntegrationCardShell
       name={name}
-      icon={<HugeiconsIcon icon={BubbleChatIcon} className="size-5 text-slate-500" />}
+      logo={logo}
       description={description}
     >
       {isLoading ? (
