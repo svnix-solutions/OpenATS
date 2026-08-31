@@ -1,4 +1,5 @@
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { serverFetch } from "@/lib/auth-action";
 
 export type ImportOutcome =
   | "imported"
@@ -24,6 +25,39 @@ export type ImportReport = {
   rows: ImportRow[];
   counts: Partial<Record<ImportOutcome, number>>;
 };
+
+export type ImportRun = {
+  id: number;
+  jobId: number;
+  filename: string | null;
+  status: "queued" | "running" | "done" | "failed";
+  total: number;
+  processed: number;
+  counts: Partial<Record<ImportOutcome, number>>;
+  problems: ImportRow[];
+  error: string | null;
+  finishedAt: string | null;
+};
+
+/**
+ * Where a running import has got to.
+ *
+ * Polled while it runs and then left alone. The run outlives this screen, so
+ * closing the browser mid-import does not lose it — reopening shows the same
+ * row, finished.
+ */
+export function useImportRun(importId: number | null) {
+  return useQuery({
+    queryKey: ["candidate-import", importId],
+    queryFn: () =>
+      serverFetch<{ data: ImportRun }>(`/candidates/imports/${importId}`),
+    enabled: importId !== null,
+    refetchInterval: (query) => {
+      const status = query.state.data?.data.status;
+      return status === "queued" || status === "running" ? 1500 : false;
+    },
+  });
+}
 
 /**
  * Sends the file twice on purpose: once to see, once to do.
@@ -54,11 +88,13 @@ export function useImportCandidates() {
         body: form,
       });
       const json = (await res.json().catch(() => null)) as
-        | { data?: ImportReport; error?: string }
+        | { data?: ImportReport | { importId: number }; error?: string }
         | null;
       if (!res.ok || !json?.data) {
         throw new Error(json?.error ?? "The import failed");
       }
+      // A dry run answers with the report itself; a real one answers 202 with
+      // an id, because the work has not happened yet.
       return json.data;
     },
   });

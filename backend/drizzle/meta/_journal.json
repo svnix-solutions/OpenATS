@@ -344,6 +344,13 @@
       "when": 1787447013364,
       "tag": "0048_whatsapp_webhook",
       "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "7",
+      "when": 1787447073364,
+      "tag": "0049_candidate_imports",
+      "breakpoints": true
     }
   ]
 }

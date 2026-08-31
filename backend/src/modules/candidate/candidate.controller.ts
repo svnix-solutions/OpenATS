@@ -17,6 +17,10 @@ import { presentCandidate } from "../../shared/auth/present";
 import { requestCvAnalysis } from "../../queues/cv-analysis/queue";
 import { getErrorMessage} from "../../utils/error.utils";
 import { importCandidates } from "./import.service";
+import { eq } from "drizzle-orm";
+import { db } from "../../db";
+import { candidateImports } from "../../db/schema/imports";
+import { requestCandidateImport } from "../../queues/candidate-import/queue";
 
 const customAnswerSchema = z.object({
   questionId: z.number().int().positive(),
@@ -314,8 +318,34 @@ export const importCandidatesToJob = async (req: Request, res: Response) => {
     // to do by forgetting a flag.
     const dryRun = req.body?.dryRun !== "false";
 
-    const report = await importCandidates(jobId, csv, { dryRun });
-    return res.status(200).json({ data: report });
+    // The dry run stays in the request. It parses and validates and writes
+    // nothing, so it is fast even on a large file, and a preview that arrived
+    // later by polling would be a worse thing to wait for.
+    if (dryRun) {
+      const report = await importCandidates(jobId, csv, { dryRun: true });
+      return res.status(200).json({ data: report });
+    }
+
+    // The real run is a job. One `apply` per row against the database is
+    // minutes on a few thousand rows, which is past any request timeout — and
+    // a run that died halfway used to leave something nobody could see the
+    // state of.
+    const [run] = await db
+      .insert(candidateImports)
+      .values({
+        jobId,
+        filename: req.file?.originalname?.slice(0, 255) ?? null,
+        csv,
+        createdBy: req.user?.id ?? null,
+      })
+      .returning({ id: candidateImports.id });
+
+    if (!run) throw new Error("Could not record the import");
+
+    await requestCandidateImport(run.id);
+
+    // 202: accepted, not finished. The id is what the screen polls.
+    return res.status(202).json({ data: { importId: run.id, status: "queued" } });
   } catch (error) {
     // A malformed CSV throws out of the parser with a message naming the line,
     // which is more use than anything this could say instead.
@@ -323,6 +353,43 @@ export const importCandidatesToJob = async (req: Request, res: Response) => {
     return res
       .status(400)
       .json({ error: `That file could not be read: ${getErrorMessage(error)}` });
+  }
+};
+
+/** Where an import got to. Polled while it runs, read once it has finished. */
+export const getCandidateImport = async (req: Request, res: Response) => {
+  try {
+    const id = Number(req.params.importId);
+    if (!Number.isInteger(id) || id <= 0) {
+      return res.status(404).json({ error: "Not found" });
+    }
+
+    const [run] = await db
+      .select({
+        id: candidateImports.id,
+        jobId: candidateImports.jobId,
+        filename: candidateImports.filename,
+        status: candidateImports.status,
+        total: candidateImports.total,
+        processed: candidateImports.processed,
+        counts: candidateImports.counts,
+        problems: candidateImports.problems,
+        error: candidateImports.error,
+        createdAt: candidateImports.createdAt,
+        finishedAt: candidateImports.finishedAt,
+      })
+      .from(candidateImports)
+      .where(eq(candidateImports.id, id))
+      .limit(1);
+
+    // The policy scopes this, so another organization's import is simply not
+    // there — no rule here has to say so.
+    if (!run) return res.status(404).json({ error: "Not found" });
+
+    return res.status(200).json({ data: run });
+  } catch (error) {
+    logger.error(`Failed to read an import: ${getErrorMessage(error)}`);
+    return res.status(500).json({ error: "Failed to read the import" });
   }
 };
 
