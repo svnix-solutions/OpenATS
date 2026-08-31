@@ -1,0 +1,51 @@
+# A staging install, on the same server as production.
+#
+# The same repository, the same images, a different everything else. Sync this
+# alongside komodo/openats.toml and Komodo maintains both.
+#
+# Three things make them separate, and all three matter:
+#
+#   project_name  namespaces the containers and the volumes, so staging has
+#                 its own database rather than sharing production's.
+#
+#   STACK_NAME    namespaces the aliases on the shared proxy network. Without
+#                 it both stacks answer to `openats-frontend` and the proxy
+#                 gets whichever replies first — no error, just staging
+#                 occasionally serving production's hostname.
+#
+#   IMAGE_TAG     what each one runs. Staging follows `latest`, which is the
+#                 head of main; production is pinned to a commit sha that has
+#                 been looked at.
+#
+# Everything else — hostnames, database passwords, the object storage bucket,
+# the Resend key — is set on the Stack's own environment. Pointing staging at
+# production's bucket or its WhatsApp number is the mistake this file cannot
+# prevent, so it is worth saying: give staging its own.
+
+[[stack]]
+name = "openats-staging"
+description = "OpenATS staging — the same images as production, on its own database and hostnames."
+deploy = true
+tags = ["openats", "staging"]
+
+[stack.config]
+server = "server-prod"
+
+git_provider = "github.com"
+git_account = "svnix-solutions"
+repo = "svnix-solutions/OpenATS"
+branch = "main"
+
+# Its own compose project, which is what separates the containers and volumes.
+project_name = "openats-staging"
+
+run_directory = "komodo"
+file_paths = ["compose.yaml", "compose.tunnel.yaml"]
+
+ignore_services = ["authorizer-keys", "migrate"]
+
+# Staging is where a change is seen before production, so it should follow the
+# repository without anyone deciding to. Production does not.
+webhook_enabled = true
+auto_update = false
+poll_for_updates = false
