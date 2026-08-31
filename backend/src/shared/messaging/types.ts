@@ -68,6 +68,33 @@ export interface WebhookChannelClient extends BaseChannelClient {
     credentials: string,
   ): boolean;
   parseInbound(payload: unknown): InboundMessage[];
+
+  /**
+   * Pre-approved messages, for channels that will not carry free-form text
+   * outside a window.
+   *
+   * On the webhook interface rather than the base one because it is not a
+   * general idea: it exists because WhatsApp's 24-hour rule exists. Telegram
+   * has no window and therefore no templates, and putting these on the shared
+   * contract would force it to implement something meaningless.
+   */
+  listTemplates(credentials: string): Promise<MessageTemplate[]>;
+  sendTemplate(
+    credentials: string,
+    to: string,
+    template: { name: string; language: string; parameters: string[] },
+  ): Promise<OutboundResult>;
+}
+
+/** An approved template, as the screen offering it needs to know about it. */
+export interface MessageTemplate {
+  name: string;
+  language: string;
+  category: string | null;
+  /** The approved text, placeholders and all, so a person can read it. */
+  body: string;
+  /** How many `{{n}}` it expects; the wrong number is refused by the provider. */
+  parameterCount: number;
 }
 
 /**

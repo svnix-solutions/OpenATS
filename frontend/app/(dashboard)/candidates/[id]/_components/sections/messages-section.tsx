@@ -7,8 +7,10 @@ import {
   useCandidateMessages,
   useFindOnTelegram,
   useSendCandidateMessage,
+  useSendTemplate,
   type CandidateChannel,
 } from "@/hooks/queries/use-candidate-messages";
+import { useMessageTemplates } from "@/hooks/queries/use-messaging-channels";
 import { timeAgo } from "../constants";
 
 /**
@@ -138,6 +140,15 @@ export function MessagesSection({ applicationId }: { applicationId: number }) {
         )}
       </div>
 
+      {/*
+        When the window is shut, a disabled box explaining why is only half an
+        answer. The template is the other half — the only thing that reaches
+        this candidate until they write again.
+      */}
+      {!open && !channel.optedOutAt && channel.channel === "whatsapp" && (
+        <TemplateComposer applicationId={applicationId} />
+      )}
+
       <div className="space-y-2">
         <textarea
           value={body}
@@ -159,6 +170,124 @@ export function MessagesSection({ applicationId }: { applicationId: number }) {
           </Button>
         </div>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Choosing an approved template and filling its blanks.
+ *
+ * The blanks are positional — Meta counts them, and the wrong number is a
+ * rejection rather than a best effort — so the count comes from the template
+ * itself and the form is built from it.
+ */
+function TemplateComposer({ applicationId }: { applicationId: number }) {
+  const { data, isLoading, error } = useMessageTemplates(true);
+  const send = useSendTemplate(applicationId);
+  const [selected, setSelected] = useState<string>("");
+  const [values, setValues] = useState<string[]>([]);
+
+  const templates = data?.data ?? [];
+  const template = templates.find((t) => t.name === selected);
+
+  if (isLoading) {
+    return <p className="text-xs text-slate-400">Loading templates…</p>;
+  }
+
+  if (error) {
+    // Meta's own message: a missing permission on the token, or a business
+    // account id that is wrong. Both fixable, neither guessable.
+    return (
+      <p className="rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:bg-amber-950/30 dark:text-amber-300">
+        {error instanceof Error ? error.message : "Templates are unavailable"}
+      </p>
+    );
+  }
+
+  if (templates.length === 0) {
+    return (
+      <p className="rounded-md bg-slate-50 px-3 py-2 text-xs text-slate-500 dark:bg-neutral-800/60">
+        No approved templates. Meta has to approve one before it can be sent,
+        and only an approved template reaches a candidate outside the window.
+      </p>
+    );
+  }
+
+  const ready =
+    template && values.filter((v) => v?.trim()).length === template.parameterCount;
+
+  return (
+    <div className="space-y-3 rounded-md border border-slate-200 p-3 dark:border-neutral-800">
+      <p className="text-xs font-semibold text-slate-600 dark:text-neutral-300">
+        Send an approved template
+      </p>
+
+      <select
+        value={selected}
+        aria-label="Template"
+        onChange={(e) => {
+          setSelected(e.target.value);
+          const next = templates.find((t) => t.name === e.target.value);
+          setValues(Array.from({ length: next?.parameterCount ?? 0 }, () => ""));
+        }}
+        className="w-full rounded-md border border-slate-200 px-2 py-1.5 text-sm dark:border-neutral-700 dark:bg-neutral-900"
+      >
+        <option value="">Choose a template…</option>
+        {templates.map((t) => (
+          <option key={`${t.name}:${t.language}`} value={t.name}>
+            {t.name} ({t.language})
+          </option>
+        ))}
+      </select>
+
+      {template && (
+        <>
+          {/* The approved wording, so nobody sends a message they have not read. */}
+          <p className="rounded bg-slate-50 px-2 py-1.5 text-xs text-slate-600 dark:bg-neutral-800 dark:text-neutral-300">
+            {template.body}
+          </p>
+
+          {Array.from({ length: template.parameterCount }, (_, i) => (
+            <input
+              key={i}
+              value={values[i] ?? ""}
+              aria-label={`Value for {{${i + 1}}}`}
+              placeholder={`{{${i + 1}}}`}
+              onChange={(e) => {
+                const next = [...values];
+                next[i] = e.target.value;
+                setValues(next);
+              }}
+              className="w-full rounded-md border border-slate-200 px-2 py-1.5 text-sm dark:border-neutral-700 dark:bg-neutral-900"
+            />
+          ))}
+
+          <div className="flex justify-end">
+            <Button
+              disabled={!ready || send.isPending}
+              onClick={async () => {
+                try {
+                  await send.mutateAsync({
+                    name: template.name,
+                    language: template.language,
+                    body: template.body,
+                    parameters: values,
+                  });
+                  setSelected("");
+                  setValues([]);
+                  toast.success("Template sent");
+                } catch (err) {
+                  toast.error(
+                    err instanceof Error ? err.message : "Could not send",
+                  );
+                }
+              }}
+            >
+              {send.isPending ? "Sending…" : "Send template"}
+            </Button>
+          </div>
+        </>
+      )}
     </div>
   );
 }

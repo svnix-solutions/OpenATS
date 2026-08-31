@@ -24,6 +24,7 @@ import {
   findOnTelegram,
   getConversation,
   sendMessage,
+  sendTemplateMessage,
 } from "../messaging/messaging.controller";
 
 const router: Router = Router();
@@ -55,6 +56,10 @@ router.post("/:id/messages", sendMessage);
 // One candidate, on purpose. Telegram limits accounts that look up numbers in
 // bulk, so this is never a sweep.
 router.post("/:id/messages/find-on-telegram", findOnTelegram);
+// A template is a different request from a message: different arguments,
+// different failures, and it is the only thing that reaches a candidate whose
+// WhatsApp window has shut.
+router.post("/:id/messages/template", sendTemplateMessage);
 router.patch("/:id", requireManager, upload.single("resume"), updateCandidateBasicDetails);
 router.put("/:id/stage", requireManager, moveCandidateStage);
 // Correspondence with a candidate: readable by anyone who may read the

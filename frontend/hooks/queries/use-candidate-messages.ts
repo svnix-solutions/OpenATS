@@ -47,6 +47,26 @@ export function useCandidateMessages(applicationId: number) {
  * the link appears on a later refetch or not at all — most people are not on
  * Telegram, and that is a real answer rather than a failure.
  */
+export function useSendTemplate(applicationId: number) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: {
+      name: string;
+      language: string;
+      body: string;
+      parameters: string[];
+    }) =>
+      serverFetch<{ data: CandidateMessage }>(
+        `/candidates/${applicationId}/messages/template`,
+        { method: "POST", body: JSON.stringify(input) },
+      ),
+    onSuccess: () =>
+      queryClient.invalidateQueries({
+        queryKey: ["candidate-messages", applicationId],
+      }),
+  });
+}
+
 export function useFindOnTelegram(applicationId: number) {
   const queryClient = useQueryClient();
   return useMutation({

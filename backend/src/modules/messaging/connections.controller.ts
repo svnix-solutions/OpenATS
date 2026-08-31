@@ -46,6 +46,9 @@ const whatsappSchema = z.object({
   phoneNumberId: z.string().trim().min(1),
   accessToken: z.string().trim().min(1),
   appSecret: z.string().trim().min(1),
+  // Optional: it is only needed to list templates, and a connection made
+  // without one still sends and receives.
+  businessAccountId: z.string().trim().min(1).optional(),
 });
 
 /**
@@ -110,6 +113,9 @@ export const connectWhatsapp = async (req: Request, res: Response) => {
       accessToken: parsed.data.accessToken,
       appSecret: parsed.data.appSecret,
       webhookVerifyToken,
+      ...(parsed.data.businessAccountId && {
+        businessAccountId: parsed.data.businessAccountId,
+      }),
     };
 
     // Checked against Meta before anything is stored, so a typo is an error

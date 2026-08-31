@@ -198,6 +198,70 @@ export const messagingService = {
 };
 
 /**
+ * Sends an approved template, which is the only thing that reaches a candidate
+ * whose window is shut.
+ *
+ * Deliberately not folded into `send`. The two take different arguments and
+ * fail for different reasons, and a single function that silently switched
+ * between them would let a recruiter believe they had sent what they typed
+ * when a template with different words went out instead.
+ *
+ * The window is not checked. A template is valid inside it too, and refusing
+ * one because the candidate happens to have replied recently would be a rule
+ * this code invented.
+ */
+export async function sendTemplate(
+  candidateId: number,
+  template: { name: string; language: string; parameters: string[]; body: string },
+  sentBy: number,
+) {
+  const [link] = await db
+    .select()
+    .from(candidateChannels)
+    .where(
+      and(
+        eq(candidateChannels.candidateId, candidateId),
+        eq(candidateChannels.channel, "whatsapp"),
+      ),
+    )
+    .limit(1);
+
+  if (!link) throw new NoChannelError("whatsapp");
+  if (link.optedOutAt) throw new OptedOutError();
+
+  const credentials = await getCredentials("whatsapp");
+  if (!credentials) throw new ChannelNotConnectedError("whatsapp");
+
+  const { externalId } = await whatsappProvider.sendTemplate(
+    JSON.stringify(credentials),
+    link.externalId,
+    template,
+  );
+
+  // The rendered text, not the template name. A thread read six months later
+  // has to show what the candidate actually received; "interview_invite_v2"
+  // tells nobody anything.
+  const rendered = template.parameters.reduce(
+    (text, value, i) => text.replaceAll(`{{${i + 1}}}`, value),
+    template.body,
+  );
+
+  const [stored] = await db
+    .insert(candidateMessages)
+    .values({
+      candidateId,
+      channel: "whatsapp",
+      direction: "outbound",
+      body: rendered,
+      sentBy,
+      externalId,
+    })
+    .returning();
+
+  return stored ?? null;
+}
+
+/**
  * When the free-form window closes, or null if it is already shut.
  *
  * Measured from the candidate's own last message, because that is what opens

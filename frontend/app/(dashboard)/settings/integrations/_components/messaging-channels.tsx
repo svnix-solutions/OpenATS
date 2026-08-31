@@ -189,6 +189,7 @@ function ConnectWhatsappForm({
   const [phoneNumberId, setPhoneNumberId] = useState("");
   const [accessToken, setAccessToken] = useState("");
   const [appSecret, setAppSecret] = useState("");
+  const [businessAccountId, setBusinessAccountId] = useState("");
 
   const ready = phoneNumberId.trim() && accessToken.trim() && appSecret.trim();
 
@@ -214,6 +215,20 @@ function ConnectWhatsappForm({
         />
       </div>
       <div className="space-y-1.5">
+        <Label htmlFor="wa-waba">Business account ID (optional)</Label>
+        <Input
+          id="wa-waba"
+          value={businessAccountId}
+          onChange={(e) => setBusinessAccountId(e.target.value)}
+          placeholder="Meta → WhatsApp → API Setup"
+        />
+        <p className="text-xs text-slate-400">
+          Only needed to offer approved templates, which are the one way to
+          reach a candidate who has not replied in 24 hours. Sending and
+          receiving work without it.
+        </p>
+      </div>
+      <div className="space-y-1.5">
         <Label htmlFor="wa-secret">App secret</Label>
         <Input
           id="wa-secret"
@@ -236,6 +251,9 @@ function ConnectWhatsappForm({
                 phoneNumberId: phoneNumberId.trim(),
                 accessToken: accessToken.trim(),
                 appSecret: appSecret.trim(),
+                ...(businessAccountId.trim() && {
+                  businessAccountId: businessAccountId.trim(),
+                }),
               });
               onConnected(data);
               toast.success(`WhatsApp connected as ${data.accountLabel}`);
