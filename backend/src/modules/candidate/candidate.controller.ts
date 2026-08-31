@@ -16,6 +16,7 @@ import { presentCandidate } from "../../shared/auth/present";
 
 import { requestCvAnalysis } from "../../queues/cv-analysis/queue";
 import { getErrorMessage} from "../../utils/error.utils";
+import { importCandidates } from "./import.service";
 
 const customAnswerSchema = z.object({
   questionId: z.number().int().positive(),
@@ -285,6 +286,43 @@ export const moveCandidateStage = async (req: Request, res: Response) => {
     res
       .status(400)
       .json({ error: getErrorMessage(error) || "Failed to move candidate" });
+  }
+};
+
+/**
+ * Imports a list of candidates onto a job.
+ *
+ * `dryRun` runs the identical pass without writing, so the preview a recruiter
+ * confirms cannot promise something the import then does differently.
+ *
+ * The same file against a second job attaches the same people rather than
+ * creating new ones, which is how one list gets reused as roles come up.
+ */
+export const importCandidatesToJob = async (req: Request, res: Response) => {
+  try {
+    const jobId = Number(req.params.jobId);
+    if (!Number.isInteger(jobId) || jobId <= 0) {
+      return res.status(404).json({ error: "Not found" });
+    }
+
+    const csv = req.file?.buffer?.toString("utf8");
+    if (!csv?.trim()) {
+      return res.status(400).json({ error: "The file is empty" });
+    }
+
+    // Defaults to a dry run. Importing several hundred people is not something
+    // to do by forgetting a flag.
+    const dryRun = req.body?.dryRun !== "false";
+
+    const report = await importCandidates(jobId, csv, { dryRun });
+    return res.status(200).json({ data: report });
+  } catch (error) {
+    // A malformed CSV throws out of the parser with a message naming the line,
+    // which is more use than anything this could say instead.
+    logger.error(`Candidate import failed: ${getErrorMessage(error)}`);
+    return res
+      .status(400)
+      .json({ error: `That file could not be read: ${getErrorMessage(error)}` });
   }
 };
 
