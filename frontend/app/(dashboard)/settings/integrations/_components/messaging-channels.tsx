@@ -8,28 +8,44 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  IntegrationCardShell,
+  integrationConnectButtonClassName,
+} from "./integration-card";
+import { TelegramConnect } from "./telegram-connect";
+import {
   useConnectWhatsapp,
   useDisconnectChannel,
   useMessagingConnections,
   type ConnectWhatsappResult,
+  type MessagingConnection,
 } from "@/hooks/queries/use-messaging-channels";
-import { TelegramConnect } from "./telegram-connect";
 
 /**
- * Messaging channels, kept apart from the meeting integrations above.
+ * Messaging channels, as cards in the same grid as the meeting integrations.
  *
- * They are not the same kind of thing. A meeting provider is connected per
- * person over OAuth and creates a meeting; a channel belongs to the agency,
- * carries conversations on its behalf, and is connected by pasting credentials
- * from a provider's console. Sharing the card would mean one component with
- * two unrelated halves.
+ * They were a pair of panels with their credential forms permanently open,
+ * which is not how anything else on this page behaves: a card says what the
+ * integration is and offers Connect, and the form is what Connect leads to.
+ * Two shapes for one idea on one screen is worse than either shape.
+ *
+ * Still a separate section rather than folded into that grid. A meeting
+ * provider is connected per person over OAuth and creates a meeting; a channel
+ * belongs to the agency and carries conversations for it. The heading is what
+ * says so.
  */
 export function MessagingChannels() {
   const { data, isLoading } = useMessagingConnections();
-  const disconnect = useDisconnectChannel();
-  const [justConnected, setJustConnected] = useState<ConnectWhatsappResult | null>(
+  const [connecting, setConnecting] = useState<"whatsapp" | "telegram" | null>(
     null,
   );
+  const [justConnected, setJustConnected] =
+    useState<ConnectWhatsappResult | null>(null);
 
   const whatsapp = data?.data.find((c) => c.channel === "whatsapp");
   const telegram = data?.data.find((c) => c.channel === "telegram");
@@ -41,142 +57,151 @@ export function MessagingChannels() {
       </h2>
       <p className="mt-0.5 text-xs text-slate-400 dark:text-neutral-500">
         Channels a candidate can be reached on. A conversation begins when they
-        message you — neither WhatsApp nor Telegram lets you write to someone
-        who has not opted in.
+        opt in — neither WhatsApp nor Telegram lets you write to someone who has
+        not.
       </p>
 
-      <div className="mt-4 max-w-2xl rounded-md border border-slate-300 bg-white p-5 dark:border-neutral-700 dark:bg-neutral-900">
-        <div className="flex items-start gap-3">
-          <span className="flex size-11 shrink-0 items-center justify-center rounded-md border border-slate-200 bg-slate-50 text-slate-500 dark:border-neutral-800 dark:bg-neutral-800 dark:text-neutral-400">
-            <HugeiconsIcon icon={BubbleChatIcon} className="size-5" />
-          </span>
-          <div className="min-w-0 flex-1">
-            <p className="text-base font-semibold text-slate-900 dark:text-neutral-100">
-              WhatsApp
-            </p>
-            <p className="mt-1 text-xs leading-relaxed text-slate-400 dark:text-neutral-500">
-              Through Meta&apos;s Cloud API. Replies arrive on the candidate,
-              and you can answer freely for 24 hours after each of their
-              messages.
-            </p>
-          </div>
-        </div>
+      <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <ChannelCard
+          name="WhatsApp"
+          description="Through Meta's Cloud API. You can answer freely for 24 hours after each of their messages, and reach them with an approved template outside that."
+          connection={whatsapp}
+          isLoading={isLoading}
+          onConnect={() => setConnecting("whatsapp")}
+        />
+        <ChannelCard
+          name="Telegram"
+          description="Signs in a Telegram account of yours. No 24-hour window — but Telegram limits accounts that message people who have not written first."
+          connection={telegram}
+          isLoading={isLoading}
+          onConnect={() => setConnecting("telegram")}
+        />
+      </div>
 
-        {isLoading ? (
-          <p className="mt-4 text-sm text-slate-500">Loading…</p>
-        ) : whatsapp ? (
-          <div className="mt-4 space-y-3">
-            <div className="flex items-center justify-between gap-3">
-              <div className="min-w-0">
-                <p className="truncate text-sm font-semibold text-slate-800 dark:text-neutral-200">
-                  {whatsapp.accountLabel ?? "Connected"}
-                </p>
-                {whatsapp.isActive ? (
-                  <p className="text-xs text-green-600 dark:text-green-400">
-                    Active
-                  </p>
-                ) : (
-                  // Not hidden. An inactive channel is why messages stopped,
-                  // and the reason is the only thing that makes it fixable.
-                  <p className="text-xs text-red-600 dark:text-red-400">
-                    Stopped: {whatsapp.lastError ?? "unknown reason"}
-                  </p>
-                )}
-              </div>
-              <Button
-                variant="ghost"
-                disabled={disconnect.isPending}
-                onClick={async () => {
-                  await disconnect.mutateAsync("whatsapp");
-                  toast.success("WhatsApp disconnected");
-                }}
-              >
-                Disconnect
-              </Button>
-            </div>
+      <Dialog
+        open={connecting !== null}
+        onOpenChange={(o) => !o && setConnecting(null)}
+      >
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>
+              Connect {connecting === "telegram" ? "Telegram" : "WhatsApp"}
+            </DialogTitle>
+          </DialogHeader>
 
-            {whatsapp.webhookUrl ? (
-              <CopyRow label="Webhook URL" value={whatsapp.webhookUrl} />
-            ) : (
-              <p className="rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:bg-amber-950/30 dark:text-amber-300">
-                The webhook URL cannot be shown because{" "}
-                <code>PUBLIC_API_URL</code> is not set on the API. Without it
-                this page would have to guess, and a wrong URL in Meta&apos;s
-                console fails silently.
-              </p>
-            )}
-          </div>
-        ) : (
-          <ConnectWhatsappForm onConnected={setJustConnected} />
-        )}
+          {connecting === "whatsapp" && (
+            <ConnectWhatsappForm
+              onConnected={(result) => {
+                setConnecting(null);
+                setJustConnected(result);
+              }}
+            />
+          )}
+          {connecting === "telegram" && (
+            <TelegramConnect onConnected={() => setConnecting(null)} />
+          )}
+        </DialogContent>
+      </Dialog>
 
-        {justConnected && (
-          <div className="mt-4 space-y-3 rounded-md border border-amber-200 bg-amber-50 p-3 dark:border-amber-900 dark:bg-amber-950/30">
-            <p className="text-xs font-semibold text-amber-900 dark:text-amber-200">
-              Copy both into Meta now — the verify token is not shown again.
-            </p>
-            {justConnected.webhookUrl && (
-              <CopyRow label="Callback URL" value={justConnected.webhookUrl} />
-            )}
+      {/*
+        Outside the dialog on purpose. The verify token is shown once and is
+        not readable again, so it must not disappear with the thing that
+        produced it.
+      */}
+      <Dialog
+        open={justConnected !== null}
+        onOpenChange={(o) => !o && setJustConnected(null)}
+      >
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Finish in Meta</DialogTitle>
+          </DialogHeader>
+          <p className="text-xs text-amber-800 dark:text-amber-300">
+            Copy both into Meta now — the verify token is not shown again.
+          </p>
+          {justConnected?.webhookUrl && (
+            <CopyRow label="Callback URL" value={justConnected.webhookUrl} />
+          )}
+          {justConnected && (
             <CopyRow
               label="Verify token"
               value={justConnected.webhookVerifyToken}
             />
+          )}
+          <div className="flex justify-end">
+            <Button onClick={() => setJustConnected(null)}>Done</Button>
           </div>
-        )}
-      </div>
-
-      <div className="mt-4 max-w-2xl rounded-md border border-slate-300 bg-white p-5 dark:border-neutral-700 dark:bg-neutral-900">
-        <div className="flex items-start gap-3">
-          <span className="flex size-11 shrink-0 items-center justify-center rounded-md border border-slate-200 bg-slate-50 text-slate-500 dark:border-neutral-800 dark:bg-neutral-800 dark:text-neutral-400">
-            <HugeiconsIcon icon={BubbleChatIcon} className="size-5" />
-          </span>
-          <div className="min-w-0 flex-1">
-            <p className="text-base font-semibold text-slate-900 dark:text-neutral-100">
-              Telegram
-            </p>
-            <p className="mt-1 text-xs leading-relaxed text-slate-400 dark:text-neutral-500">
-              Signs in a Telegram account of yours. Unlike WhatsApp there is no
-              24-hour window — but Telegram limits accounts that message people
-              who have not written first.
-            </p>
-          </div>
-        </div>
-
-        {isLoading ? (
-          <p className="mt-4 text-sm text-slate-500">Loading…</p>
-        ) : telegram ? (
-          <div className="mt-4 flex items-center justify-between gap-3">
-            <div className="min-w-0">
-              <p className="truncate text-sm font-semibold text-slate-800 dark:text-neutral-200">
-                {telegram.accountLabel ?? "Connected"}
-              </p>
-              {telegram.isActive ? (
-                <p className="text-xs text-green-600 dark:text-green-400">
-                  Active
-                </p>
-              ) : (
-                <p className="text-xs text-red-600 dark:text-red-400">
-                  Stopped: {telegram.lastError ?? "unknown reason"}
-                </p>
-              )}
-            </div>
-            <Button
-              variant="ghost"
-              disabled={disconnect.isPending}
-              onClick={async () => {
-                await disconnect.mutateAsync("telegram");
-                toast.success("Telegram disconnected");
-              }}
-            >
-              Disconnect
-            </Button>
-          </div>
-        ) : (
-          <TelegramConnect />
-        )}
-      </div>
+        </DialogContent>
+      </Dialog>
     </section>
+  );
+}
+
+function ChannelCard({
+  name,
+  description,
+  connection,
+  isLoading,
+  onConnect,
+}: {
+  name: string;
+  description: string;
+  connection: MessagingConnection | undefined;
+  isLoading: boolean;
+  onConnect: () => void;
+}) {
+  const disconnect = useDisconnectChannel();
+
+  return (
+    <IntegrationCardShell
+      name={name}
+      icon={<HugeiconsIcon icon={BubbleChatIcon} className="size-5 text-slate-500" />}
+      description={description}
+    >
+      {isLoading ? (
+        <p className="text-xs text-slate-400">Loading…</p>
+      ) : connection ? (
+        <div className="space-y-2">
+          <p className="truncate text-xs text-slate-500 dark:text-neutral-400">
+            {connection.isActive ? (
+              <>
+                Connected as{" "}
+                <span className="font-medium text-slate-700 dark:text-neutral-200">
+                  {connection.accountLabel ?? name}
+                </span>
+              </>
+            ) : (
+              // Not hidden: this is why messages stopped, and the only thing
+              // that makes it fixable.
+              <span className="text-red-600 dark:text-red-400">
+                Stopped: {connection.lastError ?? "unknown reason"}
+              </span>
+            )}
+          </p>
+          {connection.webhookUrl && (
+            <CopyRow label="Webhook URL" value={connection.webhookUrl} />
+          )}
+          <button
+            onClick={async () => {
+              await disconnect.mutateAsync(connection.channel);
+              toast.success(`${name} disconnected`);
+            }}
+            disabled={disconnect.isPending}
+            className="inline-flex h-9 w-full cursor-pointer items-center justify-center rounded-md border border-slate-200 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800"
+          >
+            {disconnect.isPending ? "Disconnecting…" : "Disconnect"}
+          </button>
+        </div>
+      ) : (
+        <button
+          onClick={onConnect}
+          className={integrationConnectButtonClassName}
+          style={{ backgroundColor: "var(--theme-color)" }}
+        >
+          Connect
+        </button>
+      )}
+    </IntegrationCardShell>
   );
 }
 
@@ -194,7 +219,7 @@ function ConnectWhatsappForm({
   const ready = phoneNumberId.trim() && accessToken.trim() && appSecret.trim();
 
   return (
-    <div className="mt-4 space-y-3">
+    <div className="space-y-3">
       <div className="space-y-1.5">
         <Label htmlFor="wa-phone">Phone number ID</Label>
         <Input
@@ -224,8 +249,7 @@ function ConnectWhatsappForm({
         />
         <p className="text-xs text-slate-400">
           Only needed to offer approved templates, which are the one way to
-          reach a candidate who has not replied in 24 hours. Sending and
-          receiving work without it.
+          reach a candidate who has not replied in 24 hours.
         </p>
       </div>
       <div className="space-y-1.5">
@@ -255,11 +279,11 @@ function ConnectWhatsappForm({
                   businessAccountId: businessAccountId.trim(),
                 }),
               });
-              onConnected(data);
               toast.success(`WhatsApp connected as ${data.accountLabel}`);
+              onConnected(data);
             } catch (err) {
-              // The API checks the credentials with Meta before storing them,
-              // so this message is Meta's own and worth showing verbatim.
+              // Checked with Meta before anything is stored, so this message is
+              // Meta's own and worth showing verbatim.
               toast.error(
                 err instanceof Error ? err.message : "Could not connect",
               );

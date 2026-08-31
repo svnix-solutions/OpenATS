@@ -1,7 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { Search01Icon } from "@hugeicons/core-free-icons";
+import { Search01Icon, PlusSignIcon } from "@hugeicons/core-free-icons";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -15,6 +16,8 @@ import type { Job } from "@/types";
 import { CandidateStatusFilter, getStatusLabel } from "../lib/candidate-utils";
 
 interface CandidateFiltersProps {
+  /** Managers only, as with Create New Job. */
+  isManager: boolean;
   search: string;
   onSearchChange: (value: string) => void;
   selectedJobId: number | undefined;
@@ -28,6 +31,7 @@ interface CandidateFiltersProps {
 const STATUS_OPTIONS: CandidateStatusFilter[] = ["all", "active", "rejected"];
 
 export function CandidateFilters({
+  isManager,
   search,
   onSearchChange,
   selectedJobId,
@@ -99,6 +103,29 @@ export function CandidateFilters({
       >
         Clear All
       </Button>
+
+      {/*
+        The same shape as "Create New Job" on the jobs page: same place in the
+        filters bar, same styling, same jump to a page of its own. Adding a
+        candidate was a dialog opened from beside the heading, which is a
+        second way of doing the same kind of thing on the screen next door.
+      */}
+      {isManager && (
+        <div className="ml-auto">
+          <Button
+            render={<Link href="/candidates/new" prefetch />}
+            nativeButton={false}
+            className="h-8 rounded-md border-none bg-[var(--theme-color)] px-4 text-sm font-semibold leading-none text-white shadow-none hover:bg-[var(--theme-color-hover)] cursor-pointer"
+          >
+            <HugeiconsIcon
+              icon={PlusSignIcon}
+              className="size-4"
+              strokeWidth={2.5}
+            />
+            <span>Add Candidate</span>
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

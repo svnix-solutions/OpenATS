@@ -24,7 +24,11 @@ import {
  */
 type Step = "credentials" | "code" | "password";
 
-export function TelegramConnect() {
+export function TelegramConnect({
+  onConnected,
+}: {
+  onConnected: () => void;
+}) {
   const start = useStartTelegramLogin();
   const verify = useVerifyTelegramLogin();
 
@@ -58,6 +62,7 @@ export function TelegramConnect() {
         return;
       }
       toast.success(`Telegram connected as ${data.accountLabel}`);
+      onConnected();
       setStep("credentials");
       setApiId(""); setApiHash(""); setPhoneNumber(""); setCode(""); setPassword("");
     } catch (err) {

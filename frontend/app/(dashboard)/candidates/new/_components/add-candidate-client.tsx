@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { useAddCandidate } from "@/hooks/queries/use-candidates";
 import {
@@ -12,15 +13,14 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { useJobs } from "@/hooks/queries/use-jobs";
 
 /**
  * Adding someone a recruiter already knew about.
+ *
+ * A page rather than a dialog, matching /jobs/new: the same kind of act
+ * deserves the same shape, and doing one in a modal and the other on a page is
+ * two answers to one question on adjacent screens.
  *
  * Not the same act as applying, and the screen says so. The person did not
  * choose to be here: they are labelled `sourced` rather than counted as an
@@ -32,17 +32,16 @@ import {
  * application is not something this product has a place for: every stage,
  * interview and offer hangs off a submission to a specific job.
  */
-export function AddCandidateDialog({
-  open,
-  onClose,
-  jobs,
-  onAdded,
-}: {
-  open: boolean;
-  onClose: () => void;
-  jobs: { id: number; title: string }[];
-  onAdded: () => void;
-}) {
+export default function AddCandidateClient() {
+  const router = useRouter();
+  const { data: jobsRes } = useJobs();
+  const jobs = jobsRes?.data ?? [];
+
+  // Leaving the page is what "cancel" and "done" both mean now, where a
+  // dialog closed itself.
+  const onClose = useCallback(() => router.push("/candidates"), [router]);
+  const onAdded = useCallback(() => router.push("/candidates"), [router]);
+
   const [mode, setMode] = useState<"one" | "many">("one");
   const [jobId, setJobId] = useState("");
   const [firstName, setFirstName] = useState("");
@@ -117,11 +116,17 @@ export function AddCandidateDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="sm:max-w-lg">
-        <DialogHeader>
-          <DialogTitle>Add a candidate</DialogTitle>
-        </DialogHeader>
+    <div className="flex flex-1 flex-col bg-white dark:bg-neutral-950">
+      <div className="max-w-2xl px-14 py-10 pb-20">
+        <div className="mb-6">
+          <h1 className="text-2xl font-medium leading-none text-slate-900 dark:text-neutral-100">
+            Add a candidate
+          </h1>
+          <p className="mt-2 text-sm text-slate-500 dark:text-neutral-400">
+            Someone you already knew about. They did not apply, so this is
+            recorded as sourced rather than counted as an application.
+          </p>
+        </div>
 
         {/*
           Two ways in, one dialog. The job is chosen once and applies to both,
@@ -231,8 +236,8 @@ export function AddCandidateDialog({
             </Button>
           </div>
         )}
-      </DialogContent>
-    </Dialog>
+      </div>
+    </div>
   );
 }
 
