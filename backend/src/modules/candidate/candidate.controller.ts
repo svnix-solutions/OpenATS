@@ -89,7 +89,20 @@ export const applyForJob = async (req: Request, res: Response) => {
       return;
     }
 
-    const result = await candidateService.apply(jobId, parsed.data);
+    // The same handler serves the careers page and a recruiter adding someone
+    // by hand. Which one it is decides how the submission is labelled, and
+    // whose voice the errors below are written in — a recruiter is not the
+    // person who "already applied".
+    const addedByRecruiter = Boolean(req.user);
+
+    const result = await candidateService.apply(jobId, {
+      ...parsed.data,
+      source: addedByRecruiter ? "sourced" : "careers_page",
+      // Never from this path. Consent is something a candidate gives, and a
+      // recruiter ticking a box on their behalf is not consent — least of all
+      // for a number that came off a CV from two years ago.
+      messagingOptIn: addedByRecruiter ? false : parsed.data.messagingOptIn,
+    });
 
     logger.info(
       `New application submitted: candidateId=${result.id}, email="${result.email}", jobId=${jobId}${result.resumeUrl ? ", hasResume=true" : ""}`,
@@ -115,7 +128,9 @@ export const applyForJob = async (req: Request, res: Response) => {
         `Duplicate application attempt: email="${req.body?.email}", jobId=${req.params.jobId}`,
       );
       res.status(409).json({
-        error: "You have already applied to this job with this email.",
+        error: req.user
+          ? "That candidate is already on this job."
+          : "You have already applied to this job with this email.",
         code: "DUPLICATE_APPLICATION",
       });
       return;

@@ -19,7 +19,7 @@ export async function POST(req: Request) {
     const token = await requireAccessToken();
     const formData = await req.formData();
 
-    const res = await fetch(`${API_BASE_URL}/api/upload/logo`, {
+    const res = await fetch(`${API_BASE_URL}/api/upload/resume`, {
       method: "POST",
       headers: { Authorization: `Bearer ${token}` },
       body: formData,

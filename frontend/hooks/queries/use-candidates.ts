@@ -155,6 +155,37 @@ export function useMoveCandidateStage() {
   });
 }
 
+/**
+ * Adds someone a recruiter already knew about, and puts them on a job.
+ *
+ * The same endpoint the careers page posts to. The API tells the two apart by
+ * whether a user is behind the request, and labels the submission `sourced`
+ * rather than counting it as an application.
+ */
+export function useAddCandidate() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      jobId,
+      ...body
+    }: {
+      jobId: number;
+      firstName: string;
+      lastName: string;
+      email: string;
+      phone?: string;
+      resumeUrl?: string;
+    }) =>
+      serverFetch<{ data: { id: number } }>(`/candidates/jobs/${jobId}/apply`, {
+        method: "POST",
+        body: JSON.stringify(body),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["candidates"] });
+    },
+  });
+}
+
 export function useDeleteCandidate() {
   const queryClient = useQueryClient();
   return useMutation({
