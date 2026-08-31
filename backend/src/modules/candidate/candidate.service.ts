@@ -72,6 +72,16 @@ export interface CandidateApplyInput {
    * rule exists to prevent.
    */
   messagingOptIn?: boolean;
+  /**
+   * How this submission arrived: the careers page, or a recruiter entering
+   * someone they already knew about.
+   *
+   * Worth distinguishing. A sourced candidate did not choose to apply, and a
+   * funnel that counts them alongside people who did is measuring two
+   * different things as one — "we get 200 applicants a month" is a different
+   * claim from "we enter 200 names a month".
+   */
+  source?: string;
   firstName: string;
   lastName: string;
   email: string;
@@ -209,7 +219,7 @@ async function sendApplicationConfirmationEmail(
 
 export const candidateService = {
   async apply(jobId: number, input: CandidateApplyInput) {
-    const { customAnswers, messagingOptIn, ...rest } = input;
+    const { customAnswers, messagingOptIn, source, ...rest } = input;
     const normalizedEmail = rest.email.trim().toLowerCase();
     const candidateData = { ...rest, email: normalizedEmail };
 
@@ -248,6 +258,7 @@ export const candidateService = {
             candidateId: candidate.id,
             jobId,
             currentStageId: firstStage.id,
+            source: source ?? "careers_page",
           })
           .returning();
 

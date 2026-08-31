@@ -9,7 +9,10 @@ async function requireAccessToken(): Promise<string> {
   return token;
 }
 
-const API_BASE_URL = publicConfig().apiUrl;
+// The internal address first. This runs on the server, and the public
+// hostname from in here leaves the network, goes out to whatever terminates
+// TLS and comes back — slow where it works, refused where it does not.
+const API_BASE_URL = process.env.OPENATS_API_URL || publicConfig().apiUrl;
 
 export async function PATCH(
   req: Request,

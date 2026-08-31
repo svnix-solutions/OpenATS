@@ -11,6 +11,8 @@ import {
 import { useJobs } from "@/hooks/queries/use-jobs";
 import type { Candidate } from "@/types";
 import { CandidateFilters } from "./candidate-filters";
+import { AddCandidateDialog } from "./add-candidate-dialog";
+import { Button } from "@/components/ui/button";
 import { CandidatesTable } from "./candidates-table";
 import { CandidateEditDialog } from "./candidate-edit-dialog";
 import { CandidateDeleteDialog } from "./candidate-delete-dialog";
@@ -31,6 +33,7 @@ export default function CandidatesPageClient() {
   const [selectedJobId, setSelectedJobId] = useState<number | undefined>();
   // Null until a row is opened: the panel fetches nothing before that.
   const [panelCandidateId, setPanelCandidateId] = useState<number | null>(null);
+  const [addOpen, setAddOpen] = useState(false);
   const [selectedStatus, setSelectedStatus] =
     useState<CandidateStatusFilter>("all");
   const [search, setSearch] = useState("");
@@ -161,7 +164,19 @@ export default function CandidatesPageClient() {
         <h1 className="text-2xl font-medium text-slate-900 dark:text-neutral-100 leading-none">
           Manage Candidates
         </h1>
+        {/*
+          Sourcing: someone the recruiter already knew about, who did not
+          apply. Recorded as such rather than counted as an applicant.
+        */}
+        <Button onClick={() => setAddOpen(true)}>Add candidate</Button>
       </div>
+
+      <AddCandidateDialog
+        open={addOpen}
+        onClose={() => setAddOpen(false)}
+        jobs={jobs}
+        onAdded={() => router.refresh()}
+      />
 
       {/* Fixed filters bar — never scrolls away */}
       <div className="flex-shrink-0">
