@@ -40,6 +40,28 @@ export function useCandidateMessages(applicationId: number) {
   });
 }
 
+/**
+ * Asks Telegram who this candidate's number belongs to.
+ *
+ * Answers "asked", not "found": the lookup happens in the bridge process, so
+ * the link appears on a later refetch or not at all — most people are not on
+ * Telegram, and that is a real answer rather than a failure.
+ */
+export function useFindOnTelegram(applicationId: number) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      serverFetch<{ data: { status: "asked" } }>(
+        `/candidates/${applicationId}/messages/find-on-telegram`,
+        { method: "POST" },
+      ),
+    onSuccess: () =>
+      queryClient.invalidateQueries({
+        queryKey: ["candidate-messages", applicationId],
+      }),
+  });
+}
+
 export function useSendCandidateMessage(applicationId: number) {
   const queryClient = useQueryClient();
   return useMutation({

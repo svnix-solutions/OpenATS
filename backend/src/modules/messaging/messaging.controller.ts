@@ -9,6 +9,12 @@ import {
   messagingService,
   personForApplication,
 } from "./messaging.service";
+import { eq } from "drizzle-orm";
+import { db } from "../../db";
+import { candidates } from "../../db/schema/candidates";
+import { candidateChannels } from "../../db/schema/messaging";
+import { toChannelAddress } from "../../shared/messaging/address";
+import { requestTelegramResolve } from "../../queues/telegram-send/queue";
 import logger from "../../utils/logger";
 import { getErrorMessage } from "../../utils/error.utils";
 
@@ -68,6 +74,74 @@ export const getConversation = async (req: Request, res: Response) => {
   } catch (error) {
     logger.error(`Failed to read conversation: ${getErrorMessage(error)}`);
     return res.status(500).json({ error: "Failed to read the conversation" });
+  }
+};
+
+/**
+ * Asks Telegram who this candidate's number belongs to, and links them.
+ *
+ * A recruiter's deliberate action on one candidate, never a sweep over
+ * everyone who applied: importing contacts in bulk is the pattern Telegram
+ * limits accounts over, and the account it would cost is the agency's own.
+ *
+ * Answers immediately. The lookup happens in the bridge, which is the only
+ * process holding a session, so the honest answer here is "asked", not
+ * "found".
+ */
+export const findOnTelegram = async (req: Request, res: Response) => {
+  try {
+    const candidateId = await resolvePerson(req, res);
+    if (candidateId === null) return;
+
+    const [person] = await db
+      .select({
+        phone: candidates.phone,
+        firstName: candidates.firstName,
+        lastName: candidates.lastName,
+      })
+      .from(candidates)
+      .where(eq(candidates.id, candidateId))
+      .limit(1);
+
+    const phone = toChannelAddress(person?.phone);
+    if (!phone) {
+      return res.status(409).json({
+        error:
+          "This candidate has no phone number in international format, so Telegram cannot be asked about them.",
+        code: "no_phone",
+      });
+    }
+
+    // Consent travels with the person, not the channel. Someone who did not
+    // agree to be messaged is not looked up on a second network either.
+    const [consent] = await db
+      .select({ optedOutAt: candidateChannels.optedOutAt })
+      .from(candidateChannels)
+      .where(eq(candidateChannels.candidateId, candidateId))
+      .limit(1);
+
+    if (!consent) {
+      return res.status(409).json({
+        error: "This candidate has not agreed to be messaged.",
+        code: "no_consent",
+      });
+    }
+    if (consent.optedOutAt) {
+      return res
+        .status(409)
+        .json({ error: "This candidate has opted out.", code: "opted_out" });
+    }
+
+    await requestTelegramResolve({
+      candidateId,
+      phone,
+      displayName: `${person!.firstName} ${person!.lastName}`.trim(),
+    });
+
+    return res.status(202).json({ data: { status: "asked" } });
+  } catch (error) {
+    logger.error(`Failed to look a candidate up on Telegram: ${getErrorMessage(error)}`);
+    return res.status(500).json({ error: "Could not ask Telegram" });
   }
 };
 

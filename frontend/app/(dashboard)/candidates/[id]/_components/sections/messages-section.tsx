@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
   useCandidateMessages,
+  useFindOnTelegram,
   useSendCandidateMessage,
   type CandidateChannel,
 } from "@/hooks/queries/use-candidate-messages";
@@ -22,6 +23,7 @@ import { timeAgo } from "../constants";
 export function MessagesSection({ applicationId }: { applicationId: number }) {
   const { data, isLoading } = useCandidateMessages(applicationId);
   const send = useSendCandidateMessage(applicationId);
+  const find = useFindOnTelegram(applicationId);
   const [body, setBody] = useState("");
 
   const messages = data?.data.messages ?? [];
@@ -51,8 +53,8 @@ export function MessagesSection({ applicationId }: { applicationId: number }) {
           No messaging channel for this candidate
         </p>
         <p className="mx-auto mt-1 max-w-md text-xs text-slate-400">
-          A conversation starts when they message your WhatsApp number. Neither
-          WhatsApp nor Telegram lets you write to someone who has not opted in.
+          They opt in on the application form. WhatsApp needs them to have
+          agreed; Telegram can be looked up from the number they gave.
         </p>
       </div>
     );
@@ -67,6 +69,39 @@ export function MessagesSection({ applicationId }: { applicationId: number }) {
         </span>
         <ChannelState channel={channel} />
       </div>
+
+      {/*
+        Offered only when there is no Telegram thread yet, and only ever for
+        one candidate at a time. Looking numbers up in bulk is what Telegram
+        limits accounts for, and it is the agency's own account that stops
+        working.
+      */}
+      {!channels.some((c) => c.channel === "telegram") && (
+        <div className="flex items-center justify-between gap-3 rounded-md border border-slate-200 px-3 py-2 dark:border-neutral-800">
+          <p className="text-xs text-slate-500">
+            Telegram has no 24-hour window. Look this candidate up by the number
+            they gave?
+          </p>
+          <Button
+            variant="ghost"
+            disabled={find.isPending}
+            onClick={async () => {
+              try {
+                await find.mutateAsync();
+                toast.success(
+                  "Asked Telegram. If they have an account it appears here shortly.",
+                );
+              } catch (err) {
+                toast.error(
+                  err instanceof Error ? err.message : "Could not ask Telegram",
+                );
+              }
+            }}
+          >
+            {find.isPending ? "Asking…" : "Find on Telegram"}
+          </Button>
+        </div>
+      )}
 
       <div className="max-h-[420px] space-y-2 overflow-y-auto rounded-md border border-slate-200 p-3 dark:border-neutral-800">
         {messages.length === 0 ? (
