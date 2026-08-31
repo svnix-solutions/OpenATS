@@ -72,6 +72,26 @@ function normaliseKey(header: string): string | null {
   return null;
 }
 
+/**
+ * The most rows one file may carry.
+ *
+ * The upload limit is ten megabytes, which is something like two hundred
+ * thousand rows — hours of work for a queue that runs one row at a time, with
+ * every other import behind it. A recruiter's list is hundreds, so a file that
+ * size is a mistake, and refusing it with a number is more use than accepting
+ * it and going quiet until tomorrow.
+ */
+const MAX_ROWS = Number(process.env.IMPORT_MAX_ROWS ?? 5000);
+
+export class ImportTooLargeError extends Error {
+  constructor(rows: number) {
+    super(
+      `That file has ${rows} rows and the limit is ${MAX_ROWS}. Split it and import the parts.`,
+    );
+    this.name = "ImportTooLargeError";
+  }
+}
+
 /** Deliberately loose. Bouncing a real address is worse than accepting a bad one. */
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -125,6 +145,8 @@ export async function importCandidates(
     trim: true,
     relax_column_count: true,
   }) as Record<string, string>[];
+
+  if (parsed.length > MAX_ROWS) throw new ImportTooLargeError(parsed.length);
 
   const rows: ImportRow[] = [];
   // Within one file, not across the database: two rows for the same person is

@@ -16,7 +16,7 @@ import { presentCandidate } from "../../shared/auth/present";
 
 import { requestCvAnalysis } from "../../queues/cv-analysis/queue";
 import { getErrorMessage} from "../../utils/error.utils";
-import { importCandidates } from "./import.service";
+import { importCandidates, ImportTooLargeError } from "./import.service";
 import { eq } from "drizzle-orm";
 import { db } from "../../db";
 import { candidateImports } from "../../db/schema/imports";
@@ -347,6 +347,13 @@ export const importCandidatesToJob = async (req: Request, res: Response) => {
     // 202: accepted, not finished. The id is what the screen polls.
     return res.status(202).json({ data: { importId: run.id, status: "queued" } });
   } catch (error) {
+    // Its own message, because it is actionable in a way a parse failure is
+    // not: the file is fine, there is simply too much of it.
+    if (error instanceof ImportTooLargeError) {
+      return res
+        .status(413)
+        .json({ error: error.message, code: "too_many_rows" });
+    }
     // A malformed CSV throws out of the parser with a message naming the line,
     // which is more use than anything this could say instead.
     logger.error(`Candidate import failed: ${getErrorMessage(error)}`);
