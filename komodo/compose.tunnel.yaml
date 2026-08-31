@@ -17,13 +17,21 @@
 # Point the proxy's ingress at the **container** port, which is not what the
 # old published ports said:
 #
-#   ats.example.com   →  http://openats-frontend:3000
-#   api.example.com   →  http://openats-api:8080
-#   auth.example.com  →  http://openats-auth:8080     (8080, not 8090)
+#   ats.example.com   →  http://${STACK_NAME}-frontend:3000
+#   api.example.com   →  http://${STACK_NAME}-api:8080
+#   auth.example.com  →  http://${STACK_NAME}-auth:8080   (8080, not 8090)
+#
+# STACK_NAME defaults to `openats`, so an existing single install is unchanged.
 #
 # Those names are aliases set below rather than service names. `frontend` and
 # `backend` are names another stack on the same shared network is entirely
 # likely to have too, and whichever answers first wins.
+#
+# STACK_NAME is what keeps two installs apart. A staging stack on the same
+# proxy network with the same aliases is not a collision Docker refuses — it
+# accepts both and answers with either, so staging would intermittently serve
+# production's hostnames and nobody would see a single error. Set it per stack
+# and the names cannot overlap.
 
 networks:
   proxy:
@@ -38,16 +46,16 @@ services:
     networks:
       default:
       proxy:
-        aliases: [openats-auth]
+        aliases: ["${STACK_NAME:-openats}-auth"]
 
   backend:
     networks:
       default:
       proxy:
-        aliases: [openats-api]
+        aliases: ["${STACK_NAME:-openats}-api"]
 
   frontend:
     networks:
       default:
       proxy:
-        aliases: [openats-frontend]
+        aliases: ["${STACK_NAME:-openats}-frontend"]

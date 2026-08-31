@@ -12,6 +12,7 @@ Everything needed is in `komodo/`:
 | `komodo/compose.ports.yaml` | Publishes to loopback instead, for a proxy running on the host |
 | `komodo/compose.build.yaml` | Builds the images on the server instead of pulling them |
 | `komodo/openats.toml` | The Stack declared as a Komodo resource, for sync |
+| `komodo/openats-staging.toml` | A second Stack, on the same server, for seeing a change before production does |
 | `komodo/.env.example` | Every variable the stack needs, and why |
 
 You need `compose.yaml` and **one** of the two overlays. Which one is the only
@@ -215,6 +216,47 @@ tenant's data to every other tenant while every query, log line and test looks
 exactly right. The server refuses to start on such a role — see
 `assertTenancyIsEnforceable` in `backend/src/db/index.ts` — but only because
 that check exists; the E2E suite ran that way for months without noticing.
+
+## A staging install
+
+The same repository and the same images, on the same server, with its own
+database and hostnames. `komodo/openats-staging.toml` declares it; sync both
+files and Komodo maintains both stacks.
+
+Three things keep them apart, and all three matter:
+
+| | |
+| --- | --- |
+| `project_name` | Namespaces the containers **and the volumes**. Docker names a volume `<project>_<volume>`, so staging gets its own database rather than sharing production's. |
+| `STACK_NAME` | Namespaces the aliases on the shared proxy network. |
+| `IMAGE_TAG` | What each one runs. Staging follows `latest`; production is pinned to a sha somebody has looked at. |
+
+**`STACK_NAME` is the one that will bite.** Two stacks on one proxy network
+claiming `openats-frontend` is not something Docker refuses — it accepts both
+aliases and answers with whichever replies first. Staging would intermittently
+serve production's hostname, with no error anywhere to say so. Set it per
+stack and the names cannot overlap:
+
+```
+STACK_NAME=openats-staging
+```
+
+The tunnel then points at those names:
+
+```
+staging.example.com      →  http://openats-staging-frontend:3000
+api.staging.example.com  →  http://openats-staging-api:8080
+auth.staging.example.com →  http://openats-staging-auth:8080
+```
+
+**Give staging its own everything else.** The object storage bucket, the
+Resend key, the WhatsApp number, the Gemini key. Nothing in these files stops
+you pointing staging at production's bucket, and the first thing you will do
+there is import a test list and send a test message.
+
+A reasonable split once both exist: `IMAGE_TAG=latest` on staging so a merge to
+`main` reaches it through the webhook, and a commit sha on production, moved by
+hand once the change has been seen working.
 
 ## Updating
 
