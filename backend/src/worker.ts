@@ -9,6 +9,7 @@ validateEnv();
 initSentry();
 
 import { startCvAnalysisWorker } from "./queues/cv-analysis/worker";
+import { startCandidateImportWorker } from "./queues/candidate-import/worker";
 import { assertTenancyIsEnforceable } from "./db";
 import logger from "./utils/logger";
 
@@ -16,11 +17,15 @@ import logger from "./utils/logger";
 // analysis results into whichever organization the job names, and a role that
 // row-level security does not apply to would write them anywhere.
 let worker: ReturnType<typeof startCvAnalysisWorker>;
+let importWorker: ReturnType<typeof startCandidateImportWorker>;
 
 assertTenancyIsEnforceable()
   .then(() => {
     worker = startCvAnalysisWorker();
-    logger.info("CV analysis worker process started");
+    // Same process: both are background work against the same database, and a
+    // second container would buy nothing that concurrency limits do not.
+    importWorker = startCandidateImportWorker();
+    logger.info("CV analysis and candidate import workers started");
   })
   .catch((err: unknown) => {
     logger.error(err instanceof Error ? err.message : String(err));
@@ -29,7 +34,7 @@ assertTenancyIsEnforceable()
 
 async function shutdown(signal: string) {
   logger.info(`[worker] received ${signal}, shutting down gracefully...`);
-  await worker?.close();
+  await Promise.all([worker?.close(), importWorker?.close()]);
   process.exit(0);
 }
 
