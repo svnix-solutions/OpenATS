@@ -2,6 +2,7 @@ import { Router } from "express";
 import multer from "multer";
 import {
   applyForJob,
+  importCandidatesToJob,
   getCandidates,
   getCandidateById,
   moveCandidateStage,
@@ -36,6 +37,18 @@ const upload = multer({
     fileSize: 10 * 1024 * 1024,
   },
 });
+
+// Multipart: a recruiter's list is a file. Behind the same job-access check
+// as adding one by hand, and manager-only, because an import writes hundreds
+// of rows in one action.
+router.post(
+  "/jobs/:jobId/import",
+  denyClients,
+  requireManager,
+  requireJobRead("jobId"),
+  upload.single("file"),
+  importCandidatesToJob,
+);
 
 router.post(
   "/jobs/:jobId/apply",

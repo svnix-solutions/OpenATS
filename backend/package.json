@@ -36,6 +36,7 @@
     "big-integer": "^1.6.52",
     "bullmq": "^5.78.1",
     "cors": "^2.8.6",
+    "csv-parse": "^7.0.2",
     "dotenv": "^17.2.4",
     "drizzle-orm": "^0.45.1",
     "express": "^5.2.1",

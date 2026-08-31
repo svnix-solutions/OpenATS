@@ -3,6 +3,11 @@
 import { useRef, useState } from "react";
 import { toast } from "sonner";
 import { useAddCandidate } from "@/hooks/queries/use-candidates";
+import {
+  useImportCandidates,
+  type ImportReport,
+  type ImportRow,
+} from "@/hooks/queries/use-candidate-import";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -37,6 +42,7 @@ export function AddCandidateDialog({
   jobs: { id: number; title: string }[];
   onAdded: () => void;
 }) {
+  const [mode, setMode] = useState<"one" | "many">("one");
   const [jobId, setJobId] = useState("");
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -108,6 +114,28 @@ export function AddCandidateDialog({
           <DialogTitle>Add a candidate</DialogTitle>
         </DialogHeader>
 
+        {/*
+          Two ways in, one dialog. The job is chosen once and applies to both,
+          which is what makes re-importing the same list against another role
+          the way to reuse it rather than adding people one at a time.
+        */}
+        <div className="mb-3 flex gap-1.5">
+          {(["one", "many"] as const).map((m) => (
+            <button
+              key={m}
+              type="button"
+              onClick={() => setMode(m)}
+              className={`rounded-md px-2.5 py-1 text-sm font-semibold ${
+                mode === m
+                  ? "bg-[var(--theme-color)] text-white"
+                  : "bg-neutral-100 text-slate-600 dark:bg-neutral-800 dark:text-neutral-300"
+              }`}
+            >
+              {m === "one" ? "One candidate" : "Import a list"}
+            </button>
+          ))}
+        </div>
+
         <div className="space-y-3">
           <div className="space-y-1.5">
             <Label htmlFor="add-job">Job</Label>
@@ -124,6 +152,18 @@ export function AddCandidateDialog({
             </select>
           </div>
 
+          {mode === "many" && (
+            <ImportPanel
+              jobId={jobId}
+              onImported={() => {
+                onClose();
+                onAdded();
+              }}
+            />
+          )}
+
+          {mode === "one" && (
+          <>
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label htmlFor="add-first">First name</Label>
@@ -174,17 +214,157 @@ export function AddCandidateDialog({
             application. They have not agreed to be messaged on WhatsApp or
             Telegram — that consent only comes from them.
           </p>
+          </>
+          )}
         </div>
 
-        <div className="mt-2 flex justify-end gap-2">
-          <Button variant="ghost" onClick={onClose} disabled={saving}>
-            Cancel
-          </Button>
-          <Button onClick={submit} disabled={!ready || saving || uploading}>
-            {saving ? "Adding…" : "Add to pipeline"}
-          </Button>
-        </div>
+        {mode === "one" && (
+          <div className="mt-2 flex justify-end gap-2">
+            <Button variant="ghost" onClick={onClose} disabled={saving}>
+              Cancel
+            </Button>
+            <Button onClick={submit} disabled={!ready || saving || uploading}>
+              {saving ? "Adding…" : "Add to pipeline"}
+            </Button>
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   );
+}
+
+/**
+ * Importing a list, in two passes: see, then do.
+ *
+ * The dry run and the real import are the same code on the server, so the
+ * preview cannot promise something the import then does differently — which is
+ * the failure a separate validator always eventually has.
+ *
+ * Re-uploading a corrected file is safe. Rows already on the job come back as
+ * "already on this job" rather than errors, so fixing line 7 and sending the
+ * whole file again does not duplicate lines 1 to 6.
+ */
+function ImportPanel({
+  jobId,
+  onImported,
+}: {
+  jobId: string;
+  onImported: () => void;
+}) {
+  const importer = useImportCandidates();
+  const [file, setFile] = useState<File | null>(null);
+  const [preview, setPreview] = useState<ImportReport | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  async function run(dryRun: boolean) {
+    if (!file || !jobId) return;
+    try {
+      const report = await importer.mutateAsync({
+        jobId: Number(jobId),
+        file,
+        dryRun,
+      });
+      if (dryRun) {
+        setPreview(report);
+        return;
+      }
+      toast.success(`Imported ${report.counts.imported ?? 0} candidates`);
+      onImported();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "The import failed");
+    }
+  }
+
+  const problems = preview?.rows.filter(
+    (r) => r.outcome !== "would_import" && r.outcome !== "imported",
+  );
+
+  return (
+    <div className="space-y-3">
+      <p className="text-xs text-slate-500">
+        A CSV with an email and a name. Headers are matched loosely, so
+        <code className="mx-1">Email</code>,<code className="mx-1">e-mail</code>
+        and <code className="mx-1">Email Address</code> all work.
+      </p>
+
+      <input
+        ref={fileRef}
+        type="file"
+        accept=".csv,text/csv"
+        className="hidden"
+        onChange={(e) => {
+          setFile(e.target.files?.[0] ?? null);
+          setPreview(null);
+        }}
+      />
+      <Button
+        variant="ghost"
+        type="button"
+        onClick={() => fileRef.current?.click()}
+        className="w-full justify-start border border-dashed border-slate-200 dark:border-neutral-700"
+      >
+        {file ? file.name : "Choose a CSV"}
+      </Button>
+
+      {preview && (
+        <div className="space-y-2 rounded-md border border-slate-200 p-3 dark:border-neutral-800">
+          <p className="text-sm font-semibold text-slate-800 dark:text-neutral-200">
+            {preview.counts.would_import ?? 0} will be added
+            {preview.counts.already_on_job
+              ? `, ${preview.counts.already_on_job} already on this job`
+              : ""}
+          </p>
+
+          {problems && problems.length > 0 && (
+            <div className="max-h-40 space-y-1 overflow-y-auto">
+              {problems.map((r) => (
+                <p key={r.line} className="text-xs text-amber-700 dark:text-amber-400">
+                  {/* The spreadsheet's own line number, so it can be found. */}
+                  Line {r.line}: {describe(r.outcome)}
+                  {r.email ? ` — ${r.email}` : ""}
+                </p>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      <div className="flex justify-end gap-2">
+        <Button
+          variant="ghost"
+          disabled={!file || !jobId || importer.isPending}
+          onClick={() => run(true)}
+        >
+          {importer.isPending ? "Checking…" : "Check the file"}
+        </Button>
+        <Button
+          // Only after a preview: importing several hundred people is not
+          // something to do without having seen what it will do.
+          disabled={!preview || importer.isPending}
+          onClick={() => run(false)}
+        >
+          Import {preview?.counts.would_import ?? 0}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function describe(outcome: ImportRow["outcome"]): string {
+  switch (outcome) {
+    case "missing_email":
+      return "no email";
+    case "invalid_email":
+      return "that is not an email address";
+    case "missing_name":
+      return "no name";
+    case "duplicate_in_file":
+      return "appears earlier in this file";
+    case "already_on_job":
+      return "already on this job";
+    case "failed":
+      return "could not be added";
+    default:
+      return outcome;
+  }
 }
